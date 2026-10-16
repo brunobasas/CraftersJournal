@@ -1,0 +1,3 @@
+# Archivos temporales de Python (las herramientas de tools/)
+__pycache__/
+*.pyc

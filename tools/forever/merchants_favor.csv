@@ -1,0 +1,311 @@
+# Fuente: https://www.wow-professions.com/forever/merchants-favor-durotar-supply-azeroth-commerce (2026-10-15). rep: 0 ninguna, 5 amistoso, 6 honorable, 7 venerado, 8 exaltado
+profession,recipe,favor,rep
+Alchemy,Mender's Potion,45,0
+Alchemy,Spellblasting Potion,45,0
+Alchemy,Frenzy Potion,45,0
+Alchemy,Disorienting Smog Potion,120,5
+Alchemy,Dragonfire Potion,120,5
+Alchemy,Caustic Smog Potion,180,6
+Alchemy,Potion of Venomous Blood,180,6
+Alchemy,Major Mender's Potion,180,6
+Alchemy,Potion of Elemental Purging,180,6
+Alchemy,Major Spellblasting Potion,180,6
+Alchemy,Major Frenzy Potion,240,6
+Alchemy,Elixir of Lesser Spirit,45,0
+Alchemy,Lesser Mageblood Elixir,45,0
+Alchemy,Elixir of Lesser Intellect,45,0
+Alchemy,Lesser Cleric's Elixir,45,0
+Alchemy,Lesser Arcane Elixir,45,0
+Alchemy,Elixir of Greater Spirit,120,5
+Alchemy,Greater Mageblood Elixir,120,5
+Alchemy,Greater Cleric's Elixir,120,5
+Alchemy,Elixir of Greater Fortitude,120,5
+Alchemy,Elixir of the Phalanx,180,6
+Alchemy,Elixir of Cunning,180,6
+Alchemy,Elixir of Ferocity,180,6
+Alchemy,Elixir of Sages,180,6
+Alchemy,Elixir of the Whale,180,6
+Alchemy,Elixir of the Owl,180,6
+Alchemy,Elixir of Nature Power,180,6
+Alchemy,Elixir of Wicked Regeneration,180,6
+Alchemy,Elixir of the Grizzly,240,6
+Blacksmithing,Guard's Chain Belt,30,0
+Blacksmithing,Guard's Gloves,30,0
+Blacksmithing,Guard's Boots,30,0
+Blacksmithing,Guard's Silvered Chain Helm,30,0
+Blacksmithing,Guard's Silvered Chain Shirt,30,0
+Blacksmithing,Guard's Silvered Chain Leggings,30,0
+Blacksmithing,Sentinel's Gauntlet,60,5
+Blacksmithing,Sentinel's Pauldrons,60,5
+Blacksmithing,Sentinel's Wristguards,90,6
+Blacksmithing,Sentinel's Sabatons,90,6
+Blacksmithing,Sentinel's Waistguard,90,6
+Blacksmithing,Veteran's Chain Belt,30,0
+Blacksmithing,Veteran's Gloves,30,0
+Blacksmithing,Veteran's Boots,30,0
+Blacksmithing,Veteran's Silvered Chain Helm,30,0
+Blacksmithing,Veteran's Silvered Chain Shirt,30,0
+Blacksmithing,Veteran's Silvered Chain Leggings,30,0
+Blacksmithing,Officer's Gauntlet,60,5
+Blacksmithing,Officer's Pauldrons,60,5
+Blacksmithing,Officer's Wristguards,90,6
+Blacksmithing,Officer's Sabatons,90,6
+Blacksmithing,Officer's Waistguard,90,6
+Blacksmithing,Thorium Cestus,90,6
+Blacksmithing,Legionite Glaive,120,6
+Blacksmithing,Acolyte's Chain Belt,30,0
+Blacksmithing,Acolyte's Gloves,30,0
+Blacksmithing,Acolyte's Boots,30,0
+Blacksmithing,Acolyte's Silvered Chain Helm,30,0
+Blacksmithing,Acolyte's Silvered Chain Shirt,30,0
+Blacksmithing,Acolyte's Silvered Chain Leggings,30,0
+Blacksmithing,Prefect's Gauntlet,60,5
+Blacksmithing,Prefect's Pauldrons,60,5
+Blacksmithing,Prefect's Wristguards,90,6
+Blacksmithing,Prefect's Sabatons,90,6
+Blacksmithing,Prefect's Waistguard,90,6
+Blacksmithing,Protector's Chain Belt,30,0
+Blacksmithing,Protector's Gloves,30,0
+Blacksmithing,Protector's Boots,30,0
+Blacksmithing,Protector's Silvered Chain Helm,30,0
+Blacksmithing,Protector's Silvered Chain Shirt,30,0
+Blacksmithing,Protector's Silvered Chain Leggings,30,0
+Blacksmithing,Warder's Gauntlet,60,5
+Blacksmithing,Warder's Pauldrons,60,5
+Blacksmithing,Warder's Wristguards,90,6
+Blacksmithing,Warder's Sabatons,90,6
+Blacksmithing,Warder's Waistguard,90,6
+Blacksmithing,Enriched Thorium Breastplate,120,6
+Blacksmithing,Enriched Thorium Helm,120,6
+Blacksmithing,Enriched Thorium Leggings,120,6
+Blacksmithing,Crusader's Chain Belt,30,0
+Blacksmithing,Crusader's Gloves,30,0
+Blacksmithing,Crusader's Boots,30,0
+Blacksmithing,Crusader's Silvered Chain Helm,30,0
+Blacksmithing,Crusader's Silvered Chain Shirt,30,0
+Blacksmithing,Crusader's Silvered Chain Leggings,30,0
+Blacksmithing,Justicar's Gauntlet,60,5
+Blacksmithing,Justicar's Pauldrons,60,5
+Blacksmithing,Justicar's Wristguards,90,6
+Blacksmithing,Justicar's Sabatons,90,6
+Blacksmithing,Justicar's Waistguard,90,6
+Blacksmithing,Thorium Greatmace,90,6
+Cooking,Venomous Smoothie,30,0
+Cooking,Slimy Smoothie,30,0
+Cooking,Mrrggl Smrrthle,30,0
+Cooking,Calcified Smoothie,60,5
+Cooking,Spicy Smoothie,60,5
+Cooking,Wicked Smoothie,90,6
+Enchanting,Enchant Necklace - Agility,120,5
+Enchanting,Enchant Necklace - Deflection,120,5
+Enchanting,Enchant Necklace - Healing Power,120,5
+Enchanting,Enchant Necklace - Spell Power,120,5
+Enchanting,Enchant Necklace - Strength,120,5
+Enchanting,Enchant Weapon - Insight,45,0
+Enchanting,Enchant Weapon - Recovery,45,0
+Enchanting,Enchant Weapon - Revelation,45,0
+Enchanting,Enchant 2H Weapon - Mighty Healing Power,240,6
+Enchanting,Enchant 2H Weapon - Mighty Spell Power,240,6
+Enchanting,Enchant 2H Weapon - Spellblasting,240,6
+Enchanting,Enchant Chest - Absorption,120,5
+Enchanting,Enchant Bracer - Greater Spellpower,240,6
+Enchanting,Enchant Bracer - Superior Deflection,240,6
+Enchanting,Enchant Bracer - Superior Intellect,240,6
+Enchanting,Enchant Cloak - Agility,240,6
+Enchanting,Enchant Gloves - Arcane Power,240,6
+Enchanting,Enchant Gloves - Holy Power,240,6
+Enchanting,Enchant Gloves - Natural Power,240,6
+Enchanting,Enchant Gloves - Superior Strength,240,6
+Enchanting,Enchant Off-Hand - Wisdom,240,6
+Enchanting,Mystic Mushroom,45,0
+Enchanting,Polished Driftwood Icon,45,0
+Enchanting,Tenets of the Silver Hand,45,0
+Enchanting,Libram of Invocation,120,5
+Enchanting,Talons of Wrath,120,5
+Enchanting,Totem of Ancestral Protection,120,5
+Enchanting,Idol of the Dream,240,6
+Enchanting,Libram of Holy Alacrity,240,6
+Enchanting,Totem of Thunder,240,6
+Enchanting,Glimmering Staff,45,0
+Enchanting,Orb of Mystic Insight,45,0
+Enchanting,Orb of Souls,45,0
+Enchanting,Soulstaff,45,0
+Enchanting,Dreamstaff,120,5
+Enchanting,Radiant Staff,120,5
+Enchanting,Truesilver Conduit,120,5
+Enchanting,Twisting Essence Jar,120,5
+Enchanting,Brilliant Wand,180,6
+Engineering,SAF-T Dynamite,45,0
+Engineering,SAF-T Copper Bomb,45,0
+Engineering,EZ-Thro Copper Bomb XL,45,0
+Engineering,Satchel of Copper Bombs,45,0
+Engineering,Satchel of Bronze Bombs,180,5
+Engineering,Satchel of Iron Bombs,270,6
+Engineering,Satchel of Dark Iron Bombs,270,6
+Engineering,Clanking Cord,180,5
+Engineering,Gizmo Girdle,180,5
+Engineering,Whimsical Waistwrap,180,5
+Engineering,Bent Goggles,180,5
+Engineering,Dented Goggles,180,5
+Engineering,Floppy Goggles,180,5
+Engineering,Stuckbutton Goggles,180,5
+Engineering,Emergency Field Cloak,270,6
+Engineering,SAF-T Disposable Parachute,270,6
+Engineering,Gnomish Poultryizer,360,6
+Engineering,Compact Critter Carrier,270,6
+Engineering,Stealthman 52,360,6
+Engineering,Ultralight Goblin Glider,360,6
+Engineering,Ultrasafe Rechargeable Battery,360,6
+Engineering,SAF-T Tabs,45,0
+Engineering,EZ-Thro Wrap,45,0
+Engineering,No Slip SAF-T Padding,45,0
+Engineering,SAF-T Bell,180,5
+Engineering,EZ-Thro Fireproof Fuse,180,5
+Leatherworking,Brawler's Leather Belt,30,0
+Leatherworking,Brawler's Leather Gloves,30,0
+Leatherworking,Brawler's Leather Boots,30,0
+Leatherworking,Brawler's Leather Hood,30,0
+Leatherworking,Brawler's Leather Tunic,30,0
+Leatherworking,Brawler's Leather Legguards,30,0
+Leatherworking,Prowler's Leather Gloves,60,5
+Leatherworking,Skulker's Leather Gloves,60,5
+Leatherworking,Prowler's Leather Shoulder,60,5
+Leatherworking,Skulker's Leather Shoulder,60,5
+Leatherworking,Prowler's Leather Bracers,90,6
+Leatherworking,Skulker's Leather Bracers,90,6
+Leatherworking,Prowler's Leather Boots,90,6
+Leatherworking,Skulker's Leather Boots,90,6
+Leatherworking,Prowler's Leather Waistguard,90,6
+Leatherworking,Skulker's Leather Waistguard,90,6
+Leatherworking,Defender's Leather Belt,30,0
+Leatherworking,Defender's Leather Gloves,30,0
+Leatherworking,Defender's Leather Boots,30,0
+Leatherworking,Defender's Leather Hood,30,0
+Leatherworking,Defender's Leather Tunic,30,0
+Leatherworking,Defender's Leather Kilt,30,0
+Leatherworking,Warden's Leather Gloves,60,5
+Leatherworking,Warden's Leather Shoulder,60,5
+Leatherworking,Warden's Leather Bracers,90,6
+Leatherworking,Warden's Leather Boots,90,6
+Leatherworking,Warden's Leather Waistguard,90,6
+Leatherworking,Trapper's Leather Belt,30,0
+Leatherworking,Trapper's Leather Gloves,30,0
+Leatherworking,Trapper's Leather Boots,30,0
+Leatherworking,Trapper's Leather Hood,30,0
+Leatherworking,Trapper's Leather Tunic,30,0
+Leatherworking,Trapper's Leather Legguards,30,0
+Leatherworking,Stalker's Leather Gloves,60,5
+Leatherworking,Stalker's Mail Shoulder,60,5
+Leatherworking,Stalker's Mail Bracers,90,6
+Leatherworking,Stalker's Mail Sabatons,90,6
+Leatherworking,Stalker's Mail Belt,90,6
+Leatherworking,Totemic Leather Belt,30,0
+Leatherworking,Totemic Leather Gloves,30,0
+Leatherworking,Totemic Leather Boots,30,0
+Leatherworking,Totemic Leather Hood,30,0
+Leatherworking,Totemic Leather Tunic,30,0
+Leatherworking,Totemic Leather Leggings,30,0
+Leatherworking,Skirmisher's Leather Gloves,60,5
+Leatherworking,Skirmisher's Mail Shoulder,60,5
+Leatherworking,Skirmisher's Mail Bracers,90,6
+Leatherworking,Skirmisher's Mail Sabatons,90,6
+Leatherworking,Skirmisher's Mail Belt,90,6
+Leatherworking,Stormrider's Leather Belt,30,0
+Leatherworking,Stormrider's Leather Gloves,30,0
+Leatherworking,Stormrider's Leather Boots,30,0
+Leatherworking,Stormrider's Leather Hood,30,0
+Leatherworking,Stormrider's Leather Tunic,30,0
+Leatherworking,Stormrider's Leather Kilt,30,0
+Leatherworking,Skycaller's Leather Gloves,60,5
+Leatherworking,Skycaller's Leather Shoulder,60,5
+Leatherworking,Skycaller's Mail Shoulder,60,5
+Leatherworking,Skycaller's Leather Bracers,90,6
+Leatherworking,Skycaller's Mail Bracers,90,6
+Leatherworking,Skycaller's Leather Boots,90,6
+Leatherworking,Skycaller's Mail Sabatons,90,6
+Leatherworking,Skycaller's Leather Waistguard,90,6
+Leatherworking,Skycaller's Mail Belt,90,6
+Leatherworking,Wisdom's Leather Belt,30,0
+Leatherworking,Wisdom's Leather Gloves,30,0
+Leatherworking,Wisdom's Leather Boots,30,0
+Leatherworking,Wisdom's Leather Hood,30,0
+Leatherworking,Wisdom's Leather Tunic,30,0
+Leatherworking,Wisdom's Leather Leggings,30,0
+Leatherworking,Mender's Leather Gloves,60,5
+Leatherworking,Mender's Leather Shoulder,60,5
+Leatherworking,Mender's Mail Shoulder,60,5
+Leatherworking,Mender's Leather Bracers,90,6
+Leatherworking,Mender's Mail Bracers,90,6
+Leatherworking,Mender's Leather Boots,90,6
+Leatherworking,Mender's Mail Sabatons,90,6
+Leatherworking,Mender's Leather Waistguard,90,6
+Leatherworking,Mender's Mail Belt,90,6
+Leatherworking,Forceful Thick Armor Kit,60,5
+Leatherworking,Mystic Rugged Armor Kit,90,6
+Tailoring,Flame Boots,30,0
+Tailoring,Flame Gloves,30,0
+Tailoring,Flame Sash,30,0
+Tailoring,Flame Circlet,30,0
+Tailoring,Flame Gown,30,0
+Tailoring,Flame Leggings,30,0
+Tailoring,Fiery Handwraps,60,5
+Tailoring,Netherflame Shoulders,60,5
+Tailoring,Netherflame Cuffs,60,5
+Tailoring,Fiery Waistcord,60,5
+Tailoring,Fiery Sandals,90,6
+Tailoring,Silky Boots,30,0
+Tailoring,Silky Gloves,30,0
+Tailoring,Silky Sash,30,0
+Tailoring,Silky Circlet,30,0
+Tailoring,Silky Gown,30,0
+Tailoring,Silky Leggings,30,0
+Tailoring,Frothing Handwraps,60,5
+Tailoring,Netherfroth Shoulders,60,5
+Tailoring,Netherfroth Cuffs,60,5
+Tailoring,Frothing Waistcord,60,5
+Tailoring,Frothing Sandals,90,6
+Tailoring,Pearly Boots,30,0
+Tailoring,Pearly Gloves,30,0
+Tailoring,Pearly Sash,30,0
+Tailoring,Pearly Circlet,30,0
+Tailoring,Pearly Gown,30,0
+Tailoring,Pearly Leggings,30,0
+Tailoring,Golden Handwraps,60,5
+Tailoring,Nethershine Shoulders,60,5
+Tailoring,Nethershine Cuffs,60,5
+Tailoring,Golden Waistcord,60,5
+Tailoring,Golden Sandals,90,6
+Tailoring,Shadow Boots,30,0
+Tailoring,Shadow Gloves,30,0
+Tailoring,Shadow Sash,30,0
+Tailoring,Shadow Circlet,30,0
+Tailoring,Shadow Gown,30,0
+Tailoring,Shadow Leggings,30,0
+Tailoring,Black Handwraps,60,5
+Tailoring,Netherpearl Shoulders,60,5
+Tailoring,Netherpearl Cuffs,60,5
+Tailoring,Black Waistcord,60,5
+Tailoring,Black Sandals,90,6
+Tailoring,Shining Boots,30,0
+Tailoring,Shining Gloves,30,0
+Tailoring,Shining Sash,30,0
+Tailoring,Shining Circlet,30,0
+Tailoring,Shining Gown,30,0
+Tailoring,Shining Leggings,30,0
+Tailoring,Radiant Handwraps,60,5
+Tailoring,Netherlight Shoulders,60,5
+Tailoring,Netherlight Cuffs,60,5
+Tailoring,Radiant Waistcord,60,5
+Tailoring,Radiant Sandals,90,6
+Tailoring,Pristine Boots,30,0
+Tailoring,Pristine Gloves,30,0
+Tailoring,Pristine Sash,30,0
+Tailoring,Pristine Circlet,30,0
+Tailoring,Pristine Gown,30,0
+Tailoring,Pristine Leggings,30,0
+Tailoring,Nethergeld Shoulders,60,5
+Tailoring,Nethergeld Cuffs,60,5
+Tailoring,Gilded Waistcord,60,5
+Tailoring,Gilded Sandals,90,6
+Tailoring,Mageweave Reagent Bag,60,5
+Tailoring,Runecloth Reagent Bag,60,5

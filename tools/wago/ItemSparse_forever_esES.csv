@@ -1,0 +1,4145 @@
+ID,Name
+118,Poción de curación menor
+159,Agua de manantial refrescante
+723,Hígado de Dentosangre
+724,Pastel de hígado de Dentosangre
+728,Receta: estofado de Páramos de Poniente
+729,Carne fibrosa de buitre
+730,Ojo de múrloc
+731,Morro de dentrosangre
+733,Estofado de Páramos de Poniente
+765,Hojaplata
+769,Trozo de carne de jabalí
+774,Malaquita
+783,Pellejo ligero
+785,Marregal
+787,Caballa de piel escurridiza
+814,Botella de aceite
+818,Ojo de tigre
+858,Poción de Curación inferior
+929,Poción de curación
+1015,Costillar de lobo magro
+1017,Kebab de lobo salpimentado
+1080,Carne de cóndor dura
+1081,Carne de araña crujiente
+1082,Estofado Crestagrana
+1179,Leche fría como el hielo
+1205,Zumo de melón
+1206,Ágata musgosa
+1210,Gema de las Sombras
+1251,Venda de lino
+1288,Glándula de veneno grande
+1468,Aleta de múrloc
+1475,Glándula de veneno pequeña
+1529,Jade
+1645,Zumo de baya lunar
+1705,Piedra lunar inferior
+1708,Néctar dulce
+1710,Poción de curación superior
+2251,Pata de araña babosa
+2289,Pergamino de Fuerza II
+2300,Jubón de cuero estampado
+2302,Botas de cuero cosidas a mano
+2303,Pantalones de cuero cosidos a mano
+2304,Complemento para armadura ligera
+2307,Botas de cuero refinado
+2308,Capa de cuero refinado
+2309,Botas de cuero estampado
+2310,Capa de cuero estampado
+2311,Chaleco de cuero blanco
+2312,Guantes de cuero refinado
+2313,Refuerzo para armadura medio
+2314,Armadura de cuero fortalecido
+2315,Botas de cuero oscuro
+2316,Capa de cuero oscuro
+2317,Túnica de cuero oscuro
+2318,Cuero ligero
+2319,Cuero medio
+2320,Hilo burdo
+2321,Hilo refinado
+2324,Lejía
+2325,Tinte negro
+2406,Patrón: botas de cuero refinado
+2407,Patrón: chaleco de cuero blanco
+2408,Patrón: guantes de cuero refinado
+2409,Patrón: túnica de cuero oscuro
+2447,Flor de paz
+2449,Raíz terrenal
+2450,Briarthorn
+2452,Cardoveloz
+2453,Hierba cardenal
+2454,Elixir de fuerza menor
+2455,Poción de maná menor
+2456,Poción de Rejuvenecimiento menor
+2457,Elixir de agilidad menor
+2458,Elixir de entereza menor
+2459,Poción de velocidad
+2553,Receta: elixir de agilidad menor
+2554,Deprecated Recipe: Elixir of Fortitude
+2555,Receta: poción de velocidad
+2568,Jubón de lino marrón
+2569,Botas de lino
+2570,Capa de lino
+2572,Toga de lino roja
+2575,Camisa de lino roja
+2576,Camisa de lino blanco
+2577,Camisa de lino azul
+2578,Jubón de lino barbárico
+2579,Camisa de lino verde
+2580,Manteo de lino reforzado
+2581,Venda de lino pesado
+2582,Jubón de lana verde
+2583,Botas de lana
+2584,Manteo de lana
+2585,Toga de lana gris
+2587,Camisa de lana gris
+2589,Paño de lino
+2592,Paño de lana
+2594,Cántaro de hidromiel enana
+2596,Nata de cerveza enana
+2598,Patrón: toga de lino rojo
+2601,Patrón: toga de lana gris
+2604,Tinte rojo
+2605,Tinte verde
+2672,Carne fibrosa de lobo
+2673,Carne de coyote
+2674,Carne de reptador
+2675,Garra de reptador
+2677,Costillas de jabalí
+2678,Especias suaves
+2679,Carne de lobo carbonizada
+2680,Carne de lobo especiada
+2681,Carne de jabalí asado
+2682,Pinza de cangrejo cocida
+2683,Pastel de cangrejo
+2684,Filete de coyote
+2685,Costillas de cerdo suculentas
+2686,Cerveza del Trueno
+2687,Costillas de cerdo secas
+2692,Especias picantes
+2697,Receta: tarta de hígado de Dentosangre
+2698,Receta: pinza de cangrejo cocida
+2699,Receta: estofado Crestagrana
+2700,Receta: costillas de cerdo suculentas
+2701,Receta: kebab de lobo salpimentado
+2723,Botella de Dalaran Noir
+2772,Hierro
+2775,Mineral de plata
+2835,Piedra basta
+2836,Piedra burda
+2838,Piedra pesada
+2840,Lingote de cobre
+2841,Lingote de bronce
+2842,Lingote de plata
+2844,Maza de cobre
+2845,Hacha de cobre
+2847,Espada corta de cobre
+2848,Maza de bronce
+2849,Hacha de bronce
+2850,Espada corta de bronce
+2851,Cinturón de anillas de cobre
+2852,Pantalones de anillas de cobre
+2853,Brazales de cobre
+2854,Brazales de cobre con runas
+2857,Cinturón de cobre con runas
+2862,Piedra de afilar férrea
+2863,Piedra de afilar burda
+2864,Peto de cobre con runas
+2865,Leotardos de bronce férreos
+2866,Loriga de bronce férrea
+2867,Brazales de bronce férreos
+2868,Brazales de bronce estampados
+2869,Coraza de bronce bañada en plata
+2870,Peto de plata lustrosa
+2871,Piedra de afilar pesada
+2880,Flujo débil
+2881,Diseño: peto de cobre con runas
+2882,Diseño: hombreras de bronce plateado
+2883,Diseño: puñal de bronce mortal
+2886,Costilla de jabalí del risco
+2888,Costillas de jabalí a la cerveza
+2889,Receta: costillas de jabalí a la cerveza
+2894,Malta rapsódica
+2924,Carne de crocolisco
+2934,Restos de cuero estropeado
+2996,Madeja de paño de lino
+2997,Madeja de paño de lana
+3013,Pergamino de Protección
+3030,Flecha cuchilla
+3172,Intestinos de jabalí
+3173,Carne de oso
+3174,Icor de araña
+3182,Seda de araña
+3220,Morcilla
+3239,Contrapeso férreo
+3240,Contrapeso burdo
+3241,Piedrafuerte pesada
+3355,Acérita salvaje
+3356,Sangrerregia
+3357,Vidarraíz
+3358,Mostacho de Khadgar
+3369,Moho de tumba
+3371,Vial vacío
+3372,Vial con plomo
+3382,Elixir de sangre de trol menor
+3383,Elixir de sabiduría
+3384,Poción de resistencia a la magia menor
+3385,Poción de maná inferior
+3386,Poción de purificación de veneno
+3387,Poción de invulnerabilidad limitada
+3388,Elixir de sangre de trol inferior
+3389,Elixir de defensa inferior
+3390,Elixir de agilidad inferior
+3391,Elixir de fuerza de ogro
+3393,Receta: poción de resistencia a la magia menor
+3394,Receta: poción de purificación de veneno
+3395,Receta: poción de invulnerabilidad limitada
+3396,Receta: elixir de agilidad inferior
+3404,Ala de águila ratonera
+3466,Flujo fuerte
+3469,Botas de anillas de cobre
+3470,Piedra de pulir férrea
+3471,Jubón de anillas de cobre
+3472,Guanteletes de cobre con runas
+3473,Pantalones de cobre con runas
+3474,Guanteletes de cobre con gemas
+3478,Piedra de pulir burda
+3480,Sobrehombros de bronce férreos
+3481,Sobrehombros de bronce bañados en plata
+3482,Botas de bronce bañadas en plata
+3483,Guanteletes de bronce bañados en plata
+3484,Botas de hierro verde
+3485,Guanteletes de hierro verde
+3486,Piedra de pulir pesada
+3487,Espada ancha pesada de cobre
+3488,Hacha de batalla de cobre
+3489,Gran hacha de guerra
+3490,Puñal de bronce mortal
+3491,Maza de bronce pesada
+3492,Martillo de hierro poderoso
+3530,Venda de lana
+3531,Venda de lana pesada
+3575,Lingote de hierro
+3577,Lingote de oro
+3608,Diseño: martillo de hierro poderoso
+3609,Diseño: jubón de anillas de cobre
+3610,Diseño: guanteletes de cobre con gemas
+3611,Diseño: botas de hierro verde
+3612,Diseño: guanteletes de hierro verde
+3662,Chuleta de crocolisco
+3663,Sopa de aleta de múrloc
+3664,Potaje de crocolisco
+3665,Tortilla con un sabor curioso
+3666,Pastel de araña babosa
+3667,Carne de crocolisco tierna
+3678,Receta: chuleta de crocolisco
+3679,Receta: morcilla
+3680,Receta: sopa de aleta de múrloc
+3681,Receta: potaje de crocolisco
+3682,Receta: tortilla con un sabor curioso
+3683,Receta: pastel de araña pegajosa
+3685,Huevo de raptor
+3712,Carne de tortuga
+3713,Especias calmantes
+3719,Capa de montañero
+3726,Chuleta de oso grande
+3727,Chuletillas de león picantes
+3728,Filete de león sabroso
+3729,Sopa de tortuga reconfortante
+3730,Carne de oso grande
+3731,Carne de león
+3734,Receta: chuleta de oso grande
+3735,Receta: chuletas de león picantes
+3736,Receta: filete de león sabroso
+3737,Receta: sopa de tortuga reconfortante
+3818,Pálida
+3819,Ivernalia
+3820,Alga estranguladora
+3821,Espina de oro
+3823,Poción de invisibilidad inferior
+3824,Aceite de las Sombras
+3825,Elixir de entereza inferior
+3826,Elixir de sangre de trol
+3827,Poción de maná
+3828,Jarabe de detección de invisibilidad inferior
+3829,Aceite escarchado
+3830,Receta: elixir de entereza inferior
+3831,Receta: elixir de sangre de trol
+3832,Receta: elixir de detección de invisibilidad inferior
+3835,Brazales de hierro verde
+3836,Yelmo de hierro verde
+3837,Almófar de escamas de oro
+3840,Hombreras de hierro verde
+3841,Sobrehombros de escamas doradas
+3842,Leotardos de hierro verde
+3843,Leotardos de escamas de oro
+3844,Camisote de hierro verde
+3845,Coraza de escamas de oro
+3846,Botas de acero pulido
+3847,Botas de escamas de oro
+3848,Cuchillo de bronce grande
+3849,Espada corta de hierro endurecido
+3850,Hoja serpentina de jade
+3851,Gran maza de hierro sólido
+3852,Destructor de hierro dorado
+3853,Espada ancha de acero lunar
+3854,Hoja tigre de Escarcha
+3855,Hacha de hierro macizo
+3856,Hacha creciente de las Sombras
+3858,Mineral de mitril
+3859,Lingote de acero
+3860,Lingote de mitril
+3864,Citrino
+3866,Diseño: alfanje de jade
+3867,Diseño: destructor de hierro dorado
+3868,Diseño: hoja tigre de Escarcha
+3869,Diseño: hacha creciente de las Sombras
+3870,Diseño: hombreras de hierro verde
+3871,Diseño: sobrehombros de escamas doradas
+3872,Diseño: leotardos de escamas de oro
+3873,Diseño: coraza de escamas de oro
+3874,Diseño: botas de acero pulido
+3875,Diseño: botas de escamas de oro
+3928,Poción de curación excelente
+4096,Pelo de gorila burdo
+4231,Pellejo ligero curado
+4232,Pellejo fino
+4233,Pellejo medio curado
+4234,Cuero pesado
+4235,Pellejo pesado
+4236,Pellejo pesado curado
+4237,Cinturón de cuero cosido a mano
+4238,Bolsa de lino
+4239,Guantes de cuero estampado
+4240,Bolsa de lana
+4241,Bolsa de lana verde
+4242,Pantalones de cuero estampado
+4243,Túnica de cuero refinado
+4244,Jubón de cuero de montañero
+4245,Talega de seda pequeña
+4246,Cinturón de cuero refinado
+4247,Guantes de cuero de montañero
+4248,Guantes de cuero oscuro
+4249,Cinturón de cuero oscuro
+4250,Cinturón de montañero
+4251,Hombreras de montañero
+4252,Hombreras de cuero oscuro
+4253,Guantes de cuero fortalecido
+4254,Guantes barbáricos
+4255,Armadura de cuero verde
+4256,Armadura de guardián
+4257,Cinturón de cuero verde
+4258,Cinturón de guardián
+4259,Brazales de cuero verde
+4260,Brazales de cuero de guardián
+4262,Cinturón de cuero con gemas incrustadas
+4264,Cinturón barbárico
+4265,Complemento pesado para armadura
+4289,Sal
+4291,Hilo de seda
+4292,Patrón: bolsa de lana verde
+4293,Patrón: jubón de cuero de montañero
+4294,Patrón: cinturón de montañero
+4295,Patrón: Guantes de cuero de doble puntada OLD
+4296,Patrón: hombreras de cuero oscuro
+4297,Patrón: guantes barbáricos
+4298,Patrón: cinturón de guardián
+4299,Patrón: armadura de guardián
+4300,Patrón: brazales de cuero de guardián
+4301,Patrón: cinturón barbárico
+4304,Cuero grueso
+4305,Madeja de paño de seda
+4306,Paño de seda
+4307,Guantes de lino pesado
+4308,Brazales de lino verde
+4309,Calzones de lino cosidos a mano
+4310,Guantes de lana pesada
+4311,Capa de lana pesada
+4312,Botas de lino de suela suave
+4313,Botas de lana roja
+4314,Hombreras de lana con doble pespunte
+4315,Hombreras de lana reforzada
+4316,Pantalones de lana pesada
+4317,Pantalones Fénix
+4318,Guantes de Meditación
+4319,Guantes de seda azur
+4320,Botas de seda de araña
+4321,Zapatillas de seda de araña
+4322,Capucha de encantador
+4323,Caperuza de las Sombras
+4324,Jubón de seda azur
+4325,Botas del Encantador
+4326,Capa de seda larga
+4327,Capa helada
+4328,Cinturón de araña
+4329,Cinturón de estrella
+4330,Camisa roja con estilo
+4331,Guantes Fénix
+4332,Camisa amarillo brillante
+4333,Camisa de seda oscura
+4334,Camisa blanca formal
+4335,Camisa de seda morada viva
+4336,Camisa de espadachín negra
+4337,Seda de araña espesa
+4338,Tela de paño mágico
+4339,Madeja de tejido mágico
+4340,Tinte gris
+4341,Tinte amarillo
+4342,Tinte morado
+4343,Pantalones de lino marrón
+4344,Camisa de lino marrón
+4345,Patrón: botas de lana roja
+4346,Patrón: capa de lana pesada
+4347,Patrón: hombreras de lana reforzada
+4348,Patrón: guantes Fénix
+4349,Patrón: pantalones Fénix
+4350,Patrón: zapatillas de seda de araña
+4351,Patrón: caperuza de las Sombras
+4352,Patrón: botas del Encantador
+4353,Patrón: cinturón de araña
+4354,Patrón: camisa de seda morada viva
+4355,Patrón: capa helada
+4356,Patrón: cinturón de estrella
+4357,Pólvora férrea
+4358,Dinamita férrea
+4359,Un puñado de tornillos de cobre
+4360,Bomba de cobre férrea
+4361,Tubo de cobre
+4362,Bocarda férrea
+4363,Modulador de cobre
+4364,Pólvora burda
+4365,Dinamita burda
+4366,Muñeco-diana
+4367,Carga de seforio pequeña
+4368,Gafas de tigre volador
+4369,Trabuco mortal
+4370,Bomba de cobre grande
+4371,Tubo de bronce
+4372,Trabuco fabricado con amor
+4373,Gafas de las Sombras
+4374,Bomba de bronce pequeña
+4375,Cacharros zumbones de bronce
+4376,Deflector de llamas
+4377,Pólvora pesada
+4378,Dinamita pesada
+4379,Escopeta de chapa de plata
+4380,Bomba de bronce grande
+4381,Recombobulador menor
+4382,Marco de bronce
+4383,Rifle de vista lunar
+4384,Oveja explosiva
+4385,Gafas tintadas de verde
+4386,Deflector de hielo
+4387,Tornapunta de hierro
+4388,Rayo descombobulador
+4389,Girocronátomo
+4390,Granada de hierro
+4391,Juego de segador de la cosecha compacto
+4392,Muñeco-diana avanzado
+4393,Monóculo de artesano
+4394,Bomba de hierro grande
+4395,Mina terrestre goblin
+4396,Dragonizo mecánico
+4397,Aparato de invisibilidad gnómico
+4398,Carga de seforio grande
+4399,Pila de madera
+4400,Surtido pesado
+4401,Caja de ardillas mecánica
+4402,Glándula de llamas pequeña
+4403,Mortero de bronce portátil
+4404,Contacto de plata
+4405,Mira rudimentaria
+4406,Mira estándar
+4407,Mira de precisión
+4408,Esquema: ardilla mecánica
+4409,Esquema: carga de seforio pequeña
+4410,Esquema: gafas de las Sombras
+4411,Esquema: deflector de llamas
+4412,Esquema: rifle de vista lunar
+4413,Esquema: rayo descombolulador
+4414,Esquema: mortero de bronce portátil
+4415,Esquema: monóculo de artesano
+4416,Esquema: mina terrestre goblin
+4417,Esquema: carga de seforio grande
+4455,Arnés de pellejo de raptor
+4456,Cinturón de pellejo de raptor
+4457,Ala de águila ratonera a la parrilla
+4461,Pellejo de raptor
+4470,Madera simple
+4536,Manzana roja lustrosa
+4589,Pluma elegante larga
+4592,Pargo de lodo boquilargo
+4593,Siluro mostacherizo
+4594,Bacalao Piedrescama
+4596,Poción de sanación descolorida menor
+4597,Receta: poción de sanación descolorida menor
+4603,Serviola moteada cruda
+4605,Champiñón con motas rojas
+4609,Receta: ala de águila ratonera a la parrilla
+4611,Perla azul
+4623,Poción de escudo de piedra inferior
+4624,Receta: poción de escudo de piedra inferior
+4625,Flor de Fuego
+4655,Carne de almeja gigante
+4852,Bomba cegadora
+5051,Rata de excavación
+5081,Bolsa de pellejo de kodo
+5082,Cuero fino de kodo
+5083,Patrón: bolsa de pellejo de kodo
+5095,Atún blanco arco iris
+5116,Pluma de cola larga
+5373,Talismán de la suerte
+5465,Pata de araña pequeña
+5466,Aguijón de escórpido
+5467,Carne de kodo
+5468,Carne de frenesí tierna
+5469,Carne de zancudo
+5470,Cola de truenagarto
+5471,Carne de ciervo
+5472,Kebab de araña Kaldorei
+5473,Sorpresa de escórpido
+5474,Carne de kodo asado
+5476,Filete de pez furia
+5477,Estofado de zancudo
+5478,Estofado de ratas de excavación
+5479,Cola de lagarto crujiente
+5480,Venado magro
+5482,Receta: kebab de araña Kaldorei
+5483,Receta: sorpresa de escórpido
+5484,Receta: carne de kodo asado
+5485,Receta: filete de furia
+5486,Receta: estofado de zancudo
+5487,Receta: estofado de ratas de excavación
+5488,Receta: cola de lagarto crujiente
+5489,Receta: venado magro
+5498,Perla lustrosa pequeña
+5500,Perla iridiscente
+5503,Carne de almeja
+5504,Carne de almeja ácida
+5507,Catalejo ornamentado
+5525,Almejas hervidas
+5526,Sopa de almejas
+5527,Almejas picantes a la goblin
+5528,Receta: sopa de almejas
+5540,Daga de perlas
+5541,Martillo iridiscente
+5542,Capa con broche de perlas
+5543,Diseño: martillo iridiscente
+5578,Diseño: peto de bronce plateado
+5631,Poción de ira
+5633,Gran poción de ira
+5634,Poción de acción libre
+5635,Garra afilada
+5637,Colmillo grande
+5640,Receta: poción de ira
+5642,Receta: poción de acción libre
+5643,Receta: gran poción de ira
+5739,Arnés barbárico
+5762,Bolsa de lino roja
+5763,Bolsa de lana roja
+5764,Talega de seda verde
+5765,Talega de seda negra
+5766,Toga de zahorí inferior
+5770,Togas de Arcana
+5771,Patrón: bolsa de lino rojo
+5772,Patrón: bolsa de lana roja
+5773,Patrón: togas de Arcana
+5774,Patrón: talega de seda verde
+5775,Patrón: talega de seda negra
+5780,Cinturón de escama de múrloc
+5781,Peto de escama de múrloc
+5782,Armadura múrloc gruesa
+5783,Brazales de escama de múrloc
+5784,Escama de múrloc babosa
+5785,Escama múrloc gruesa
+5786,Patrón: cinturón de escama de múrloc
+5787,Patrón: peto de escama de múrloc
+5788,Patrón: armadura múrloc gruesa
+5789,Patrón: brazales de escama de múrloc
+5956,Martillo de herrero
+5957,Jubón de cuero cosido a mano
+5958,Pantalones de cuero refinado
+5961,Pantalones de cuero oscuro
+5962,Pantalones guardián
+5963,Leotardos barbáricos
+5964,Hombreras barbáricas
+5965,Capa de guardián
+5966,Guantes de guardián
+5972,Patrón: pantalones de cuero refinado
+5973,Patrón: leotardos barbáricos
+5974,Patrón: capa de guardián
+5996,Jarabe de respiración acuática
+5997,Elixir de defensa menor
+6037,Lingote de veraplata
+6038,Almeja gigante chamuscada
+6039,Receta: almeja gigante chamuscada
+6040,Brazales de escamas de oro
+6041,Cadena de acero
+6042,Escudo con punta de hierro
+6043,Contrapeso de hierro
+6044,Diseño: escudo con punta de hierro
+6045,Diseño: contrapeso de hierro
+6046,Diseño: cadena de acero
+6047,Diseño: almófar de escamas de oro
+6048,Poción de protección de las Sombras
+6049,Poción de protección de Fuego
+6050,Poción de protección de Escarcha
+6051,Poción de protección Sagrada
+6052,Poción de protección de Naturaleza
+6053,Receta: poción de protección Sagrada
+6054,Receta: poción de protección de las Sombras
+6055,Receta: poción de protección de Fuego
+6056,Receta: poción de Protección de Escarcha
+6057,Receta: poción de protección de Naturaleza
+6068,Receta: aceite de las Sombras
+6149,Poción de maná superior
+6211,Receta: elixir de fuerza de ogro
+6214,Gran maza de cobre pesada
+6217,Vara de cobre
+6218,Vara de cobre con runas
+6219,Llave inglesa Arcoluz
+6238,Toga de lino marrón
+6239,Jubón de lino rojo
+6240,Jubón de lino azul
+6241,Toga de lino blanco
+6242,Toga de lino azul
+6243,Toga de lana verde
+6260,Tinte azul
+6261,Tinte naranja
+6263,Mono azul
+6264,Toga de adepto superior
+6270,Patrón: jubón de lino azul
+6271,Patrón: jubón de lino rojo
+6272,Patrón: toga de lino azul
+6274,Patrón: mono azul
+6275,Patrón: toga de fiel superior
+6289,Pargo de loco boquilargo crudo
+6290,Pececito luminoso
+6291,Pececito luminoso crudo
+6303,Caballa suave cruda
+6308,Siluro mostacherizo crudo
+6316,Delicia de furia de Loch Modan
+6317,Frenesí del lago crudo
+6325,Receta: pececito luminoso
+6326,Receta: caballa suave
+6328,Receta: pargo de lodo boquilargo
+6329,Receta: delicia de furia de Loch Modan
+6330,Receta: siluro mostacherizo
+6338,Vara de plata
+6339,Vara de plata con runas
+6342,Fórmula: Encantar torso: intelecto menor
+6344,Fórmula: encantar brazal: espíritu menor
+6345,Fórmula: imbuir capa: protección
+6346,Fórmula: Encantar torso: intelecto inferior
+6347,Fórmula: encantar brazal: fuerza menor
+6348,Fórmula: encantar arma: bestiacida menor
+6349,Fórmula: encantar arma de 2M: intelecto inferior
+6350,Botas de bronce férreas
+6358,Bocanegra graso
+6359,Pargo de Fuego
+6361,Atún blanco arco iris crudo
+6362,Bacalao Piedrescama crudo
+6368,Receta: atún blanco arco iris
+6369,Receta: bacalao Piedrescama
+6370,Aceite bocanegra
+6371,Aceite de fuego
+6372,Poción de velocidad de nado
+6373,Elixir de poder de Fuego
+6375,Fórmula: encantar brazal: espíritu inferior
+6376,Fórmula: encantar botas: aguante menor
+6377,Fórmula: encantar botas: agilidad menor
+6384,Camisa azul con estilo
+6385,Camisa verde con estilo
+6390,Patrón: camisa azul con estilo
+6391,Patrón: camisa verde con estilo
+6401,Patrón: camisa de seda oscura
+6450,Venda de seda
+6451,Venda de seda pesada
+6452,Antídoto
+6453,Antídoto fuerte
+6454,Manual: antídoto fuerte
+6466,Capa de escamas desviadas
+6467,Guantes de escamas desviadas
+6468,Cinturón de escamas desviadas
+6470,Escama desviada
+6471,Escama desviada perfecta
+6474,Patrón: capa de escamas desviadas
+6475,Patrón: guantes de escamas desviadas
+6476,Patrón: cinturón de escamas desviadas
+6522,Pez descarriado
+6530,Reptadores nocturnos
+6533,Atractor de peces acuadinámico
+6657,Delicia desviada sabrosa
+6661,Receta: delicia desviada sabrosa
+6662,Elixir de crecimiento gigante
+6663,Receta: elixir de crecimiento gigante
+6672,Esquema: bomba cegadora
+6709,Jubón Resplandor lunar
+6710,Patrón: jubón Resplandor lunar
+6712,Cerradura de prácticas
+6714,Dinamita EZ-Thro
+6716,Esquema: dinamita EZ-Thro
+6730,Cadena de Forjaz
+6731,Peto de Forjaz
+6733,Guanteletes de Forjaz
+6735,Diseño: peto de Forjaz
+6786,Vestido simple
+6787,Vestido de lana blanco
+6795,Camisa blanca de aventurero
+6796,Camisa de espadachín roja
+6887,Serviola moteada
+6888,Huevo cocido con hierbas
+6889,Huevo pequeño
+6890,Carne de oso ahumado
+6892,Receta: carne de oso ahumado
+7026,Cinturón de lino
+7027,Botas de oscuridad
+7046,Pantalones de seda azur
+7047,Manos de Oscuridad
+7048,Caperuza de seda azur
+7049,Guantes de fe verdadera
+7050,Cinta de seda
+7051,Jubón terráneo
+7052,Cinturón de seda azur
+7053,Capa de seda azur
+7054,Toga de Poder
+7055,Cinturón de seda carmesí
+7056,Capa de seda carmesí
+7057,Hombreras de seda verde
+7058,Jubón de seda carmesí
+7059,Sobrehombros de seda carmesí
+7060,Hombreras azur
+7061,Cinturón de seda terránea
+7062,Pantalones bombacho de seda carmesí
+7063,Toga de seda carmesí
+7064,Guantes de seda carmesí
+7065,Armadura de seda verde
+7067,Elemental de tierra
+7068,Elemental de Fuego
+7069,Elemental de aire
+7070,Elemental de agua
+7071,Hebilla de hierro
+7072,Escama Naga
+7075,Núcleo de tierra
+7076,Esencia de tierra
+7077,Corazón de fuego
+7078,Esencia de Fuego
+7079,Globo de agua
+7080,Esencia de agua
+7081,Aliento del Viento
+7082,Esencia de aire
+7084,Patrón: sobrehombros de seda carmesíes
+7085,Patrón: hombreras azur
+7086,Patrón: cinturón de seda terránea
+7087,Patrón: capa de seda carmesí
+7088,Patrón: toga de seda carmesí
+7089,Patrón: capa de seda azur
+7090,Patrón: armadura de seda verde
+7091,Patrón: guantes de fe verdadera
+7092,Patrón: manos de Oscuridad
+7114,Patrón: guantes de seda azur
+7148,Pinzas de batería goblin
+7166,Daga de cobre
+7189,Botas cohete goblin
+7191,Cableado fusionado
+7192,Esquema: botas cohete goblin
+7276,Capa de cuero cosida a mano
+7277,Brazales de cuero cosidos a mano
+7278,Carcaj de cuero ligero
+7279,Faltriquera de munición de cuero pequeña
+7280,Pantalones de cuero basto
+7281,Brazales de cuero ligero
+7282,Pantalones de cuero ligero
+7283,Capa de cría negra
+7284,Guantes de cachorro rojo
+7285,Guantes de cuero livianos
+7286,Escama de cría negra
+7287,Escama de cachorro rojo
+7288,Patrón: pantalones de cuero basto
+7289,Patrón: capa de cría negra
+7290,Patrón: guantes de cría de dragón roja
+7348,Guantes de flechero
+7349,Guantes de herborista
+7352,Sobrehombros de cuero terráneo
+7358,Guantes de ratero
+7359,Guantes terráneos gruesos
+7360,Patrón: guantes de cuero oscuro
+7361,Patrón: guantes de herborista
+7362,Patrón: hombreras de cuero terráneo
+7363,Patrón: guantes de ratero
+7364,Patrón: guantes terráneos pesados
+7371,Carcaj pesado
+7372,Faltriquera de munición de cuero pesado
+7373,Leotardos de cuero oscurecido
+7374,Armadura de cuero oscurecido
+7375,Armadura de cría verde
+7377,Capa de cuero escarchada
+7378,Brazales oscurecidos
+7386,Brazales de cría verde
+7387,Cinturón oscurecido
+7390,Botas oscurecidas
+7391,Botas veloces
+7392,Escama de cría verde
+7428,Pellejo de gato de las Sombras
+7449,Patrón: leotardos de cuero oscurecido
+7450,Patrón: armadura de cría verde
+7451,Patrón: brazales de cría verde
+7452,Patrón: botas oscurecidas
+7453,Patrón: botas veloces
+7506,Mando universal gnómico
+7560,Esquema: mando universal gnómico
+7561,Esquema: pinzas de batería goblin
+7613,Patrón: armadura de cuero verde
+7676,Té de cardo
+7678,Receta: té de cardo
+7742,Esquema: aparato de invisibilidad gnómico
+7909,Aguamarina
+7910,Rubí estrella
+7912,Piedra sólida
+7913,Sobrehombros barbáricos de hierro
+7914,Coraza barbárica de hierro
+7915,Yelmo barbárico de hierro
+7916,Botas barbáricas de hierro
+7917,Guantes barbáricos de hierro
+7918,Hombrera de mitril pesado
+7919,Guanteletes de mitril pesado
+7920,Pantalones de placas de mitril
+7921,Pantalones de mitril pesado
+7922,Yelmo de placas de acero
+7924,Brazales de placas de mitril
+7925,Guantes de placas de mitril
+7926,Pantalones de mitril ornamentado
+7927,Guantes de mitril ornamentado
+7928,Hombreras de mitril ornamentadas
+7929,Leotardos de guerra orcos
+7930,Peto de mitril pesado
+7931,Almófar de mitril
+7932,Hombreras de placas de mitril
+7933,Botas de mitril pesado
+7934,Yelmo de mitril pesado
+7935,Peto de mitril ornamentado
+7936,Botas de mitril ornamentadas
+7937,Yelmo de mitril ornamentado
+7938,Guanteletes de veraplata
+7939,Peto de veraplata
+7941,Hacha de mitril pesado
+7942,Hacha azul relumbrante
+7943,Espada de mitril maligna
+7944,Estoque de mitril deslumbrante
+7945,Maza negra grande
+7946,Martillo de mitril con runas
+7947,Chafarote de ébano
+7954,El asolador
+7955,Espada claymore de cobre
+7956,Martillo de guerra de bronce
+7957,Espada magna de bronce
+7958,Hacha de batalla de bronce
+7959,Plaga
+7960,Campeón de veraplata
+7961,Hoja fantasma
+7963,Peto de acero
+7964,Piedra de afilar sólida
+7965,Piedrafuerte sólida
+7966,Piedra de pulir sólida
+7967,Punta de escudo de mitril
+7969,Aguijones de mitril
+7971,Perla negra
+7972,Icor de no-muerto
+7974,Carne de almeja sabrosa
+7975,Diseño: pantalones de mitril pesado
+7976,Diseño: escudo con punta de mitril
+7978,Diseño: hombreras de hierro barbárico
+7979,Diseño: peto de hierro barbárico
+7980,Diseño: yelmo de hierro barbárico
+7981,Diseño: botas de hierro barbárico
+7982,Diseño: guantes de hierro barbárico
+7983,Diseño: pantalones de mitril ornamentado
+7984,Diseño: guantes de mitril ornamentado
+7985,Diseño: hombreras de mitril ornamentadas
+7989,Diseño: aguijones de mitril
+7990,Diseño: yelmo de mitril pesado
+7991,Diseño: hombreras de placas de mitril
+7992,Diseño: hacha azul relumbrante
+7993,Diseño: estoque de mitril deslumbrante
+7995,Diseño: brazales de placas de mitril
+8028,Diseño: martillo de mitril con runas
+8029,Diseño: hoja de mitril maligna
+8030,Diseño: shiv de ébano
+8067,Proyectil artesanal ligero
+8068,Proyectil artesanal pesado
+8069,Proyectil artesanal sólido
+8146,Garra maligna
+8150,Sal de roca
+8151,Frasco de mojo
+8152,Frasco de gran mojo
+8153,Atriplex salvaje
+8154,Escama de escórpido
+8165,Escamas de dragón desgastadas
+8167,Escama de tortuga
+8168,Pluma negro azabache
+8169,Pellejo grueso
+8170,Cuero basto
+8171,Pellejo basto
+8172,Pellejo grueso curado
+8173,Complemento grueso para armadura
+8174,Sombrero de cuero cómodo
+8175,Túnica Nochefugaz
+8176,Cinta Nochefugaz
+8185,Leotardos de escamas de tortuga
+8187,Guantes de escamas de tortuga
+8189,Peto de escamas de tortuga
+8191,Yelmo de escamas de tortuga
+8192,Hombreras Nochefugaz
+8193,Pantalones Nochefugaz
+8195,Capa Nochefugaz
+8197,Botas Nochefugaz
+8198,Brazales de escamas de tortuga
+8200,Toga de gran vudú
+8201,Máscara de gran vudú
+8202,Pantalones de gran vudú
+8203,Coraza de escórpido resistente
+8204,Guantes de escórpido resistentes
+8205,Brazales de escórpido resistentes
+8206,Leotardos de escórpido resistentes
+8207,Sobrehombros de escórpido resistentes
+8208,Yelmo de escórpido resistente
+8209,Botas de escórpido resistentes
+8210,Hombreras de cuero salvaje
+8211,Jubón de cuero salvaje
+8212,Leotardos de cuero salvaje
+8213,Botas de cuero salvaje
+8214,Casco de cuero salvaje
+8215,Capa de cuero salvaje
+8216,Capa de gran vudú
+8217,Carcaj rápido
+8218,Faltriquera de munición de cuero grueso
+8343,Hilo de seda pesada
+8345,Yelmo cabeza de lobo
+8346,Guanteletes del Mar
+8347,Guanteletes de escamas de dragón
+8348,Yelmo de Fuego
+8349,Peto de plumas
+8364,Trucha de cabeza de mitril
+8365,Trucha cabeza de mitril cruda
+8367,Peto de escamas de dragón
+8368,Pellejo de lobo grueso
+8384,Patrón: sombrero de cuero cómodo
+8385,Patrón: guantes de escamas de tortuga
+8386,Patrón: toga de gran vudú
+8387,Patrón: máscara de gran vudú
+8388,Patrón: capa Nochefugaz
+8389,Patrón: pantalones de gran vudú
+8390,Patrón: capa de gran vudú
+8395,Patrón: peto escórpido resistente
+8397,Patrón: brazales escórpidos resistentes
+8398,Patrón: guantes escórpidos resistentes
+8399,Patrón: botas escórpidas resistentes
+8400,Patrón: hombreras escórpidos resistentes
+8401,Patrón: leotardos escórpidos resistentes
+8402,Patrón: yelmo escórpido resistente
+8403,Patrón: hombreras de cuero salvaje
+8404,Patrón: jubón de cuero salvaje
+8405,Patrón: casco de cuero salvaje
+8406,Patrón: botas de cuero salvaje
+8407,Patrón: leotardos de cuero salvaje
+8408,Patrón: capa de cuero salvaje
+8409,Patrón: hombreras Nochefugaz
+8544,Venda de tejido mágico
+8545,Venda de tejido mágico gruesa
+8766,Rocío de gloria matinal
+8827,Jarabe de caminar sobre el agua
+8831,Loto morado
+8836,Lágrimas de Arthas
+8838,Solea
+8839,Carolina
+8845,Champiñón fantasma
+8846,Gromsanguina
+8925,Vial de cristal
+8949,Elixir de agilidad
+8951,Elixir de defensa
+8956,Aceite de inmolación
+8957,Mero espinoso
+8959,Mero espinoso crudo
+9030,Poción reconstituyente
+9036,Poción de resistencia a la magia
+9060,Cilindro de mitril taraceado
+9061,Combustible de cohete goblin
+9088,Ofrenda de Arthas
+9144,Poción de atriplex salvaje
+9149,Piedra de filósofo
+9154,Jarabe de detección de no-muertos
+9155,Elixir Arcano
+9172,Poción de invisibilidad
+9179,Elixir de intelecto superior
+9187,Elixir de agilidad superior
+9197,Jarabe de visión onírica
+9206,Elixir de fuerza superior
+9210,Tinte de fantasma
+9224,Poción de matanza de demonios
+9233,Jarabe de detección de demonios
+9260,Ron volátil
+9262,Vitriolo negro
+9264,Elixir de poder de las Sombras
+9293,Receta: poción de resistencia a la magia
+9294,Receta: poción de atriplex salvaje
+9295,Receta: poción de invisibilidad
+9296,Receta: obsequio de Arthas
+9297,Receta: jarabe de visión onírica
+9298,Receta: elixir de gigantes
+9300,Receta: poción de matanza de demonios
+9301,Receta: elixir de poder de las Sombras
+9302,Receta: tinte fantasmal
+9303,Receta: piedra de filósofo
+9304,Receta: transmutar hierro a oro
+9305,Receta: transmutar mitril a veraplata
+9312,Fuego artificial azul
+9313,Fuego artificial verde
+9318,Fuego artificial rojo
+9366,Guanteletes de escamas de oro
+9367,Diseño: guanteletes de escamas de oro
+9998,Jubón de tejido mágico negro
+9999,Leotardos de tejido mágico negros
+10001,Toga de tejido mágico negra
+10002,Pantalones de tejido de sombras
+10003,Guantes de tejido mágico negros
+10004,Toga de tejido de sombras
+10007,Jubón de tejido mágico rojo
+10008,Máscara de bandido blanca
+10009,Pantalones de tejido mágico rojos
+10010,Pantalones de paño tormentoso
+10011,Guantes de paño tormentoso
+10018,Guantes de tejido mágico rojos
+10019,Guantes Vigilasueños
+10020,Jubón de paño tormentoso
+10021,Jubón Vigilasueños
+10023,Guantes tejido de sombras
+10024,Cinta de tejido mágico negra
+10025,Máscara de tejido de sombras
+10026,Botas de tejido mágico negras
+10027,Sobrehombros de tejido mágico negros
+10028,Hombreras de tejido de sombras
+10029,Sobrehombros de tejido mágico rojos
+10030,Sombrero de almirante
+10031,Botas tejido de sombras
+10032,Cinta de paño tormentoso
+10033,Cinta de tejido mágico roja
+10034,Camisa de esmoquin
+10035,Pantalones de esmoquin
+10036,Chaqueta de esmoquin
+10038,Hombreras de paño tormentoso
+10039,Botas de paño tormentoso
+10040,Vestido de boda blanco
+10041,Aro Vigilasueños
+10042,Toga de paño cenizo
+10044,Botas de paño cenizo
+10045,Pantalones de lino simples
+10046,Botas de lino simples
+10047,Falda escocesa simple
+10048,Falda escocesa de colores
+10050,Bolsa de tejido mágico
+10051,Bolsa de tejido mágico roja
+10052,Camisa marcial naranja
+10053,Vestido negro simple
+10054,Camisa de tejido mágico lavanda
+10055,Camisa de tejido mágico rosa
+10056,Camisa de tejido mágico naranja
+10284,Harina estándar
+10285,Seda de las Sombras
+10286,Corazón del Salvaje
+10290,Tinte rosa
+10300,Patrón: jubón de paño mágico rojo
+10301,Patrón: máscara de bandido blanca
+10302,Patrón: pantalones de paño mágico rojo
+10308,Pergamino de Intelecto IV
+10311,Patrón: camisa marcial naranja
+10312,Patrón: guantes de paño mágico rojo
+10314,Patrón: camisa de paño mágico lavanda
+10315,Patrón: hombreras de paño mágico rojo
+10316,Patrón: falda escocesa colorida
+10317,Patrón: camisa de paño mágico rosa
+10318,Patrón: sombrero de almirante
+10320,Patrón: cinta de paño mágico rojo
+10321,Patrón: camisa de esmoquin
+10323,Patrón: pantalones de esmoquin
+10325,Patrón: vestido de boda blanco
+10326,Patrón: chaqueta de esmoquin
+10421,Jubón de cobre férreo
+10423,Leotardos de bronce plateado
+10424,Diseño: leotardos de bronce plateado
+10463,Patrón: máscara de tejido de sombras
+10498,Microajustador giromático
+10499,Gafas Ojo brillante
+10500,Gafas de Fuego
+10501,Ultragafas Ojo de gato
+10502,Gafas extremas de hechizo de poder
+10503,Gafas tintadas de rosa
+10504,Lentes verdes
+10505,Pólvora
+10506,Casco de inmersión
+10507,Dinamita sólida
+10508,Trabuco de mitril
+10510,Rifle de gran calibre de mitril
+10512,Balas de mitril de gran impacto
+10513,Girotiro de mitril
+10514,Bomba de fragmentación de mitril
+10518,Capa de paracaidista
+10542,Casco de minero goblin
+10543,Casco de albañil goblin
+10545,Gafas gnómicas
+10546,Mira mortal
+10548,Mira de francotirador
+10558,Núcleo de energía de oro
+10559,Tubo de mitril
+10560,Disparador inestable
+10561,Envoltura de mitril
+10562,Bomba de gran carga
+10576,Dragonizo mecánico de mitril
+10577,Mortero goblin
+10579,Flecha explosiva
+10586,El grande
+10587,Expendedora de bombas goblin
+10588,Casco de cohete goblin
+10592,Jarabe Ojo de gato
+10601,Esquema: gafas Ojo brillante
+10602,Esquema: mira mortal
+10603,Esquema: ultragafas Ojo de gato
+10604,Esquema: rifle de gran calibre de mitril
+10605,Esquema: gafas extremas de hechizo de poder
+10606,Esquema: capa de paracaidista
+10607,Esquema: casco de inmersión
+10608,Esquema: mira de francotirador
+10609,Esquema: dragonizo mecánico de mitril
+10620,Torio
+10644,Receta: combustible de cohete goblin
+10645,Rayo mortal gnómico
+10646,Carga de zapador goblin
+10647,Tinta de ingeniero
+10648,Pliego negro
+10713,Diseño: cilindro de mitril taraceado
+10716,Rayo reductor gnómico
+10719,Alarma móvil
+10720,Proyector redomático gnómico
+10721,Cinturón de prevención de daño gnómico
+10724,Botas cohete gnómicas
+10725,Pollo de batalla gnomo
+10726,Gorro de control mental gnómico
+10727,Pistola de dragón goblin
+10728,Patrón: camisa negra de aventurero
+10841,Té de espina de oro
+10858,Diseño: gran maza de hierro sólido
+10938,Esencia mágica inferior
+10939,Esencia mágica superior
+10940,Polvo extraño
+10978,Fragmento de luz trémula pequeño
+10998,Esencia astral inferior
+11038,Fórmula: encantar arma de 2M: espíritu inferior
+11039,Fórmula: encantar capa: agilidad menor
+11040,Mañagrana
+11081,Fórmula: encantar escudo: protección inferior
+11082,Esencia astral superior
+11083,Polvo de alma
+11084,Fragmento con luz trémula grande
+11098,Fórmula: encantar capa: resistencia inferior a las Sombras
+11101,Fórmula: encantar brazal: fuerza inferior
+11128,Vara de oro
+11130,Vara de oro rúnica
+11134,Esencia mística inferior
+11135,Esencia mística superior
+11137,Polvo de visión
+11138,Fragmento resplandeciente pequeño
+11139,Fragmento resplandeciente grande
+11144,Vara de veraplata
+11145,Vara de veraplata con runas
+11150,Fórmula: encantar guantes: minería
+11151,Fórmula: encantar guantes: herboristería
+11152,Fórmula: encantar guantes: pesca
+11163,Fórmula: encantar brazal: desvío inferior
+11164,Fórmula: encantar arma: bestiacida inferior
+11165,Fórmula: encantar arma: mataelementales inferior
+11166,Fórmula: encantar guantes: desuello
+11167,Fórmula: encantar botas: espíritu inferior
+11168,Fórmula: encantar escudo: bloqueo inferior
+11174,Esencia abisal inferior
+11175,Esencia abisal superior
+11176,Polvo onírico
+11177,Fragmento radiante pequeño
+11178,Fragmento radiante grande
+11184,Cristal de poder azul
+11185,Cristal de poder verde
+11186,Cristal de poder rojo
+11188,Cristal de poder amarillo
+11202,Fórmula: encantar escudo: aguante
+11203,Fórmula: encantar guantes: minería avanzada
+11204,Fórmula: encantar brazal: espíritu superior
+11205,Fórmula: encantar guantes: herboristería avanzada
+11206,Fórmula: encantar capa: agilidad inferior
+11207,Fórmula: encantar arma: arma ígnea
+11208,Fórmula: encantar arma: matanza de demonios
+11223,Fórmula: encantar brazal: desvío
+11224,Fórmula: encantar escudo: resistencia a Escarcha
+11225,Fórmula: encantar brazal: aguante superior
+11226,Fórmula: encantar guantes: equitación
+11287,Varita mágica inferior
+11288,Varita mágica superior
+11289,Varita mística inferior
+11291,Madera de estrella
+11371,Lingote Hierro Negro
+11382,Sangre de la Montaña
+11590,Equipo de reparación mecánico
+11604,Placa Hierro Negro
+11605,Hombreras Hierro Negro
+11606,Malla Hierro Negro
+11607,Taladora Hierro Negro
+11608,Pulverizador Hierro Negro
+11610,Diseño: pulverizador Hierro Negro
+11611,Diseño: taladora Hierro Negro
+11612,Diseño: placas Hierro Negro
+11614,Diseño: malla Hierro Negro
+11615,Diseño: hombreras Hierro Negro
+11754,Diamante negro
+11813,Fórmula: corazón humeante de la montaña
+11825,Bomba mascota
+11826,Humillo
+11827,Esquema: Lil' Humillo
+11828,Esquema: bomba mascota
+12037,Carne misteriosa
+12162,Diseño: espada corta de hierro endurecido
+12163,Diseño: espada ancha de acero lunar
+12164,Diseño: hacha de hierro macizo
+12184,Carne de raptor
+12190,Poción de letargo sin sueños
+12202,Carne de tigre
+12203,Carne de lobo rojo
+12204,Carne de kodo pesada
+12205,Carne de araña blanca
+12206,Carne de cangrejo tierna
+12207,Huevo gigante
+12208,Carne de lobo tierna
+12209,Chuleta de lobo magro
+12210,Raptor asado
+12212,Estofado de la selva
+12213,Sorpresa de carroñero
+12214,Estofado misterioso
+12215,Estofado de kodo pesado
+12216,Chili de cangrejo especiado
+12217,Ají aliento de dragón
+12218,Tortilla de monstruo
+12223,Ala de murciélago carnosa
+12224,Ala de murciélago crujiente
+12226,Receta: ala de murciélago crujiente
+12227,Receta: chuleta de lobo magro
+12228,Receta: raptor asado
+12229,Receta: costillas de lobo picantes
+12231,Receta: estofado de la selva
+12232,Receta: sorpresa de carroñero
+12233,Receta: estofado misterioso
+12239,Receta: ají aliento de dragón
+12240,Receta: estofado de kodo pesado
+12259,Daga de acero destellante
+12260,Hoja dorada abrasadora
+12261,Diseño: hoja dorada abrasadora
+12359,Lingote de torio
+12360,Lingote de arcanita
+12361,Zafiro azul
+12363,Cristal Arcano
+12364,Esmeralda enorme
+12365,Piedra densa
+12404,Piedra de afilar densa
+12405,Armadura de torio
+12406,Cinturón de torio
+12408,Brazales de torio
+12409,Botas de torio
+12410,Yelmo de torio
+12414,Leotardos de torio
+12415,Peto radiante
+12416,Cinturón radiante
+12417,Aro radiante
+12418,Guantes radiantes
+12419,Botas radiantes
+12420,Leotardos radiantes
+12422,Peto de placas imperiales
+12424,Cinturón de placas imperiales
+12425,Brazales de placas imperiales
+12426,Botas de placas imperiales
+12427,Yelmo de placas imperiales
+12428,Hombreras de placas imperiales
+12429,Leotardos de placas imperiales
+12607,Escamas cromáticas luminosas
+12610,Sobrehombros rúnicos de placas
+12611,Botas de placas rúnicas
+12612,Yelmo de placas rúnicas
+12613,Peto rúnico
+12614,Leotardos de placas rúnicas
+12618,Peto de torio encantado
+12619,Leotardos de torio encantado
+12620,Yelmo de torio encantado
+12624,Malla de espina salvaje
+12625,Hombreras Albar
+12631,Guanteletes de placas ígneas
+12632,Guanteletes de tormenta
+12633,Yelmo de alma blanca
+12636,Yelmo del Gran jefe
+12639,Guanteletes bastión
+12640,Yelmo corazón de león
+12641,Malla invulnerable
+12643,Piedrafuerte densa
+12644,Piedra de pulir densa
+12645,Punta de escudo de torio
+12655,Lingote de torio encantado
+12662,Runa demoníaca
+12682,Diseño: armadura de torio
+12683,Diseño: cinturón de torio
+12684,Diseño: brazales de torio
+12685,Diseño: cinturón radiante
+12687,Diseño: hombreras de placas imperiales
+12688,Diseño: cinturón de placas imperiales
+12689,Diseño: peto radiante
+12690,Diseño: brazales de placas imperiales
+12691,Patrón: malla Espina Salvaje
+12692,Diseño: escudo con punta de torio
+12693,Diseño: botas de torio
+12694,Diseño: yelmo de torio
+12695,Diseño: guantes radiantes
+12696,Diseño: peto de demonio forjado
+12697,Diseño: botas radiantes
+12698,Diseño: sobrehombros Albar
+12699,Diseño: guanteletes de placas ígneas
+12700,Diseño: botas de placas imperiales
+12701,Diseño: yelmo de placas imperiales
+12702,Diseño: aro radiante
+12703,Patrón: guanteletes de tormenta
+12704,Diseño: leotardos de torio
+12705,Diseño: peto de placas imperiales
+12706,Diseño: hombreras de placas rúnicas
+12707,Diseño: botas de placas rúnicas
+12711,Diseño: yelmo de alma blanca
+12713,Diseño: leotardos radiantes
+12714,Diseño: yelmo de placas rúnicas
+12715,Diseño: leotardos de placas imperiales
+12716,Patrón: yelmo del Gran Jefe
+12717,Diseño: yelmo corazón de león
+12718,Diseño: peto rúnico
+12719,Diseño: leotardos de placas rúnicas
+12720,Diseño: guanteletes bastión
+12725,Diseño: yelmo de torio encantado
+12726,Diseño: leotardos de torio encantados
+12727,Diseño: peto de torio encantado
+12728,Patrón: malla invulnerable
+12735,Punto de abominación deshilachado
+12753,Piel de las Sombras
+12764,Espada magna de torio
+12769,Extracto de Picomadera
+12772,Martillo de torio taraceado
+12773,Hacha de mano de torio ornamentado
+12774,Filo del Alba
+12775,Hacha de batalla de torio enorme
+12776,Martillo de batalla encantado
+12777,Estoque llameante
+12781,Serenidad
+12782,Corrupción
+12783,Buscalmas
+12784,Segadora de arcanita
+12790,Campeón de arcanita
+12792,Martillo volcánico
+12794,Martillo de tormenta de obra maestra
+12795,Espolón de sangre
+12796,Martillo de los Titanes
+12797,Guardia de Escarcha
+12798,Aniquilador
+12799,Ópalo grande
+12800,Diamante de Azeroth
+12802,Lanza Negra
+12803,Esencia viva
+12804,Mojo potente
+12808,Esencia de no-muerto
+12809,Piedra guardián
+12810,Cuero encantado
+12811,Orbe de rectitud
+12819,Diseño: hacha de mano de torio ornamentado
+12821,Diseño: filo del Alba
+12823,Diseño: hacha de batalla de torio enorme
+12824,Diseño: martillo de batalla encantado
+12825,Diseño: estoque llameante
+12827,Diseño: serenidad
+12828,Diseño: martillo volcánico
+12830,Diseño: corrupción
+12833,Diseño: martillo de los Titanes
+12834,Diseño: campeón de arcanita
+12835,Diseño: aniquilador
+12836,Diseño: guardia de Escarcha
+12837,Diseño: martillo Tormenta de obra maestra
+12838,Diseño: segadora de arcanita
+12839,Diseño: buscalmas
+12938,Sangre de héroes
+12958,Receta: transmutar arcanita
+13180,Agua bendita de Stratholme
+13287,Patrón: arnés de pellejo de raptor
+13288,Patrón: cinturón de pellejo de raptor
+13308,Esquema: deflector de hielo
+13309,Esquema: trabuco fabricado con amor
+13310,Esquema: mira de precisión
+13311,Esquema: dragonizo mecánico
+13422,Anguila Escama Tormentosa
+13423,Aceite de Escama Tormentosa
+13442,Poción de ira poderosa
+13443,Poción de maná excelente
+13444,Poción de maná sublime
+13445,Elixir de defensa superior
+13446,Poción de curación sublime
+13447,Elixir de los sabios
+13452,Elixir de la mangosta
+13453,Elixir de potencia bruta
+13454,Elixir superior arcano
+13455,Poción de escudo de piedra superior
+13456,Poción de protección de Escarcha superior
+13457,Poción de protección de Fuego superior
+13458,Poción de protección de Naturaleza superior
+13459,Poción de protección de las Sombras superior
+13460,Poción de protección Sagrada superior
+13461,Poción de protección de Arcana superior
+13462,Poción de purificación
+13463,Hojasueño
+13464,Sansam dorado
+13465,Salviargenta de montaña
+13466,Flor de peste
+13467,Setelo
+13468,Loto negro
+13476,Receta: poción de ira poderosa
+13477,Receta: poción de maná excelente
+13478,Receta: elixir de defensa excelente
+13479,Receta: elixir de los sabios
+13481,Receta: elixir de potencia bruta
+13482,Receta: transmutar aire a fuego
+13483,Receta: transmutar fuego a tierra
+13484,Receta: transmutar tierra a agua
+13485,Receta: transmutar agua a aire
+13486,Receta: transmutar inerte a agua
+13487,Receta: transmutar agua a inerte
+13488,Receta: transmutar vida a tierra
+13489,Receta: transmutar tierra a vida
+13490,Receta: poción de escudo de piedra superior
+13491,Receta: elixir de la mangosta
+13492,Receta: poción de purificación
+13493,Receta: elixir arcano superior
+13494,Receta: poción de protección de Fuego superior
+13495,Receta: poción de protección de Escarcha superior
+13496,Receta: poción de protección de Naturaleza superior
+13497,Receta: poción de protección Arcana superior
+13499,Receta: poción de protección de las Sombras superior
+13500,Receta: poción de protección Sagrada superior
+13501,Receta: poción de maná sublime
+13503,Piedra de alquimista
+13506,Frasco de petrificación
+13510,Frasco de los Titanes
+13511,Frasco de sabiduría destilada
+13512,Frasco de poder supremo
+13513,Frasco de resistencia cromática
+13517,Receta: piedra de alquimista
+13518,Receta: frasco de petrificación
+13519,Receta: frasco de los Titanes
+13520,Receta: frasco de sabiduría destilada
+13521,Receta: frasco de poder supremo
+13522,Receta: frasco de resistencia cromática
+13754,Vigorpez lustroso crudo
+13755,Calamar de invierno crudo
+13756,Lubina cruda
+13758,Branquirrojo crudo
+13759,Pargo nocturno crudo
+13760,Salmón escama de sol crudo
+13851,Costillas de lobo picantes
+13856,Cinturón de paño rúnico
+13857,Túnica de paño rúnico
+13858,Toga de paño rúnico
+13860,Capa de paño rúnico
+13863,Guantes de paño rúnico
+13864,Botas de paño rúnico
+13865,Pantalones de paño rúnico
+13866,Cinta de paño rúnico
+13867,Hombreras de paño rúnico
+13868,Toga Tejescarcha
+13869,Túnica Tejescarcha
+13870,Guantes Tejescarcha
+13871,Pantalones Tejescarcha
+13888,Langosta pinza oscura
+13889,Salmón escama blanca crudo
+13890,Pez coraza de placas crudo
+13893,Vigorpez crudo grande
+13926,Perla de oro
+13927,Vigorpez lustroso cocido
+13928,Calamar a la parrilla
+13929,Lubina ahumada caliente
+13930,Filete de branquirrojo
+13931,Sopa de pargo nocturno
+13932,Salmón escama de sol pochado
+13933,Estofado de langosta
+13934,Filete de vigorpez
+13935,Salmón al horno
+13939,Receta: serviola moteada
+13940,Receta: vigorpez lustroso cocido
+13941,Receta: filete de branquirrojo
+13942,Receta: calamar a la parrilla
+13943,Receta: lubina ahumada caliente
+13945,Receta: sopa de aleta nocturna
+13946,Receta: salmón escama de sol pochado
+13947,Receta: estofado de langosta
+13948,Receta: filete de vigorpez
+13949,Receta: salmón al horno
+14042,Jubón de paño cenizo
+14043,Guantes de paño cenizo
+14044,Capa de paño cenizo
+14045,Pantalones de paño cenizo
+14046,Bolsa de paño rúnico
+14047,Paño rúnico
+14048,Madeja de paño rúnico
+14100,Toga de paño brillante
+14101,Guantes de paño brillante
+14103,Capa de paño brillante
+14104,Pantalones de paño brillante
+14106,Toga de tela de inferi
+14107,Pantalones de tela de inferi
+14108,Botas de tela de inferi
+14111,Caperuza de tela de inferi
+14112,Hombreras de tela de inferi
+14128,Toga de tejido zahorí
+14130,Turbante de tejido zahorí
+14132,Leotardos de tejido zahorí
+14134,Capa de Fuego
+14136,Toga de Noche invernal
+14137,Leotardos de tela lunar
+14138,Jubón de tela lunar
+14139,Hombreras de tela lunar
+14140,Aro de tela lunar
+14141,Jubón Telafantasma
+14142,Guantes Telafantasma
+14143,Cinturón Telafantasma
+14144,Pantalones Telafantasma
+14146,Guantes de maestría de hechizos
+14152,Toga del Archimago
+14153,Toga del Vacío
+14154,Vestimentas de fe verdadera
+14155,Bolsa de tela lunar
+14156,Bolsa sin fondo
+14227,Seda de araña Tejehierro
+14256,Tela de inferi
+14341,Hilo rúnico
+14342,Tela lunar
+14343,Fragmento luminoso pequeño
+14344,Fragmento luminoso grande
+14466,Patrón: túnica Tejescarcha
+14467,Patrón: toga Tejescarcha
+14468,Patrón: bolsa de paño rúnico
+14469,Patrón: toga de paño rúnico
+14470,Patrón: túnica de paño rúnico
+14471,Patrón: jubón de paño ceniza
+14472,Patrón: capa de paño rúnico
+14473,Patrón: cinturón Telafantasma
+14474,Patrón: guantes Tejescarcha
+14476,Patrón: guantes de paño ceniza
+14477,Patrón: guantes Telafantasma
+14478,Patrón: toga de paño brillante
+14479,Patrón: guantes de paño brillante
+14480,Patrón: jubón Telafantasma
+14481,Patrón: guantes de paño rúnico
+14482,Patrón: capa de paño ceniza
+14483,Patrón: pantalones de tela de inferi
+14484,Patrón: capa de paño brillante
+14485,Patrón: leotardos de tejido zahorí
+14486,Patrón: capa de Fuego
+14488,Patrón: botas de paño rúnico
+14489,Patrón: pantalones Tejescarcha
+14490,Patrón: pantalones de paño ceniza
+14491,Patrón: pantalones de paño rúnico
+14492,Patrón: botas de tela de inferi
+14493,Patrón: toga de Noche invernal
+14494,Patrón: pantalones de paño brillante
+14495,Patrón: pantalones Telafantasma
+14496,Patrón: caperuza de tela de inferi
+14497,Patrón: leotardos de tela lunar
+14498,Patrón: cinta de paño rúnico
+14499,Patrón: bolsa de tela lunar
+14500,Patrón: toga de tejido zahorí
+14501,Patrón: jubón de tela lunar
+14504,Patrón: hombreras de paño rúnico
+14505,Patrón: turbante de tejido zahorí
+14506,Patrón: toga de tela de inferi
+14507,Patrón: hombreras de tela lunar
+14508,Patrón: hombreras de tela de inferi
+14509,Patrón: aro de tela lunar
+14510,Patrón: bolsa sin fondo
+14511,Patrón: guantes de maestría de hechizos
+14512,Patrón: vestimentas de fe verdadera
+14513,Patrón: toga del Archimago
+14514,Patrón: toga del Vacío
+14526,Patrón: tela lunar
+14529,Venda de paño rúnico
+14530,Venda de paño rúnico pesada
+14627,Patrón: camisa amarillo brillante
+14630,Patrón: capucha de encantador
+14634,Receta: aceite escarchado
+14635,Patrón: cinturón de cuero con gemas incrustadas
+14639,Esquema: recombobulador menor
+15045,Peto de escamas de dragón verde
+15046,Leotardos de escamas de dragón verde
+15047,Peto de escamas de dragón rojo
+15048,Peto de escamas de dragón azul
+15049,Hombreras de escamas de dragón azul
+15050,Peto de escamas de dragón negro
+15051,Hombreras de escamas de dragón negro
+15052,Leotardos de escamas de dragón negro
+15053,Peto volcánico
+15054,Leotardos volcánicos
+15055,Hombreras volcánicas
+15056,Armadura Velotormenta
+15057,Pantalones Velotormenta
+15058,Hombreras Velotormenta
+15059,Peto vivo
+15060,Leotardos vivos
+15061,Hombreras vivas
+15062,Leotardos de demosaurio
+15063,Guanteletes de demosaurio
+15064,Arnés de oso de guerra
+15065,Prendas de lana de oso de guerra
+15066,Peto Plumahierro
+15067,Hombreras Plumahierro
+15068,Túnica Sable de Hielo
+15069,Leotardos Sable de Hielo
+15070,Guantes Sable de Hielo
+15071,Botas Sable de Hielo
+15072,Leotardos quiméricos
+15073,Botas quiméricas
+15074,Guantes quiméricos
+15075,Jubón quimérico
+15076,Jubón de escórpido pesado
+15077,Brazales de escórpido pesados
+15078,Guanteletes de escórpido pesado
+15079,Leotardos de escórpido pesado
+15080,Yelmo de escórpido pesado
+15081,Sobrehombros de escórpido pesados
+15082,Cinturón de escórpido pesado
+15083,Guanteletes de cuero maligno
+15084,Brazales de cuero maligno
+15085,Armadura de cuero maligno
+15086,Cinta de cuero maligno
+15087,Pantalones de cuero maligno
+15088,Cinturón de cuero maligno
+15090,Armadura de cuero rúnico
+15091,Guanteletes de cuero rúnico
+15092,Brazales de cuero rúnico
+15093,Cinturón de cuero rúnico
+15094,Cinta de cuero rúnico
+15095,Pantalones de cuero rúnico
+15096,Hombreras de cuero rúnico
+15138,Capa de escamas de Onyxia
+15141,Peto de escamas de Onyxia
+15407,Pellejo basto curado
+15408,Escama de escórpido pesado
+15409,Sal de roca refinada
+15410,Escama de Onyxia
+15412,Escamas de dragón verde
+15414,Escamas de dragón rojo
+15415,Escamas de dragón azul
+15416,Escamas de dragón negro
+15417,Cuero de demosaurio
+15419,Cuero de oso de guerra
+15420,Plumahierro
+15422,Cuero Sable de Hielo
+15423,Cuero quimérico
+15564,Complemento basto para armadura
+15724,Patrón: brazales de escórpido pesado
+15725,Patrón: guanteletes de cuero maligno
+15726,Patrón: peto de escamas de dragón verde
+15727,Patrón: jubón de escórpido pesado
+15728,Patrón: brazales de cuero maligno
+15729,Patrón: guantes quiméricos
+15730,Patrón: peto de escamas de dragón rojo
+15731,Patrón: guanteletes de cuero rúnico
+15732,Patrón: leotardos volcánicos
+15733,Patrón: leotardos de escamas de dragón verde
+15734,Patrón: hombreras vivas
+15735,Patrón: hombreras Plumahierro
+15737,Patrón: botas quiméricas
+15738,Patrón: guanteletes de escórpido pesado
+15739,Patrón: brazales de cuero rúnico
+15740,Patrón: botas Sable de Hielo
+15741,Patrón: pantalones Velotormenta
+15742,Patrón: arnés de oso de guerra
+15752,Patrón: leotardos vivos
+15743,Patrón: cinturón de escórpido pesado
+15744,Patrón: cinta de cuero maligno
+15745,Patrón: cinturón de cuero rúnico
+15746,Patrón: leotardos quiméricos
+15747,Patrón: leotardos Sable de Hielo
+15748,Patrón: leotardos de escórpido pesado
+15749,Patrón: peto volcánico
+15751,Patrón: peto de escamas de dragón azul
+15753,Patrón: armadura Velotormenta
+15755,Patrón: jubón quimérico
+15756,Patrón: cinta de cuero rúnico
+15757,Patrón: pantalones de cuero maligno
+15758,Patrón: guanteletes de demosaurio
+15759,Patrón: peto de escamas de dragón negro
+15760,Patrón: peto Plumahierro
+15761,Patrón: guantes Sable de Hielo
+15762,Patrón: yelmo de escórpido pesado
+15763,Patrón: hombreras de escamas de dragón azul
+15764,Patrón: hombreras Velotormenta
+15765,Patrón: pantalones de cuero rúnico
+15768,Patrón: cinturón de cuero maligno
+15770,Patrón: hombreras de escamas de dragón negro
+15771,Patrón: peto vivo
+15772,Patrón: leotardos de demosaurio
+15773,Patrón: armadura de cuero maligno
+15774,Patrón: hombreras de escórpido pesado
+15775,Patrón: hombreras volcánicas
+15776,Patrón: armadura de cuero rúnico
+15777,Patrón: hombreras de cuero rúnico
+15779,Patrón: túnica Sable de Hielo
+15781,Patrón: leotardos de escamas de dragón negro
+15802,Botas de tela lunar
+15846,Salero
+15869,Llave esqueleto de plata
+15870,Llave esqueleto de oro
+15871,Llave esqueleto de veraplata
+15872,Llave esqueleto de arcanita
+15992,Pólvora densa
+15993,Granada de torio
+15994,Trastos wow de torio
+15995,Rifle de torio
+15996,Sapo mecánico casi vivo
+15997,Proyectiles de torio
+15999,Gafas extremas de hechizo de poder plus
+16000,Tubo de torio
+16004,Rifle Hierro Negro
+16005,Bomba Hierro Negro
+16006,Conversor de arcanita delicado
+16007,Rifle de arcanita impecable
+16008,Gafas de maestro ingeniero
+16009,Modulador de amplificación de voz
+16022,Dragonizo de arcanita
+16023,Muñeco-diana magistral
+16040,Bomba Arcana
+16041,Esquema: granada de torio
+16042,Esquema: trastos wow de torio
+16043,Esquema: rifle de torio
+16044,Esquema: sapo mecánico casi vivo
+16045,Esquema: gafas extremas de hechizo de poder plus
+16046,Esquema: muñeco-diana magistral
+16047,Esquema: tubo de torio
+16048,Esquema: rifle Hierro Negro
+16049,Esquema: bomba Hierro Negro
+16050,Esquema: conversor de arcanita delicado
+16051,Esquema: proyectiles de torio
+16052,Esquema: modulador de amplificación de voz
+16053,Esquema: gafas de maestro ingeniero
+16054,Esquema: dragonizo de arcanita
+16055,Esquema: bomba Arcana
+16056,Esquema: rifle de arcanita impecable
+16072,Libro de cocina para expertos
+16084,Primeros auxilios para expertos: Entre vendas
+16110,Receta: tortilla de monstruo
+16111,Receta: chili de cangrejo especiado
+16112,Manual: venda de seda pesada
+16113,Manual: venda de paño mágico
+16202,Esencia eterna inferior
+16203,Esencia eterna superior
+16204,Polvo de ilusión
+16206,Vara de arcanita
+16207,Vara arcanita con runas
+16214,Fórmula: encantar brazal: intelecto superior
+16215,Fórmula: encantar botas: aguante superior
+16216,Fórmula: encantar capa: resistencia superior
+16217,Fórmula: encantar escudo: aguante superior
+16218,Fórmula: encantar brazal: espíritu excelente
+16219,Fórmula: encantar guantes: agilidad superior
+16220,Fórmula: encantar botas: espíritu
+16221,Fórmula: Encantar torso: aguante sublime
+16222,Fórmula: encantar escudo: espíritu excelente
+16223,Fórmula: encantar arma: escalofrío gélido
+16224,Fórmula: encantar capa: defensa excelente
+16242,Fórmula: Encantar torso: intelecto sublime
+16243,Fórmula: vara arcanita con runas
+16244,Fórmula: encantar guantes: fuerza superior
+16245,Fórmula: encantar botas: agilidad superior
+16246,Fórmula: encantar brazal: fuerza excelente
+16247,Fórmula: encantar arma de 2M: impacto excelente
+16248,Fórmula: Encantar arma: arma profana
+16249,Fórmula: encantar arma de 2M: intelecto sublime
+16250,Fórmula: encantar arma: golpes excelentes
+16251,Fórmula: encantar brazal: aguante excelente
+16252,Fórmula: encantar arma: cruzado
+16253,Fórmula: encantar pechera: estadística superior
+16254,Fórmula: encantar arma: robo de vida
+16255,Fórmula: encantar arma de 2M: espíritu sublime
+16583,Figura demoníaca
+16766,Sopa de almejas de Villabajo
+16767,Receta: sopa de almejas de Villabajo
+16979,Guantes Bengala del Núcleo
+16980,Manto Bengala del Núcleo
+16982,Botas de can del Núcleo
+16983,Yelmo de arrabio
+16984,Botas de escamas de dragón negro
+16988,Sobrehombros de anillas ígneas
+16989,Faja de anillas ígneas
+17010,Núcleo ígneo
+17011,Núcleo de lava
+17012,Cuero del Núcleo
+17013,Leotardos Hierro Negro
+17014,Brazales Hierro Negro
+17015,Atracador Hierro Negro
+17016,Destructor Hierro Negro
+17017,Patrón: manto Bengala del Núcleo
+17018,Patrón: guantes Bengala del Núcleo
+17022,Patrón: botas del can del Núcleo
+17023,Patrón: yelmo de arrabio
+17025,Patrón: botas de escamas de dragón negro
+17034,Semillas de arce
+17035,Semilla Tuercespina
+17049,Diseño: faja de anillas ígneas
+17051,Diseño: brazales Hierro Negro
+17052,Diseño: leotardos Hierro Negro
+17053,Diseño: hombreras de anillas ígneas
+17056,Pluma ligera
+17059,Diseño: atracador Hierro Negro
+17060,Diseño: destructor Hierro Negro
+17062,Receta: trucha de cabeza de mitril
+17193,Martillo de Sulfuron
+17194,Especias de vacaciones
+17196,Espíritus de vacaciones
+17197,Galleta de jengibre
+17198,Ponche de huevo
+17200,Receta: galleta de jengibre
+17201,Receta: ponche de huevo
+17202,Bola de nieve
+17203,Lingote de sulfuron
+17222,Salchicha de araña
+17704,Filo de invierno
+17706,Diseño: filo de invierno
+17708,Elixir de poder de Escarcha
+17709,Receta: elixir de poder de Escarcha
+17716,Señor de las nieves 9000
+17720,Esquema: señor de las nieves 9000
+17721,Guantes del Padre Invierno
+17722,Patrón: guantes del Padre Invierno
+17723,Camisa festiva verde
+17724,Patrón: camisa de vacaciones verde
+17725,Fórmula: encantar arma: poderío del invierno
+17967,Escama refinada de Onyxia
+18045,Chuleta de lobo tierno
+18046,Receta: chuleta de lobo tierno
+18160,Receta: té de cardo
+18168,Disco reactivo a la fuerza
+18232,Robot de reparación de campo 74A
+18235,Esquema: robot de reparación de campo 74A
+18238,Guantes sombradermos
+18239,Patrón: guantes sombradermos
+18240,Tanino ogro
+18251,Complemento para armadura del Núcleo
+18252,Patrón: complemento para armadura del Núcleo
+18253,Poción rejuvenecedora sublime
+18254,Sorpresa de tubérculo runtún
+18255,Tubérculo runtún
+18256,Vial imbuida
+18257,Receta: poción rejuvenecedora sublime
+18258,Taje ogro de Gordok
+18259,Fórmula: encantar arma: poder de hechizos
+18260,Fórmula: encantar arma: poder de curación
+18262,Piedra de afilar elemental
+18263,Brazaletes Bengala del Núcleo
+18264,Diseño: piedra de afilar elemental
+18265,Patrón: brazaletes Bengala del Núcleo
+18267,Receta: sorpresa de tubérculo runtún
+18282,Rifle de tirador del Núcleo
+18283,Acurascopio 247x128 Biznicks
+18290,Esquema: Acurascopio de 247x128 Biznicks
+18291,Esquema: disco reactivo de potencia
+18292,Esquema: rifle de tirador del Núcleo
+18294,Jarabe de respiración acuática superior
+18405,Cinturón del archimago
+18407,Guantes de tela de inferi
+18408,Guantes inferno
+18409,Guantes de tela lunar
+18413,Capa de Protección
+18414,Patrón: cinturón del archimago
+18415,Patrón: guantes de tela de inferi
+18416,Patrón: guantes inferno
+18417,Patrón: guantes de tela lunar
+18418,Patrón: capa de Protección
+18486,Toga de tela lunar
+18487,Patrón: toga de tela lunar
+18504,Faja de Perspicacia
+18506,Botas de mangosta
+18508,Brazales de Vuelo veloz
+18509,Capa cromática
+18510,Pellejo de las fieras
+18511,Capa ondeante
+18512,Ácido de larval
+18514,Patrón: faja de Perspicacia
+18515,Patrón: botas de mangosta
+18516,Patrón: brazales de Vuelo veloz
+18517,Patrón: capa cromática
+18518,Patrón: pellejo de las fieras
+18519,Patrón: capa ondeante
+18567,Flujo elemental
+18587,Pinzas de batería goblin XL
+18588,Dinamita EZ-Thro 2
+18592,Diseño: martillo de Sulfuron
+18594,Carga de seforio potente
+18631,Transformador de veraplata
+18634,Refractor de hielo Girohielo
+18637,Recombobulador sublime
+18638,Refractor de llamas hiperradiante
+18639,Reflector de sombras ultra-flash
+18641,Dinamita densa
+18645,Roboalarma gnómica
+18647,Esquema: fuego artificial rojo
+18648,Esquema: fuego artificial verde
+18649,Esquema: fuego artificial azul
+18650,Esquema: dinamita EZ-Thro 2
+18651,Esquema: transformador de veraplata
+18652,Esquema: refractor de hielo Girohielo
+18653,Esquema: pinzas de batería goblin XL
+18654,Esquema: Roboalarma gnómico
+18655,Esquema: recombobulador sublime
+18656,Esquema: carga de seforio potente
+18657,Esquema: refractor de llamas hiperradiante
+18658,Esquema: reflector de sombras ultra-flash
+18660,Amplificador de mundo
+18661,Esquema: amplificador de mundo
+18662,Bola de cuero pesado
+18731,Patrón: bola de cuero pesado
+18948,Brazales barbáricos
+18949,Patrón: brazales barbáricos
+18984,Desgarrador dimensional: Vista Eterna
+18986,Transportador ultraseguro: Gadgetzan
+19026,Fuego artificial con forma de serpiente
+19027,Esquema: fuego artificial con forma de serpiente
+19043,Cinturón Fauces de Madera pesado
+19044,Poderío de los Fauces de Madera
+19047,Sabiduría de los Fauce de Madera
+19048,Botas Fauces de Madera pesadas
+19049,Camorristas Fauces de Madera
+19050,Manto de los Fauces de Madera
+19051,Faja del Alba
+19052,Botines del Alba
+19056,Botas Argenta
+19057,Guantes del Alba
+19058,Manto dorado del Alba
+19059,Hombreras Argenta
+19148,Yelmo Hierro Negro
+19149,Cinturón de lava
+19156,Toga Bengala del Núcleo
+19157,Guanteletes cromáticos
+19162,Cinturón de can del Núcleo
+19163,Cinturón de arrabio
+19164,Guanteletes Hierro Negro
+19165,Leotardos Bengala del Núcleo
+19166,Amnistía negra
+19167,Furianegra
+19168,Guardanegro
+19169,Ocaso
+19170,Mano de ébano
+19202,Patrón: cinturón Fauces de Madera pesado
+19203,Diseño: faja del Alba
+19204,Patrón: botas Fauces de Madera pesadas
+19205,Diseño: guantes del Alba
+19206,Diseño: yelmo Hierro Negro
+19207,Diseño: guanteletes Hierro Negro
+19208,Diseño: amnistía negra
+19209,Diseño: Furianegra
+19210,Diseño: mano de ébano
+19211,Diseño: guardanegro
+19212,Diseño: ocaso
+19215,Patrón: sabiduría de los Fauces de Madera
+19216,Patrón: botas Argenta
+19217,Patrón: sobrehombros Argenta
+19218,Patrón: manto de los Fauces de Madera
+19219,Patrón: toga Bengala del Núcleo
+19220,Patrón: leotardos Bengala del Núcleo
+19326,Patrón: poderío de los Fauces de Madera
+19327,Patrón: camorristas Fauces de Madera
+19328,Patrón: botines del Alba
+19329,Patrón: manto del Alba dorado
+19330,Patrón: cinturón de lava
+19331,Patrón: guanteletes cromáticos
+19332,Patrón: cinturón del can del Núcleo
+19333,Patrón: cinturón de arrabio
+19440,Antídoto potente
+19441,Glándula de veneno enorme
+19442,Fórmula: antídoto potente
+19444,Fórmula: encantar arma: fuerza
+19445,Fórmula: encantar arma: agilidad
+19446,Fórmula: encantar brazal: regeneración de maná
+19447,Fórmula: encantar brazal: curación
+19448,Fórmula: encantar arma: espíritu poderoso
+19449,Fórmula: encantar arma: intelecto poderoso
+19682,Jubón Vid de sangre
+19683,Leotardos Vid de sangre
+19684,Botas Vid de sangre
+19685,Chaleco de piel de murciélago primigenio
+19686,Guantes de piel de murciélago primigenio
+19687,Brazales de piel de murciélago primigenio
+19688,Peto de tigre de sangre
+19689,Hombreras de tigre de sangre
+19690,Peto alma de sangre
+19691,Hombreras alma de sangre
+19692,Guanteletes alma de sangre
+19693,Peto Almanegra
+19694,Leotardos Almanegra
+19695,Hombreras Almanegra
+19726,Vid de sangre
+19764,Patrón: jubón Vid de sangre
+19765,Patrón: leotardos Vid de sangre
+19766,Patrón: botas Vid de sangre
+19767,Cuero de murciélago primigenio
+19768,Cuero de tigre primigenio
+19769,Patrón: chaleco de piel de murciélago primigenio
+19770,Patrón: guantes de piel de murciélago primigenio
+19771,Patrón: brazales de piel de murciélago primigenio
+19772,Patrón: peto de tigre de sangre
+19773,Patrón: hombreras de tigre de sangre
+19774,Almarita
+19776,Diseño: peto alma de sangre
+19777,Diseño: hombreras alma de sangre
+19778,Diseño: guanteletes alma de sangre
+19779,Diseño: peto Almanegra
+19780,Diseño: leotardos Almanegra
+19781,Diseño: hombreras Almanegra
+19931,Locura mojo de Gurubashi
+19943,Mojo macizo
+19998,Lentes Vid de sangre
+19999,Gafas Vid de sangre
+20000,Esquema: gafas Vid de sangre
+20001,Esquema: lentes Vid de sangre
+20002,Poción superior de letargo sin sueños
+20004,Elixir de sangre de trol sublime
+20007,Elixir de sangre de mago
+20008,Poción de acción viva
+20011,Receta: elixir de sangre de mago
+20012,Receta: letargo sin sueños superior
+20013,Receta: poción de acción viva
+20014,Receta: elixir de sangre de trol sublime
+20039,Botas Hierro Negro
+20040,Diseño: botas Hierro Negro
+20074,Estofado de crocolisco pesado
+20075,Receta: estofado de crocolisco pesado
+20253,Patrón: arnés de oso de guerra
+20254,Patrón: prendas de lana de oso de guerra
+20295,Leotardos de escamas de dragón azul
+20296,Guanteletes de escamas de dragón verde
+20380,Peto de escamas oníricas
+20381,Escama onírica
+20424,Carne de gusano de arena
+20452,Bolas de masa del desierto ahumadas
+20476,Brazales Acecharenas
+20477,Guanteletes Acecharenas
+20478,Peto Acecharenas
+20479,Peto escupefuego
+20480,Guanteletes escupefuego
+20481,Brazales escupefuego
+20498,Quitina de silítido
+20500,Caparazón de silítido ligero
+20501,Caparazón de silítido pesado
+20520,Runa oscura
+20537,Botas estigias rúnicas
+20538,Leotardos estigios rúnicos
+20539,Cinturón estigio rúnico
+20546,Patrón: leotardos estigios rúnicos
+20547,Patrón: botas estigias rúnicas
+20548,Patrón: cinturón estigio rúnico
+20549,Guanteletes runa oscura
+20550,Peto runa oscura
+20551,Yelmo runa oscura
+20553,Diseño: guanteletes runa oscura
+20554,Diseño: peto runa oscura
+20555,Diseño: yelmo runa oscura
+20575,Túnica de cría negra
+20576,Patrón: túnica de cría negra
+20725,Cristal Nexus
+20726,Fórmula: encantar guantes: amenaza
+20727,Fórmula: encantar guantes: poder de las Sombras
+20728,Fórmula: encantar guantes: poder de Escarcha
+20729,Fórmula: encantar guantes: poder de Fuego
+20730,Fórmula: encantar guantes: poder de curación
+20731,Fórmula: encantar guantes: agilidad excelente
+20732,Fórmula: encantar capa: resistencia superior a Fuego
+20733,Fórmula: encantar capa: resistencia superior a Naturaleza
+20734,Fórmula: encantar capa: sigilo
+20735,Fórmula: encantar capa: sutileza
+20736,Fórmula: encantar capa: esquivar
+20744,Aceite de zahorí menor
+20745,Aceite de maná menor
+20746,Aceite de zahorí inferior
+20747,Aceite de maná inferior
+20748,Aceite de maná luminoso
+20749,Aceite de zahorí luminoso
+20750,Aceite de zahorí
+20752,Fórmula: aceite de maná menor
+20753,Fórmula: aceite de zahorí inferior
+20754,Fórmula: aceite de maná inferior
+20755,Fórmula: aceite de zahorí
+20756,Fórmula: aceite de zahorí luminoso
+20757,Fórmula: aceite de maná luminoso
+20758,Fórmula: aceite de zahorí menor
+20761,Receta: transmutar Fuego elemental
+20867,Ídolo de ónice
+20868,Ídolo luminiscente
+20870,Ídolo de jaspe
+20871,Ídolo obsidiano
+20872,Ídolo bermellón
+20873,Ídolo de alabastro
+20874,Ídolo del Sol
+20875,Ídolo de la Noche
+20876,Ídolo de Muerte
+20877,Ídolo del Sabio
+20878,Ídolo de Renacimiento
+20879,Ídolo de la Vida
+20881,Ídolo de la Disputa
+20882,Ídolo de la Guerra
+21023,Fabulosas chuletillas de quimerok de Dirge
+21024,Solomillo de Quimerok
+21025,Receta: pinchos quimerok potentes de Dirge
+21071,Sabiola cruda
+21072,Sabiola ahumada
+21099,Receta: sabiola ahumada
+21153,Sabiola cruda superior
+21154,Vestido de fiesta
+21217,Delicia de sabiolas
+21219,Receta: delicia de sabiolas
+21277,Yeti mecánico tranquilo
+21278,Guantes Velotormenta
+21340,Faltriquera de almas
+21341,Bolsa de tela de inferi
+21342,Bolsa de tela de inferi del Núcleo
+21358,Patrón: faltriquera de almas
+21371,Patrón: bolsa de tela de inferi del Núcleo
+21542,Traje de fiesta
+21546,Elixir de poder Sagrado
+21547,Receta: elixir de poder de Fuego superior
+21548,Patrón: guantes Velotormenta
+21557,Cohete rojo pequeño
+21558,Cohete azul pequeño
+21559,Cohete verde pequeño
+21560,Cohete morado pequeño
+21561,Cohete blanco pequeño
+21562,Cohete amarillo pequeño
+21569,Lanzador de fuegos artificiales
+21570,Lanzacohetes
+21571,Ristra de cohetes azules
+21574,Ristra de cohetes verdes
+21575,Ristra de cohetes morados
+21576,Ristra de cohetes rojos
+21577,Ristra de cohetes blancos
+21578,Ristra de cohetes amarillos
+21589,Cohete azul grande
+21590,Cohete verde grande
+21591,Cohete morado grande
+21592,Cohete rojo grande
+21593,Cohete blanco grande
+21595,Cohete amarillo grande
+21714,Ristra de cohetes azules grandes
+21716,Ristra de cohetes verdes grandes
+21717,Ristra de cohetes morados grandes
+21718,Ristra de cohetes rojos grandes
+21719,Ristra de cohetes blancos grandes
+21720,Ristra de cohetes amarillos grandes
+21722,Patrón: vestido de fiesta
+21723,Patrón: traje de fiesta
+21724,Esquema: cohete azul pequeño
+21725,Esquema: cohete verde pequeño
+21726,Esquema: cohete rojo pequeño
+21727,Esquema: cohete azul grande
+21728,Esquema: cohete verde grande
+21729,Esquema: cohete rojo grande
+21730,Esquema: ristra de cohetes azules
+21731,Esquema: ristra de cohetes verdes
+21732,Esquema: ristra de cohetes rojos
+21733,Esquema: ristra de cohetes azules grandes
+21734,Esquema: ristra de cohetes verdes grandes
+21735,Esquema: ristra de cohetes rojos grandes
+21737,Esquema: lanzacohetes
+21738,Esquema: lanzacohetes pirotécnico
+22191,Túnica de malla obsidiana
+22194,Garra negra del Destructor
+22195,Cinturón de obsidiana ligero
+22196,Peto obsidiano grueso
+22197,Cinturón de obsidiana pesado
+22198,Escudo dentado obsidiano
+22202,Fragmento obsidiano pequeño
+22203,Fragmento obsidiano grande
+22219,Diseño: escudo de obsidiana dentado
+22220,Diseño: garra negra del Destructor
+22221,Diseño: túnica de malla obsidiana
+22222,Diseño: peto obsidiano grueso
+22246,Faltriquera de tejido mágico encantada
+22248,Bolsa de paño rúnico encantada
+22249,Bolsa de encantamiento grande
+22251,Bolsa de hierbas Cenarion
+22252,Cartera de Cenarius
+22307,Patrón: faltriquera de paño mágico encantado
+22308,Patrón: bolsa de paño rúnico encantado
+22309,Patrón: bolsa de encantamiento grande
+22310,Patrón: bolsa de hierbas Cenarion
+22312,Patrón: cartera de Cenarius
+22383,Hoja sabia
+22384,Persuasor
+22385,Leotardos titánicos
+22388,Diseño: leotardos titánicos
+22389,Diseño: hoja sabia
+22390,Diseño: persuasor
+22392,Fórmula: encantar arma de 2M: agilidad
+22652,Jubón glacial
+22654,Guantes glaciales
+22655,Muñequeras glaciales
+22658,Capa glacial
+22660,Abrazo de Gaea
+22661,Túnica polar
+22662,Guantes polares
+22663,Brazales polares
+22664,Peto de escamas heladas
+22665,Brazales de escamas heladas
+22666,Guanteletes de escamas heladas
+22669,Peto Deliriohelado
+22670,Guanteletes Deliriohelado
+22671,Brazales Deliriohelado
+22682,Runa congelada
+22683,Patrón: abrazo de Gaea
+22703,Diseño: peto Deliriohelado
+22704,Diseño: guanteletes Deliriohelado
+22705,Diseño: brazales Deliriohelado
+22728,Mando de tanque a vapor
+22729,Esquema: mando de tanque a vapor
+22756,Jubón nemoroso
+22757,Corona nemorosa
+22758,Hombreras nemorosas
+22759,Yelmo zarzal
+22760,Botas zarzal
+22761,Cinturón zarzal
+22772,Patrón: hombreras nemorosas
+22773,Patrón: corona nemorosa
+22774,Patrón: jubón nemoroso
+23567,DEPRECATED ITEM
+23684,Venda de cristal imbuido
+34085,Ropa de invierno roja
+34086,Botas de invierno
+34087,Ropa de invierno verde
+34261,Patrón: ropa de invierno verde
+34262,Patrón: botas de invierno
+34319,Patrón: ropa de invierno roja
+210147,Unidad de autorreciclaje de la trituradora
+210178,Esquema: unidad de autorreciclaje de la trituradora
+210708,Elixir de arrepentimiento fusionado
+210709,Receta: elixir de arrepentimiento fusionado
+210779,Diseño: manto de la Segunda Guerra
+210781,Ataduras de Fénix
+211247,Patrón: ataduras de Fénix
+211427,Receptáculo de almas
+211845,Piedra de afilar Brazanegra
+212230,Esquema: receptáculo de almas
+213369,Cuero de tenue resplandor
+213370,Restos de cuero irradiado
+213371,Caja de solución de gniodina contaminada
+213373,Chatarra reflectante
+213376,Placas de veraplata de fondo bajo
+213378,Microfilamento inestable
+213379,Filamento Arcano hiperconductor
+213381,Montón de engranajes manchados
+213383,Engranajes de veraplata pulidos
+215129,Fórmula: encantar arma: desmantelar
+215138,Fórmula: encantar pechera: Retribucionismo
+215141,Sigilo encantado: Innovación
+215149,Patrón: monóculo de filamento Arcano gneurovinculado
+215152,Patrón: capucha gneurovinculada brillante
+215153,Esquema: bastión de veraplata giratorio
+215155,Diseño: casco antiinterferencias templado
+215156,Esquema: cinturón dorado hiperconductor
+215163,Receta: poción de rejuvenecimiento ligeramente irradiada
+215365,Manto de invocador
+215366,Cordón de invocador
+215367,Patrón: cuero de tenue resplandor
+215368,Patrón: filamento Arcano hiperconductor
+215369,Patrón: cordón de invocador
+215370,Patrón: manto de invocador
+215383,Diseño: jaula cerebral de veraplata reflectante
+215384,Diseño: placas de veraplata de fondo bajo
+215422,Patrón: almófar de escamas hiperconductoras brillante
+215423,Patrón: caperuza de canalizador gneuroconductora
+215424,Patrón: caperuza de escamas resistente a la radiación
+215429,Esquema: engranajes de veraplata pulidos
+215430,Restos radiactivos de Gnomeregan
+215431,Esquema: bomba de radiación de alto rendimiento
+215432,Esquema: bomba de radiación para tontos
+215433,Receta: gniodina aislante
+215434,SIN USO
+217244,Patrón: toga de seda carmesí
+217249,Patrón: cinturón de seda terránea
+217251,Patrón: sobrehombros de seda carmesíes
+217254,Patrón: botas del encantador
+217258,Patrón: capucha de encantador
+217260,Patrón: máscara de gran vudú
+217262,Patrón: toga de gran vudú
+217264,Patrón: brazales de cuero de guardián
+217266,Patrón: cinturón de guardián
+217270,Guantes de escamas de tortuga
+217271,Patrón: guantes de escamas de tortuga
+217273,Guanteletes de escamas doradas
+217274,Diseño: guanteletes de escamas doradas
+217276,Diseño: botas de escamas doradas
+217278,Diseño: loriga de escamas doradas
+217280,Diseño: almófar de escamas doradas
+217282,Diseño: espada ancha de acero lunar
+217284,Diseño: sobrehombros de escamas doradas
+217286,Diseño: leotardos de escamas doradas
+217287,Varita mística superior
+217308,Sigilo encantado: Innovación
+217398,Elixir Arcano inferior
+217399,Receta: elixir Arcano inferior
+220606,Ídolo del Sueño
+220792,Pergamino de alivio espacial
+221336,Esquema: casco de minero goblin
+223163,Fórmula: pergamino de alivio espacial
+227727,Diseño: martillo de Sulfuron
+227844,Bolsa de paño rúnico reforzada de cuero
+227895,Patrón: manto del Alba dorado
+227896,Patrón: botas Argenta
+227897,Patrón: sobrehombros Argenta
+227898,Patrón: coraza de escamas de dragón azul pulida
+227899,Patrón: sobrehombros de escamas de dragón azul pulidos
+227900,Patrón: leotardos de escamas de dragón verde vivientes
+227901,Diseño: placa Hierro Negro templada
+227902,Patrón: coraza de escamas de dragón negro endurecida
+227903,Patrón: leotardos de escamas de dragón negro endurecidos
+227904,Patrón: sobrehombros de escamas de dragón negro endurecidos
+227905,Diseño: martillo de tormenta magistral de jinete celeste
+227906,Patrón: coraza volcánica magistral
+227907,Patrón: sobrehombros volcánicos magistrales
+227908,Patrón: leotardos volcánicos magistrales
+227909,Diseño: guanteletes de placas ígneas de la técnica oculta
+227910,Patrón: capa cromática brillante
+228114,Diseño: segadora de arcanita refinada
+228117,Diseño: campeona de arcanita refinada
+228118,Diseño: guanteletes de bastión recios
+228119,Patrón: guanteletes de núcleo demoníaco
+228120,Patrón: leotardos de núcleo demoníaco
+228121,Patrón: bolsa de paño rúnico reforzada de cuero
+228175,Tratado sobre prontitud sagrada
+228176,Tótem de trueno
+228250,Diseño: guanteletes de bastión recios
+228251,Patrón: guanteletes de escamas de dragón verde vivientes
+228276,Patrón: capa cambiante magistral
+228301,Patrón: avambrazos de Vuelo presto
+228303,Patrón: toga de tela lunar incandescente
+228309,Patrón: coraza de escamas de dragón verde viviente
+228310,Diseño: guardia de Escarcha endurecida
+228311,Diseño: martillo de batalla encantado con pericia
+228312,Diseño: malla invencible
+228313,Diseño: guanteletes de tempestad
+228314,Diseño: cimera del gran jefe
+228315,Diseño: hoja sabia del archimago
+228316,Patrón: jubón de tela lunar incandescente
+228317,Patrón: aro de tela lunar incandescente
+228318,Patrón: leotardos de tela lunar incandescente
+228319,Patrón: faja de perspicacia Arcana
+228477,Patrón: cinturón bordado del archimago
+228978,Sigilo encantado: Agua corriente
+228979,Sigilo encantado: Agua corriente
+228980,Revestimiento de escudo conductivo
+228981,Fórmula: revestimiento de escudo conductivo
+228982,Fórmula: encantar escudo: ley de la naturaleza
+228993,Patrón: bolsa sin fondo
+229008,Fórmula: Encantar capa: Resistencia al Fuego superior
+229009,Fórmula: Encantar capa: Resistencia a la Naturaleza superior
+232433,Venda de paño rúnico densa
+232434,Manual: venda de paño rúnico densa
+232436,Sopa de Garranegra
+232437,Receta: sopa de Garranegra
+232438,Branquirrojo ahumado
+232443,Receta: branquirrojo ahumado
+249427,Cuero prístino
+232610,Fórmula: abrillantador trol magnífico
+232611,Abrillantador trol magnífico
+234012,Cardo de la colmena
+236754,Receta: piroagua destilada
+236872,Esquema: sensores de censor aterradores
+237023,Arbusto desplegable
+238298,Patrón: caperuza de augur Escarlata
+238299,Patrón: manto de augur Escarlata
+238300,Patrón: vestimentas de augur Escarlata
+238301,Patrón: puños de augur Escarlata
+238302,Patrón: mitones de augur Escarlata
+238303,Patrón: correa de augur Escarlata
+238304,Patrón: leotardos de augur Escarlata
+238305,Patrón: suelas de augur Escarlata
+238306,Patrón: bandana de infiltrado Escarlata
+238307,Patrón: hombreras de infiltrado Escarlata
+238308,Patrón: jubón de infiltrado Escarlata
+249454,Bastonsueño
+238309,Patrón: brazales de infiltrado Escarlata
+238310,Patrón: guantes de infiltrado Escarlata
+238311,Patrón: cinturón de infiltrado Escarlata
+238312,Patrón: pantalones de infiltrado Escarlata
+238313,Patrón: zapatos de infiltrado Escarlata
+238314,Patrón: almófar de cazador Escarlata
+238315,Patrón: espaldares de cazador Escarlata
+238316,Patrón: cadena de cazador Escarlata
+238317,Patrón: guardamuñecas de cazador Escarlata
+238318,Patrón: manoplas de cazador Escarlata
+238319,Patrón: cinto de cazador Escarlata
+238320,Patrón: musleras de cazador Escarlata
+238321,Patrón: botas de cazador Escarlata
+238322,Diseño: casco de soldado Escarlata
+238323,Diseño: bufas de soldado Escarlata
+238324,Diseño: peto de soldado Escarlata
+249869,Té soleado
+238325,Diseño: protectores de soldado Escarlata
+238326,Diseño: mandiletes de soldado Escarlata
+238327,Diseño: guardarrenes de soldado Escarlata
+238328,Diseño: quijotes de soldado Escarlata
+238329,Diseño: apisonadoras de soldado Escarlata
+238637,Filete de merodeador
+238638,Filete de falda
+238639,Tortilla del alba
+238641,Festín de pez moteado
+238642,Gran festín de langostas
+238645,Receta: filete de merodeador
+238646,Receta: filete de falda
+238647,Receta: tortilla del alba
+238649,Receta: festín de pez moteado
+238650,Receta: gran festín de langostas
+238734,Caja de manitas: teletransporte
+238735,Caja de manitas: propulsiones de nitro
+238736,Caja de manitas: desplazamiento magnético
+238737,Caja de manitas
+238782,Esquema: caja de manitas
+238783,Esquema: caja de manitas: teletransporte
+238784,Esquema: caja de manitas: propulsiones de nitro
+238785,Esquema: caja de manitas: desplazamiento magnético
+238786,Esquema: modificación: teletransporte
+238787,Esquema: modificación: propulsiones de nitro
+238788,Esquema: modificación: desplazamiento magnético
+238789,Esquema: transportador cuasiseguro: Nuevo Avalon
+238927,Patrón: carcaj Escarlata
+238928,Patrón: faltriquera de munición Escarlata
+239016,Sales sagradas
+239017,Especias exquisitas
+239021,Libro de cocina de Carrie
+239147,Morral de cruzado
+239148,Bolsa de tela del Alba Carmesí
+239149,Patrón: morral de cruzado
+239150,Patrón: bolsa de tela del Alba Carmesí
+239222,Esquema: arbusto desplegable
+241191,Fórmula: encantar arma: gran cruzado
+241195,Fórmula: encantar arma 2M: gran arcanista
+241201,Fórmula: encantar arma: gran hechicero
+241650,Poción de sanación descolorida sublime
+241651,Receta: poción de sanación descolorida sublime
+242361,Fórmula: Encantar arma 2M: gran inquisidor
+246948,Piroagua destilada
+247239,Poción de sanación descolorida inferior
+247240,Poción de sanación descolorida
+247241,Poción de sanación descolorida superior
+247242,Poción de sanación descolorida excelente
+247754,Elixir Arcano menor
+247755,Elixir de fuerza menor
+247786,Mota de magia
+247789,Varita de prácticas de novicio
+249395,Orbe de almas
+248819,Cristal vil
+248820,Torbernita
+248821,Salvia demoníaca
+248822,Loto mortal
+248823,Hojapesadilla
+248824,Pellejo vil
+248825,Cuero vil
+249144,Varita del Vacío Abisal
+249232,Varita eterna inferior
+249234,Varita de Ramaoniria
+249237,Varita eterna superior
+249274,Estranguladora
+249385,Varita brillante
+249391,Pirita
+249392,Bastón de luz trémula
+249393,Bastón de las almas
+249394,Orbe de perspicacia mística
+249396,Champiñón místico
+249397,Principios de la Mano de Plata
+249398,Icono de madera a la deriva pulido
+249399,Liquen con volantes
+249409,Tinte cerúleo
+249410,Ácido sulfúrico
+249424,Sombrerrosa
+249425,Bauxita
+249426,Uraninita
+249428,Pellejo prístino
+249429,Escama prístina
+249430,Tinte magenta
+249431,Tinte viridiano
+249432,Papel de lija
+249441,Garfas de Cólera
+249442,Tratado sobre invocación
+249443,Tótem de protección ancestral
+249453,Bastón radiante
+249455,Conducto de veraplata
+249456,Tarro de esencia sinuosa
+249469,Corazón de la montaña congelado
+249470,Corazón de la montaña fundido
+249473,Corazón de la montaña durmiente
+249474,Fórmula: Encantar brazales: intelecto menor
+249475,Fórmula: Encantar brazales: poder de sanación menor
+249476,Fórmula: champiñón místico
+249477,Fórmula: principios de la Mano de Plata
+249478,Fórmula: icono de madera a la deriva pulido
+249479,Fórmula: Encantar arma: perspicacia
+249480,Fórmula: Encantar arma: recuperación
+249481,Fórmula: Encantar arma: revelación
+249482,Fórmula: bastón de luz trémula
+249483,Fórmula: bastón de las almas
+249484,Fórmula: orbe de perspicacia mística
+249485,Fórmula: orbe de almas
+249486,Fórmula: Encantar brazales: agilidad inferior
+249487,Fórmula: varita del Vacío Abisal
+249488,Fórmula: Encantar brazales: agilidad
+249489,Fórmula: Encantar brazales: poder de sanación inferior
+249493,Fórmula: garfas de Cólera
+249494,Fórmula: tratado sobre invocación
+249495,Fórmula: Tótem de protección ancestral
+249496,Fórmula: Encantar collar: fuerza
+249502,Fórmula: Encantar collar: poder con hechizos
+249503,Fórmula: Encantar collar: poder de sanación
+249504,Fórmula: Encantar collar: agilidad
+249505,Fórmula: Encantar collar: desvío
+249506,Fórmula: bastón radiante
+249507,Fórmula: bastonsueño
+249508,Fórmula: conducto de veraplata
+249509,Fórmula: tarro de esencia sinuosa
+249510,Fórmula: Encantar torso: absorción
+249511,Formula: Enchant 2H Weapon - Lesser Agility
+249512,Fórmula: varita de Ramaoniria
+249513,Formula: Enchant 2H Weapon - Lesser Strength
+249514,Fórmula: Encantar brazales: agilidad superior
+249515,Fórmula: varita eterna inferior
+249516,Fórmula: Encantar guantes: desuello avanzado
+249522,Fórmula: varita eterna superior
+249523,Formula: Enchant 2H Weapon - Strength
+249524,Fórmula: Encantar brazales: agilidad excelente
+249525,Formula: Enchant 2H Weapon - Mighty Spell Power
+249526,Formula: Enchant 2H Weapon - Mighty Healing Power
+249529,Fórmula: ídolo del Sueño
+249530,Fórmula: tratado sobre prontitud sagrada
+249532,Fórmula: tótem de trueno
+249534,Fórmula: Encantar guantes: poder Arcano
+249535,Fórmula: Encantar guantes: poder de la Naturaleza
+249536,Fórmula: Encantar guantes: poder Sagrado
+249537,Fórmula: varita brillante
+249538,Fórmula: Encantar brazales: intelecto excelente
+249539,Fórmula: Encantar brazal: desvío excelente
+249726,Barra de azerothium
+249796,Bayas de Hyjal
+249865,Té de paz
+249866,Té regio
+249867,Té de raíz
+249868,Té reconstituyente
+249870,Té de salvia
+249871,Batido venenoso
+249872,Batido baboso
+249873,Mrrgltido
+249874,Batido calcificado
+249875,Batido picante
+249876,Batido perverso
+249879,Receta: té de paz
+249880,Receta: té regio
+249881,Receta: té de raíz
+249882,Receta: té reconstituyente
+249883,Receta: té soleado
+249884,Receta: té de salvia
+249885,Receta: batido venenoso
+249886,Receta: batido baboso
+249887,Receta: mrrgltido
+249888,Receta: batido calcificado
+249889,Receta: batido picante
+249890,Receta: batido perverso
+250065,Minihamburguesas de venado sabrosas
+250066,Pamplona rasante
+250067,Hachee de murciélago
+250068,Estofado de tortuga sabroso
+250069,Carne de falda au Poivre
+250070,Bruscitti de oso
+250071,Filete de venado humeante
+250072,Filete Golpeveloz
+250073,Costillas de raptor picantes
+250074,Costilla de oso
+250075,Carne mechada de raptor prehistórico
+250076,Rollo de carne de raptor
+250077,Filete de raptor con dos especias
+250078,Huevos gigantes revueltos
+250079,Pinchitos de raptor sabrosos
+250080,Tortilla de desayuno
+250081,Linguini de almejas
+250173,Receta: minihamburguesas de venado sabrosas
+250174,Receta: pamplona rasante
+250175,Receta: hachee de murciélago
+250176,Receta: estofado de tortuga sabroso
+250177,Receta: carne de falda au Poivre
+250178,Receta: bruscitti de oso
+250179,Receta: filete de venado humeante
+250180,Receta: filete Golpeveloz
+250181,Receta: costillas de raptor picantes
+250182,Receta: costilla de oso
+250183,Receta: carne mechada de raptor prehistórico
+250184,Receta: rollo de carne de raptor
+250185,Receta: filete de raptor con dos especias
+250186,Receta: huevos gigantes revueltos
+250187,Receta: pinchitos de raptor sabrosos
+250188,Receta: tortilla de desayuno
+250189,Receta: linguini de almejas
+250327,Jarabe de instintos depredadores
+250328,Elixir de astucia
+250329,Elixir de la falange
+250330,Elixir de clérigo menor
+250331,Elixir de clérigo inferior
+250332,Elixir de clérigo
+250333,Elixir de clérigo superior
+250334,Elixir de entereza
+250335,Elixir de entereza superior
+250336,Elixir de regeneración perversa
+250337,Elixir del búho
+250338,Elixir de los sabios
+250339,Elixir de sangre de mago menor
+250340,Elixir de sangre de mago inferior
+250341,Elixir de sangre de mago superior
+250342,Elixir Arcano inferior
+250343,Elixir de poder de la Naturaleza
+250344,Elixir de espíritu menor
+250345,Elixir de espíritu inferior
+250346,Elixir de espíritu
+250347,Elixir de espíritu superior
+250348,Elixir de la ballena
+250349,Elixir de fuerza
+250350,Elixir de ferocidad
+250351,Elixir de los pardos
+250353,Elixir de intelecto inferior
+250354,Elixir de intelecto
+250363,Receta: jarabe de instintos depredadores
+250364,Receta: elixir de astucia
+250365,Receta: elixir de la falange
+250366,Receta: elixir de clérigo menor
+250367,Receta: elixir de clérigo inferior
+250368,Receta: elixir de clérigo
+250369,Receta: elixir de clérigo superior
+250370,Receta: elixir de entereza
+250371,Receta: elixir de entereza superior
+250372,Receta: elixir de regeneración perversa
+250373,Receta: elixir del búho
+250374,Receta: elixir de los sabios
+250375,Receta: elixir de sangre de mago menor
+250376,Receta: elixir de sangre de mago inferior
+250377,Receta: elixir de sangre de mago superior
+250378,Receta: elixir Arcano inferior
+250379,Receta: elixir de poder de la Naturaleza
+250380,Receta: elixir de espíritu menor
+250381,Receta: elixir de espíritu inferior
+250483,Botas de plata de ley
+250382,Receta: elixir de espíritu
+250383,Receta: elixir de espíritu superior
+250384,Receta: elixir de la ballena
+250385,Receta: elixir de fuerza
+250386,Receta: elixir de ferocidad
+250387,Receta: elixir de los pardos
+250388,Receta: elixir de intelecto inferior
+250389,Receta: elixir de intelecto
+250482,Botas de cobre resplandecientes
+250484,Leotardos de plata de ley
+250485,Guanteletes de plata de ley
+250486,Hombreras de plata de ley
+250487,Coraza de plata de ley
+250488,Camisa de anillas de veterano
+250489,Camisa de anillas de guardia
+250490,Camisa de anillas de protector
+250491,Camisa de anillas de acólito
+250492,Camisa de anillas de cruzado
+250493,Leotardos de anillas de veterano
+250494,Leotardos de anillas de guardia
+250495,Leotardos de anillas de protector
+250496,Leotardos de anillas de acólito
+250497,Leotardos de anillas de cruzado
+250498,Yelmo de anillas de veterano
+250499,Yelmo de anillas de guardia
+250500,Yelmo de anillas de protector
+250501,Yelmo de anillas de acólito
+250502,Yelmo de anillas de cruzado
+250503,Botas de veterano
+250504,Botas de guardia
+250505,Botas de protector
+250506,Botas de acólito
+250507,Botas de cruzado
+250508,Guantes de veterano
+250509,Guantes de guardia
+250510,Guantes de protector
+250511,Guantes de acólito
+250512,Guantes de cruzado
+250513,Cinturón de anillas de veterano
+250514,Cinturón de anillas de guardia
+250515,Cinturón de anillas de protector
+250516,Cinturón de anillas de acólito
+250517,Cinturón de anillas de cruzado
+250518,Camisa de anillas bañada en plata de veterano
+250519,Camisa de anillas bañada en plata de guardia
+250520,Camisa de anillas bañada en plata de protector
+250521,Camisa de anillas bañada en plata de acólito
+250522,Camisa de anillas bañada en plata de cruzado
+250523,Leotardos de anillas bañados en plata de veterano
+250524,Leotardos de anillas bañados en plata de guardia
+250525,Leotardos de anillas bañados en plata de protector
+250526,Leotardos de anillas bañados en plata de acólito
+250527,Leotardos de anillas bañados en plata de cruzado
+250528,Yelmo de anillas bañado en plata de veterano
+250529,Yelmo de anillas bañado en plata de guardia
+250530,Yelmo de anillas bañado en plata de protector
+250531,Yelmo de anillas bañado en plata de acólito
+250532,Yelmo de anillas bañado en plata de cruzado
+250533,Loriga de oro dura
+250534,Botas de oro duras
+250535,Brazales de oro duros
+250536,Leotardos de oro duros
+250537,Almófar de oro duro
+250538,Guanteletes de oro duros
+250539,Espaldares de oro duros
+250540,Coraza de mitril brillante
+250541,Espaldares de mitril brillantes
+250542,Botas de mitril brillantes
+250543,Yelmo de mitril brillante
+250544,Pantalones de mitril brillantes
+250545,Guanteletes de mitril brillantes
+250546,Botas de oficial
+250547,Botas de centinela
+250548,Botas de guardián
+250549,Botas de prefecto
+250550,Botas de justicar
+250551,Guantes de oficial
+250552,Guantes de centinela
+250553,Guantes de guardián
+250554,Guantes de prefecto
+250555,Guantes de justicar
+250556,Cinturón de oficial
+250557,Cinturón de centinela
+250558,Cinturón de guardián
+250559,Cinturón de prefecto
+250560,Cinturón de justicar
+250561,Escarpes de oficial
+250562,Escarpes de centinela
+250563,Escarpes de guardián
+250564,Escarpes de prefecto
+250565,Escarpes de justicar
+250566,Guanteletes de oficial
+250567,Guanteletes de centinela
+250568,Guanteletes de guardián
+250569,Guanteletes de prefecto
+250570,Guanteletes de justicar
+250571,Guardarrenes de oficial
+250572,Guardarrenes de centinela
+250573,Guardarrenes de guardián
+250574,Guardarrenes de prefecto
+250575,Guardarrenes de justicar
+250576,Espaldares de oficial
+250577,Espaldares de centinela
+250578,Espaldares de guardián
+250579,Espaldares de prefecto
+250580,Espaldares de justicar
+250581,Muñequeras de oficial
+250582,Muñequeras de centinela
+250583,Muñequeras de guardián
+250584,Muñequeras de prefecto
+250585,Muñequeras de justicar
+250586,Espaldares de placas benditos
+250587,Botas de placas benditas
+250588,Guanteletes de placas benditos
+250589,Guanteletes de placas imperiales
+250590,Brazales de placas benditos
+250591,Leotardos de placas benditos
+250592,Cinturón de placas bendito
+250593,Yelmo de placas bendito
+250594,Torso de placas bendito
+250595,Coraza de torio enriquecido
+250596,Leotardos de torio enriquecido
+250597,Yelmo de torio enriquecido
+250598,Quijotes de campeón
+250599,Yelmo incondicional
+250600,Quijotes de mártir
+250601,Coraza de salvación
+250602,Nudillos de latón
+250603,Doru de bronce
+250604,Puños de hierro
+250605,Lanza de acero
+250606,Lucero del alba de hierro
+250607,Espada corta de mitril
+250608,Martillo de guerra de mitril
+250609,Garras de mitril
+250610,Mandoble de mitril
+250611,Estilete de mitril
+250612,Hacha de batalla de mitril cargada
+250613,Maza suprema de torio
+250614,Cestus de torio
+250615,Arma de asta de torio
+250616,Puntilla llamativa
+250617,Tallatormentas
+250618,Bagh nakh
+250619,Guja de legionita
+250620,Botas de cobre con gemas
+250621,Botas de cobre extrañas
+250932,Poción de explosión de hechizos menor
+250933,Poción de explosión de hechizos inferior
+250934,Poción de explosión de hechizos
+250935,Poción de explosión de hechizos superior
+250936,Poción de explosión de hechizos excelente
+250937,Poción de explosión de hechizos sublime
+250938,Poción de frenesí menor
+250939,Poción de frenesí inferior
+250940,Poción de frenesí
+250941,Poción de frenesí superior
+250942,Poción de frenesí excelente
+250943,Poción de frenesí sublime
+250944,Poción de ensalmador menor
+250945,Poción de ensalmador inferior
+250946,Poción de ensalmador
+250947,Poción de ensalmador superior
+250948,Poción de ensalmador excelente
+250949,Poción de ensalmador sublime
+250950,Poción de sangre venenosa
+250951,Poción de humo cáustico
+250952,Poción de humo desorientador
+250953,Poción de fuego de dragón
+250954,Poción de purga elemental
+250955,Poción de matanza de bestias
+250976,Receta: poción de explosión de hechizos menor
+250977,Receta: poción de explosión de hechizos inferior
+250978,Receta: poción de explosión de hechizos
+250979,Receta: poción de explosión de hechizos superior
+250980,Receta: poción de explosión de hechizos excelente
+250981,Receta: poción de explosión de hechizos sublime
+250982,Receta: poción de frenesí menor
+250983,Receta: poción de frenesí inferior
+250984,Receta: poción de frenesí
+250985,Receta: poción de frenesí superior
+250986,Receta: poción de frenesí excelente
+250987,Receta: poción de frenesí sublime
+250988,Receta: poción de ensalmador menor
+250989,Receta: poción de ensalmador inferior
+250990,Receta: poción de ensalmador
+250992,Receta: poción de ensalmador excelente
+250993,Receta: poción de ensalmador sublime
+250994,Receta: poción de sangre venenosa
+250995,Receta: poción de humo cáustico
+250996,Receta: poción de humo desorientador
+250997,Receta: poción de fuego de dragón
+250998,Receta: poción de purga elemental
+250999,Receta: poción de matanza de bestias
+251290,Barra de legionita
+251291,Barra de torio pesado
+251332,Diseño: botas de cobre con gemas
+251333,Diseño: botas de cobre extrañas
+251334,Diseño: botas de cobre resplandecientes
+251335,Diseño: botas de plata de ley
+251336,Diseño: leotardos de plata de ley
+251337,Diseño: guanteletes de plata de ley
+251338,Diseño: hombreras de plata de ley
+251339,Diseño: coraza de plata de ley
+251341,Diseño: camisa de anillas de guardia
+251355,Diseño: botas de veterano
+251356,Diseño: botas de guardia
+251357,Diseño: botas de protector
+251358,Diseño: botas de acólito
+251359,Diseño: botas de cruzado
+251360,Diseño: guantes de veterano
+251361,Diseño: guantes de guardia
+251362,Diseño: guantes de protector
+251363,Diseño: guantes de acólito
+251364,Diseño: guantes de cruzado
+251365,Diseño: cinturón de anillas de veterano
+251366,Diseño: cinturón de anillas de guardia
+251367,Diseño: cinturón de anillas de protector
+251368,Diseño: cinturón de anillas de acólito
+251369,Diseño: cinturón de anillas de cruzado
+251370,Diseño: camisa de anillas bañada en plata de veterano
+251371,Diseño: camisa de anillas bañada en plata de guardia
+251372,Diseño: camisa de anillas bañada en plata de protector
+251373,Diseño: camisa de anillas bañada en plata de acólito
+251374,Diseño: camisa de anillas bañada en plata de cruzado
+251375,Diseño: leotardos de anillas bañados en plata de veterano
+251376,Diseño: leotardos de anillas bañados en plata de guardia
+251377,Diseño: leotardos de anillas bañados en plata de protector
+251378,Diseño: leotardos de anillas bañados en plata de acólito
+251379,Diseño: leotardos de anillas bañados en plata de cruzado
+251380,Diseño: yelmo de anillas bañado en plata de veterano
+251381,Diseño: yelmo de anillas bañado en plata de guardia
+251382,Diseño: yelmo de anillas bañado en plata de protector
+251383,Diseño: yelmo de anillas bañado en plata de acólito
+251384,Diseño: yelmo de anillas bañado en plata de cruzado
+251385,Diseño: loriga de oro dura
+251386,Diseño: botas de oro duras
+251387,Diseño: brazales de oro duros
+251388,Diseño: leotardos de oro duros
+251389,Diseño: almófar de oro duro
+251390,Diseño: guanteletes de oro duros
+251391,Diseño: espaldares de oro duros
+251392,Diseño: coraza de mitril brillante
+251393,Diseño: espaldares de mitril brillantes
+251394,Diseño: botas de mitril brillantes
+251396,Diseño: pantalones de mitril brillantes
+251397,Diseño: guanteletes de mitril brillantes
+251398,Diseño: botas de oficial
+251399,Diseño: botas de centinela
+251400,Diseño: botas de guardián
+251401,Diseño: botas de prefecto
+251402,Diseño: botas de justicar
+251403,Diseño: guantes de oficial
+251404,Diseño: guantes de centinela
+251405,Diseño: guantes de guardián
+251406,Diseño: guantes de prefecto
+251407,Diseño: guantes de justicar
+251408,Diseño: cinturón de oficial
+251409,Diseño: cinturón de centinela
+251410,Diseño: cinturón de guardián
+251411,Diseño: cinturón de prefecto
+251412,Diseño: cinturón de justicar
+251413,Diseño: escarpes de oficial
+251414,Diseño: escarpes de centinela
+251415,Diseño: escarpes de guardián
+251416,Diseño: escarpes de prefecto
+251417,Diseño: escarpes de justicar
+251418,Diseño: guanteletes de oficial
+251419,Diseño: guanteletes de centinela
+251420,Diseño: guanteletes de guardián
+251421,Diseño: guanteletes de prefecto
+251422,Diseño: guanteletes de justicar
+251423,Diseño: guardarrenes de oficial
+251424,Diseño: guardarrenes de centinela
+251425,Diseño: guardarrenes de guardián
+251426,Diseño: guardarrenes de prefecto
+251427,Diseño: guardarrenes de justicar
+251428,Diseño: espaldares de oficial
+251429,Diseño: espaldares de centinela
+251430,Diseño: espaldares de guardián
+251431,Diseño: espaldares de prefecto
+251432,Diseño: espaldares de justicar
+251433,Diseño: guardamuñecas de oficial
+251434,Diseño: guardamuñecas de centinela
+251435,Diseño: guardamuñecas de guardián
+251436,Diseño: guardamuñecas de prefecto
+251437,Diseño: guardamuñecas de justicar
+251438,Diseño: espaldares de placas benditos
+251439,Diseño: botas de placas benditas
+251440,Diseño: guanteletes de placas benditos
+251441,Diseño: guanteletes de placas imperiales
+251442,Diseño: brazales de placas benditos
+251443,Diseño: leotardos de placas benditos
+251444,Diseño: cinturón de placas bendito
+251445,Diseño: yelmo de placas bendito
+251446,Diseño: torso de placas bendito
+251447,Diseño: coraza de torio enriquecido
+251448,Diseño: leotardos de torio enriquecido
+251449,Diseño: yelmo de torio enriquecido
+251450,Diseño: quijotes de campeón
+251451,Diseño: yelmo incondicional
+251452,Diseño: quijotes de mártir
+251453,Diseño: coraza de salvación
+251454,Diseño: nudillos de latón
+251455,Diseño: doru de bronce
+251456,Diseño: puños de hierro
+251457,Diseño: lanza de acero
+251458,Diseño: lucero del alba de hierro
+251459,Diseño: espada corta de mitril
+251460,Diseño: martillo de guerra de mitril
+251461,Diseño: garras de mitril
+251462,Diseño: mandoble de mitril
+251463,Diseño: estilete de mitril
+251464,Diseño: hacha de batalla de mitril cargada
+251465,Diseño: maza suprema de torio
+251466,Diseño: cestus de torio
+251467,Diseño: arma de asta de torio
+251468,Diseño: puntilla llamativa
+251469,Diseño: tallatormentas
+251470,Diseño: bagh nakh
+251471,Diseño: guja de legionita
+251524,Aletantojo
+251525,Delicia de aletantojo sabrosa
+251526,Receta: delicia de aletantojo sabrosa
+251735,Patrón: togas adaptables de asesino de babosas
+251736,Patrón: puños adaptables de asesino de babosas
+251737,Patrón: cordón adaptable de asesino de babosas
+251738,Patrón: jubón adaptable de asesino de bestias
+251739,Patrón: brazales adaptables de asesino de bestias
+251740,Patrón: envoltura adaptable de asesino de bestias
+251741,Patrón: coselete adaptable de dinodestructor
+251742,Patrón: muñequeras adaptables de dinodestructor
+251743,Patrón: cinturón adaptable de dinodestructor
+251744,Diseño: peto adaptable de aplastatierras
+251745,Diseño: guardabrazos adaptables de aplastatierras
+251746,Diseño: faja adaptable de aplastatierras
+251747,Esquema: supresor de fango
+251748,Esquema: dardo tranquilizante enorme
+251749,Esquema: G.R.R.-Nada
+251750,Patrón: guerrera adaptable de ensalmador de babosas
+251751,Patrón: brazales adaptables de ensalmador de babosas
+251752,Patrón: cinturón adaptable de ensalmador de babosas
+251753,Patrón: toga adaptable de ensalmador de bestias
+251754,Patrón: pulseras adaptables de ensalmador de bestias
+251755,Patrón: faja adaptable de ensalmador de bestias
+251756,Patrón: guerrera adaptable de dinoensalmador
+251757,Patrón: muñequeras adaptables de dinoensalmador
+251758,Patrón: armadura de anillas adaptable de dinoensalmador
+251759,Diseño: placa adaptable de tejetierras
+251760,Diseño: eslabones adaptables de tejetierras
+251761,Diseño: guardarrenes adaptables de tejetierras
+252424,Zapatillas de cría negra
+252425,Botas de cuero oscuro
+252426,Zapatos de escamas de múrloc
+252427,Botas de resplandor lunar
+252428,Cinturón de cuero de camorrista
+252429,Cinturón de cuero de trampero
+252430,Cinturón de cuero de defensor
+252431,Cinturón de cuero totémico
+252432,Cinturón de cuero de jinete de la tormenta
+252433,Cinturón de cuero de la sabiduría
+252434,Armadura de cuero de defensor
+252435,Armadura de cuero totémica
+252436,Complemento medio para armadura místico
+252437,Complemento medio para armadura fuerte
+252439,Botas de cuero de camorrista
+252440,Botas de cuero de trampero
+252441,Botas de cuero de defensor
+252442,Botas de cuero totémicas
+252443,Botas de cuero de jinete de la tormenta
+252444,Botas de cuero de la sabiduría
+252445,Pantalones de cuero de defensor
+252446,Pantalones de cuero totémicos
+252447,Caperuza de cuero de defensor
+252448,Caperuza de cuero totémica
+252449,Botas de cuero de montañero
+252450,Guerrera de cuero de defensor
+252451,Guerrera de cuero totémica
+252452,Complemento pesado para armadura místico
+252453,Complemento pesado para armadura fuerte
+252455,Yelmo de cuero de defensor
+252456,Yelmo de cuero totémico
+252457,Falda de cuero de defensor
+252458,Leotardos de cuero totémicos
+252459,Cinturón de cuero de merodeador
+252460,Cinturón de cuero de celador
+252461,Cinturón de cuero de hostigador
+252462,Complemento grueso para armadura místico
+252463,Complemento grueso para armadura fuerte
+252465,Zapatos de cuero de merodeador
+252466,Zapatos de cuero de celador
+252467,Zapatos de gamuza azul
+252468,Botas de cuero de merodeador
+252469,Botas de cuero de vagador
+252470,Botas de cuero de celador
+252471,Botas de cuero de clamacielos
+252472,Botas de cuero de ensalmador
+252473,Guardarrenes de cuero de merodeador
+252474,Guardarrenes de cuero de vagador
+252475,Guardarrenes de cuero de celador
+252476,Guardarrenes de cuero de clamacielos
+252477,Guardarrenes de cuero de ensalmador
+252478,Pantalones de gamuza azul
+252479,Botas de cuero maligno
+252480,Armadura de gamuza azul
+252481,Cinturón de gamuza azul
+252482,Sombrero de gamuza azul
+252483,Armadura del Alba
+252484,Guerrera de los Fauces de Madera
+252485,Yelmo de oso de guerra
+252486,Leotardos Plumahierro
+252487,Complemento basto para armadura místico
+252488,Complemento basto para armadura fuerte
+252490,Armadura de cuero de camorrista
+252491,Armadura de cuero de trampero
+252492,Armadura de cuero de jinete de la tormenta
+252493,Armadura de cuero de la sabiduría
+252494,Guantes de cuero de camorrista
+252495,Guantes de cuero de trampero
+252496,Guantes de cuero de defensor
+252497,Guantes de cuero totémicos
+252498,Guantes de cuero de jinete de la tormenta
+252499,Guantes de cuero de la sabiduría
+252500,Pantalones de cuero de camorrista
+252501,Pantalones de cuero de trampero
+252502,Pantalones de cuero de jinete de la tormenta
+252503,Pantalones de cuero de la sabiduría
+252504,Caperuza de cuero de camorrista
+252505,Caperuza de cuero de trampero
+252506,Caperuza de cuero de jinete de la tormenta
+252507,Caperuza de cuero de la sabiduría
+252508,Guerrera de cuero de camorrista
+252509,Guerrera de cuero de trampero
+252510,Guerrera de cuero de jinete de la tormenta
+252511,Guerrera de cuero de la sabiduría
+252512,Yelmo de cuero de camorrista
+252513,Yelmo de cuero de trampero
+252514,Yelmo de cuero de jinete de la tormenta
+252515,Yelmo de cuero de la sabiduría
+252516,Musleras de cuero de camorrista
+252517,Musleras de cuero de trampero
+252518,Falda de cuero de jinete de la tormenta
+252519,Leotardos de cuero de la sabiduría
+252520,Cinturón de cuero de vagador
+252521,Cinturón de cuero de acechador
+252522,Cinturón de cuero de clamacielos
+252523,Cinturón de cuero de ensalmador
+252524,Guantes de cuero de merodeador
+252525,Guantes de cuero de vagador
+252526,Guantes de cuero de acechador
+252527,Guantes de cuero de celador
+252528,Guantes de cuero de hostigador
+252529,Guantes de cuero de clamacielos
+252530,Guantes de cuero de ensalmador
+252531,Zapatos de cuero de vagador
+252532,Zapatos de cuero de clamacielos
+252533,Zapatos de cuero de ensalmador
+252534,Hombreras de cuero de merodeador
+252535,Hombreras de cuero de vagador
+252536,Hombreras de cuero de celador
+252537,Hombreras de cuero de clamacielos
+252538,Hombreras de cuero de ensalmador
+252539,Brazales de cuero de merodeador
+252540,Brazales de cuero de vagador
+252541,Brazales de cuero de celador
+252542,Brazales de cuero de clamacielos
+252543,Brazales de cuero de ensalmador
+252544,Cinturón de cuero trabajado
+252545,Botas de cuero trabajado
+252546,Guantes de gamuza azul
+252547,Guanteletes de cuero de merodeador
+252548,Guanteletes de cuero de vagador
+252549,Guanteletes de cuero de celador
+252550,Guanteletes de cuero de clamacielos
+252551,Guanteletes de cuero de ensalmador
+252552,Armadura de cuero trabajado
+252553,Guanteletes de cuero trabajado
+252554,Hombreras de gamuza azul
+252555,Corona de cuero trabajado
+252556,Hombreras de cuero maligno
+252557,Brazales de cuero trabajado
+252558,Cubrehombros de cuero trabajado
+252559,Brazales de gamuza azul
+252560,Pantalones de cuero trabajado
+252561,Corona viva
+252562,Botas de malla de acechador
+252563,Botas de malla de clamacielos
+252564,Botas de malla de hostigador
+252565,Botas de malla de ensalmador
+252566,Hombreras de malla de acechador
+252567,Hombreras de malla de clamacielos
+252568,Hombreras de malla de hostigador
+252569,Hombreras de malla de ensalmador
+252570,Brazales de malla de acechador
+252571,Brazales de malla de clamacielos
+252572,Brazales de malla de hostigador
+252573,Brazales de malla de ensalmador
+252574,Botas de escórpido flexibles
+252575,Cinturón de escórpido cargado
+252576,Escarpes de malla de acechador
+252577,Escarpes de malla de clamacielos
+252578,Escarpes de malla de hostigador
+252579,Escarpes de malla de ensalmador
+252580,Leotardos de escórpido flexibles
+252581,Yelmo de escórpido cargado
+252582,Brazales de escórpido flexibles
+252583,Hombreras de escórpido cargadas
+252584,Guanteletes de malla de acechador
+252585,Guanteletes de malla de clamacielos
+252586,Guanteletes de malla de hostigador
+252587,Guanteletes de malla de ensalmador
+252588,Cinturón de malla de acechador
+252589,Cinturón de malla de clamacielos
+252590,Cinturón de malla de hostigador
+252591,Cinturón de malla de ensalmador
+252592,Hombreras de escórpido flexibles
+252593,Brazales de escórpido cargados
+252594,Botas de escórpido pesadas
+252595,Cinturón de escórpido flexible
+252596,Guanteletes de escórpido cargados
+252597,Yelmo de escórpido flexible
+252598,Jubón de escórpido cargado
+252599,Jubón de escórpido flexible
+252600,Leotardos de escórpido cargados
+252601,Escarpes de escórpido flexibles
+252602,Botas de escórpido cargadas
+252603,Leotardos de escamas de dragón rojo
+252604,Yelmo de escamas de dragón azul
+252605,Yelmo de escamas de dragón negro
+252606,Leotardos de escórpido prístinos
+252761,Patrón: zapatillas de cría negra
+252762,Patrón: botas de cuero oscuro
+252763,Patrón: zapatos de escamas de múrloc
+252764,Patrón: botas de resplandor lunar
+252765,Patrón: cinturón de cuero de camorrista
+252766,Patrón: cinturón de cuero de trampero
+252767,Patrón: cinturón de cuero de defensor
+252768,Patrón: cinturón de cuero totémico
+252769,Patrón: cinturón de cuero de jinete de la tormenta
+252770,Patrón: cinturón de cuero de la sabiduría
+252777,Patrón: guantes de cuero de camorrista
+252778,Patrón: guantes de cuero de trampero
+252779,Patrón: guantes de cuero de defensor
+252780,Patrón: guantes de cuero totémicos
+252781,Patrón: guantes de cuero de jinete de la tormenta
+252782,Patrón: guantes de cuero de la sabiduría
+252783,Patrón: complemento medio para armadura místico
+252784,Patrón: complemento medio para armadura fuerte
+252786,Patrón: botas de cuero de camorrista
+252787,Patrón: botas de cuero de trampero
+252788,Patrón: botas de cuero de defensor
+252789,Patrón: botas de cuero totémicas
+252790,Patrón: botas de cuero de jinete de la tormenta
+252791,Patrón: botas de cuero de la sabiduría
+252798,Patrón: caperuza de cuero de camorrista
+252799,Patrón: caperuza de cuero de trampero
+252800,Patrón: caperuza de cuero de defensor
+252801,Patrón: caperuza de cuero totémica
+252802,Patrón: caperuza de cuero de jinete de la tormenta
+252803,Patrón: caperuza de cuero de la sabiduría
+252804,Patrón: botas de cuero de montañero
+252805,Patrón: guerrera de cuero de camorrista
+252806,Patrón: guerrera de cuero de trampero
+252807,Patrón: guerrera de cuero de defensor
+252808,Patrón: guerrera de cuero de totémica
+252809,Patrón: guerrera de cuero de jinete de la tormenta
+252810,Patrón: guerrera de cuero de la sabiduría
+252811,Patrón: complemento pesado para armadura místico
+252812,Patrón: complemento pesado para armadura fuerte
+252820,Patrón: musleras de cuero de camorrista
+252821,Patrón: musleras de cuero de trampero
+252822,Patrón: falda de cuero de defensor
+252823,Patrón: leotardos de cuero totémicos
+252824,Patrón: falda de cuero de jinete de la tormenta
+252825,Patrón: leotardos de cuero de la sabiduría
+252826,Patrón: cinturón de cuero de merodeador
+252827,Patrón: cinturón de cuero de vagador
+252828,Patrón: cinturón de cuero de acechador
+252829,Patrón: cinturón de cuero de celador
+252830,Patrón: cinturón de cuero de hostigador
+252831,Patrón: cinturón de cuero de clamacielos
+252832,Patrón: cinturón de cuero de ensalmador
+252833,Patrón: complemento grueso para armadura místico
+252834,Patrón: complemento grueso para armadura fuerte
+252836,Patrón: guantes de cuero de merodeador
+252837,Patrón: guantes de cuero de vagador
+252838,Patrón: guantes de cuero de acechador
+252839,Patrón: guantes de cuero de celador
+252840,Patrón: guantes de cuero de hostigador
+252841,Patrón: guantes de cuero de clamacielos
+252842,Patrón: guantes de cuero de ensalmador
+252843,Patrón: zapatos de cuero de merodeador
+252844,Patrón: zapatos de cuero de vagador
+252845,Patrón: zapatos de cuero de celador
+252846,Patrón: zapatos de cuero de clamacielos
+252847,Patrón: zapatos de cuero de ensalmador
+252848,Patrón: hombreras de cuero de merodeador
+252849,Patrón: hombreras de cuero de vagador
+252850,Patrón: hombreras de cuero de celador
+252851,Patrón: hombreras de cuero de clamacielos
+252852,Patrón: hombreras de cuero de ensalmador
+252853,Patrón: brazales de cuero de merodeador
+252854,Patrón: brazales de cuero de vagador
+252855,Patrón: brazales de cuero de celador
+252856,Patrón: brazales de cuero de clamacielos
+252857,Patrón: brazales de cuero de ensalmador
+252858,Patrón: cinturón de cuero trabajado
+252859,Patrón: zapatos de gamuza azul
+252860,Patrón: botas de cuero de merodeador
+252861,Patrón: botas de cuero de vagador
+253897,Botas nacaradas
+252862,Patrón: botas de cuero de celador
+252863,Patrón: botas de cuero de clamacielos
+252864,Patrón: botas de cuero de ensalmador
+252865,Patrón: botas de cuero trabajado
+252866,Patrón: guantes de gamuza azul
+252867,Patrón: guanteletes de cuero de merodeador
+252868,Patrón: guanteletes de cuero de vagador
+252869,Patrón: guanteletes de cuero de celador
+254087,Ceñidor negro
+252870,Patrón: guanteletes de cuero de clamacielos
+252871,Patrón: guanteletes de cuero de ensalmador
+252872,Patrón: guardarrenes de cuero de merodeador
+252873,Patrón: guardarrenes de cuero de vagador
+252874,Patrón: guardarrenes de cuero de celador
+252875,Patrón: guardarrenes de cuero de clamacielos
+252876,Patrón: guardarrenes de cuero de ensalmador
+252877,Patrón: armadura de cuero trabajado
+252878,Patrón: pantalones de gamuza azul
+252879,Patrón: botas de cuero maligno
+252880,Patrón: guanteletes de cuero trabajado
+252881,Patrón: hombreras de gamuza azul
+252882,Patrón: corona de cuero trabajado
+252883,Patrón: armadura de gamuza azul
+252884,Patrón: hombreras de cuero maligno
+252885,Patrón: brazales de cuero trabajado
+252895,Patrón: leotardos Plumahierro
+252886,Patrón: cinturón de gamuza azul
+252887,Patrón: cubrehombros de cuero trabajado
+252888,Patrón: brazales de gamuza azul
+252889,Patrón: pantalones de cuero trabajado
+252890,Patrón: sombrero de gamuza azul
+252891,Patrón: corona viva
+252892,Patrón: armadura del Alba
+252893,Patrón: guerrera de los Fauces de Madera
+252894,Patrón: yelmo de oso de guerra
+252896,Patrón: botas de malla de acechador
+252897,Patrón: botas de malla de clamacielos
+252898,Patrón: botas de malla de hostigador
+252899,Patrón: botas de malla de ensalmador
+252900,Patrón: hombreras de malla de acechador
+252901,Patrón: hombreras de malla de clamacielos
+252902,Patrón: hombreras de malla de hostigador
+252903,Patrón: hombreras de malla de ensalmador
+252904,Patrón: brazales de malla de acechador
+252905,Patrón: brazales de malla de clamacielos
+252906,Patrón: brazales de malla de hostigador
+252907,Patrón: brazales de malla de ensalmador
+252908,Patrón: botas de escórpido flexibles
+252909,Patrón: cinturón de escórpido cargado
+252910,Patrón: escarpes de malla de acechador
+252911,Patrón: escarpes de malla de clamacielos
+252912,Patrón: escarpes de malla de hostigador
+252913,Patrón: escarpes de malla de ensalmador
+252914,Patrón: leotardos de escórpido flexibles
+252915,Patrón: yelmo de escórpido cargado
+252916,Patrón: brazales de escórpido flexibles
+252917,Patrón: hombreras de escórpido cargadas
+252918,Patrón: guanteletes de malla de acechador
+252919,Patrón: guanteletes de malla de clamacielos
+252920,Patrón: guanteletes de malla de hostigador
+252921,Patrón: guanteletes de malla de ensalmador
+252922,Patrón: cinturón de malla de acechador
+252923,Patrón: cinturón de malla de clamacielos
+252924,Patrón: cinturón de malla de hostigador
+252925,Patrón: cinturón de malla de ensalmador
+252926,Patrón: hombreras de escórpido flexibles
+252927,Patrón: brazales de escórpido cargados
+252928,Patrón: botas de escórpido pesadas
+252929,Patrón: cinturón de escórpido flexible
+252930,Patrón: guanteletes de escórpido cargados
+252931,Patrón: yelmo de escórpido flexible
+252932,Patrón: jubón de escórpido cargado
+252933,Patrón: jubón de escórpido flexible
+252934,Patrón: leotardos de escórpido cargados
+252935,Patrón: escarpes de escórpido flexibles
+252936,Patrón: botas de escórpido cargadas
+252937,Patrón: leotardos de escamas de dragón rojo
+252938,Patrón: yelmo de escamas de dragón azul
+252939,Patrón: yelmo de escamas de dragón negro
+252940,Patrón: leotardos de escórpido prístinos
+252941,Patrón: complemento basto para armadura místico
+252942,Patrón: complemento basto para armadura fuerte
+253664,Bolsa de componentes de lino
+253665,Patrón: bolsa de componentes de lino
+253667,Bolsa de componentes de lana
+253668,Patrón: bolsa de componentes de lana
+253885,Fajín de arcanista novicio
+253886,Patrón: fajín de arcanista novicio
+253887,Fajín de ferviente novicio
+253888,Patrón: fajín de ferviente novicio
+253889,Botas prístinas
+253890,Patrón: botas prístinas
+253891,Botas sedosas
+253892,Patrón: botas sedosas
+253893,Botas de llamas
+253894,Patrón: botas de llamas
+253895,Botas de las Sombras
+253896,Patrón: botas de las Sombras
+253898,Patrón: botas nacaradas
+253899,Botas brillantes
+253900,Patrón: botas brillantes
+253901,Gonela prístina de filigrana
+253902,Patrón: gonela prístina de filigrana
+253903,Gonela sedosa de filigrana
+253904,Patrón: gonela sedosa de filigrana
+253905,Gonela de llamas de filigrana
+253906,Patrón: gonela de llamas de filigrana
+253907,Gonela de las Sombras de filigrana
+253908,Patrón: gonela de las Sombras de filigrana
+253909,Gonela nacarada de filigrana
+253910,Patrón: gonela nacarada de filigrana
+253911,Gonela brillante de filigrana
+253912,Patrón: gonela brillante de filigrana
+253913,Guantes prístinos
+253914,Patrón: guantes prístinos
+253915,Guantes sedosos
+253916,Patrón: guantes sedosos
+253917,Guantes de llamas
+253918,Patrón: guantes de llamas
+253919,Guantes de las Sombras
+253920,Patrón: guantes de las Sombras
+253921,Guantes nacarados
+253922,Patrón: guantes nacarados
+253923,Guantes brillantes
+253924,Patrón: guantes brillantes
+253925,Fajín prístino
+253926,Patrón: fajín prístino
+253927,Fajín sedoso
+253928,Patrón: fajín sedoso
+253929,Fajín de llamas
+253930,Patrón: fajín de llamas
+253931,Fajín de las Sombras
+253932,Patrón: fajín de las Sombras
+253933,Fajín nacarado
+253934,Patrón: fajín nacarado
+253935,Fajín brillante
+253936,Patrón: fajín brillante
+253937,Leotardos prístinos de filigrana
+253938,Patrón: leotardos prístinos de filigrana
+253939,Leotardos sedosos de filigrana
+253940,Patrón: leotardos sedosos de filigrana
+253941,Leotardos de llamas de filigrana
+253942,Patrón: leotardos de llamas de filigrana
+253943,Leotardos de las Sombras de filigrana
+253944,Patrón: leotardos de las Sombras de filigrana
+253945,Leotardos nacarados de filigrana
+253946,Patrón: leotardos nacarados de filigrana
+253947,Leotardos brillantes de filigrana
+253948,Patrón: leotardos brillantes de filigrana
+253949,Diadema prístina
+253950,Patrón: diadema prístina
+253951,Diadema sedosa
+253952,Patrón: diadema sedosa
+253953,Diadema de llamas
+253954,Patrón: diadema de llamas
+253955,Diadema de las Sombras
+253956,Patrón: diadema de las Sombras
+253957,Diadema nacarada
+253958,Patrón: diadema nacarada
+253959,Diadema brillante
+253960,Patrón: diadema brillante
+253961,Gonela prístina
+253962,Patrón: gonela prístina
+253963,Gonela sedosa
+253964,Patrón: gonela sedosa
+253965,Gonela de llamas
+253966,Patrón: gonela de llamas
+253967,Gonela de las Sombras
+253968,Patrón: gonela de las Sombras
+253969,Gonela nacarada
+253970,Patrón: gonela nacarada
+253971,Gonela brillante
+253972,Patrón: gonela brillante
+253973,Bolsa de componentes de seda
+253974,Patrón: bolsa de componentes de seda
+253975,Diadema prístina de filigrana
+253976,Patrón: diadema prístina de filigrana
+253977,Diadema sedosa de filigrana
+253978,Patrón: diadema sedosa de filigrana
+253979,Diadema de llamas de filigrana
+253980,Patrón: diadema de llamas de filigrana
+253981,Diadema de las Sombras de filigrana
+253982,Patrón: diadema de las Sombras de filigrana
+253983,Diadema nacarada de filigrana
+253984,Patrón: diadema nacarada de filigrana
+253985,Diadema brillante de filigrana
+253986,Patrón: diadema brillante de filigrana
+253987,Leotardos prístinos
+253988,Patrón: leotardos prístinos
+253989,Leotardos sedosos
+253990,Patrón: leotardos sedosos
+253991,Leotardos de llamas
+253992,Patrón: leotardos de llamas
+253993,Leotardos de las Sombras
+253994,Patrón: leotardos de las Sombras
+253995,Leotardos nacarados
+253996,Patrón: leotardos nacarados
+253997,Leotardos brillantes
+253998,Patrón: leotardos brillantes
+253999,Leotardos terráneos
+254000,Patrón: leotardos terráneos
+254001,Zapatillas áureas
+254002,Patrón: zapatillas áureas
+254003,Zapatillas rabiosas
+254004,Patrón: zapatillas rabiosas
+254005,Zapatillas ígneas
+254006,Patrón: zapatillas ígneas
+254007,Zapatillas negras
+254008,Patrón: zapatillas negras
+254009,Zapatillas doradas
+254010,Patrón: zapatillas doradas
+254011,Zapatillas radiantes
+254012,Patrón: zapatillas radiantes
+254013,Zapatillas de seda terránea
+254014,Patrón: zapatillas de seda terránea
+254015,Caperuza de seda terránea
+254016,Patrón: caperuza de seda terránea
+254017,Guantes de seda terránea
+254018,Patrón: guantes de seda terránea
+254019,Puños de seda terránea
+254020,Patrón: puños de seda terránea
+254021,Manijas áureas
+254022,Patrón: manijas áureas
+254023,Manijas rabiosas
+254024,Patrón: manijas rabiosas
+254025,Manijas ígneas
+254026,Patrón: manijas ígneas
+254027,Manijas negras
+254028,Patrón: manijas negras
+254029,Manijas doradas
+254030,Patrón: manijas doradas
+254031,Manijas radiantes
+254032,Patrón: manijas radiantes
+254033,Hombreras de seda terránea
+254034,Patrón: hombreras de seda terránea
+254035,Bolsa de componentes de tejido mágico
+254036,Patrón: bolsa de componentes de tejido mágico
+254037,Cordón áureo
+254038,Patrón: cordón áureo
+254039,Cordón rabioso
+254040,Patrón: cordón rabioso
+254041,Cordón ígneo
+254042,Patrón: cordón ígneo
+254043,Cordón negro
+254044,Patrón: cordón negro
+254045,Cordón dorado
+254046,Patrón: cordón dorado
+254047,Cordón radiante
+254048,Patrón: cordón radiante
+254049,Hombreras de diezmo abisal
+254050,Patrón: hombreras de diezmo abisal
+254051,Hombreras de rabia abisal
+254052,Patrón: hombreras de rabia abisal
+254053,Hombreras de llama abisal
+254054,Patrón: hombreras de llama abisal
+254055,Hombreras de perla abisal
+254056,Patrón: hombreras de perla abisal
+254057,Hombreras de brillo abisal
+254058,Patrón: hombreras de brillo abisal
+254059,Hombreras de Luz Abisal
+254060,Patrón: hombreras de Luz Abisal
+254061,Puños de diezmo abisal
+254062,Patrón: puños de diezmo abisal
+254063,Puños de rabia abisal
+254064,Patrón: puños de rabia abisal
+254065,Puños de llama abisal
+254066,Patrón: puños de llama abisal
+254067,Puños de perla abisal
+254068,Patrón: puños de perla abisal
+254069,Puños de brillo abisal
+254070,Patrón: puños de brillo abisal
+254071,Puños de Luz Abisal
+254072,Patrón: puños de Luz Abisal
+254073,Cordón Telafantasma
+254074,Patrón: cordón Telafantasma
+254075,Guantes de tejido terráneo
+254076,Patrón: guantes de tejido terráneo
+254077,Cordón de tejido terráneo
+254078,Patrón: cordón de tejido terráneo
+254079,Bolsa de componentes de paño rúnico
+254080,Patrón: bolsa de componentes de paño rúnico
+254081,Ceñidor áureo
+254082,Patrón: ceñidor áureo
+254083,Ceñidor rabioso
+254084,Patrón: ceñidor rabioso
+254085,Ceñidor ígneo
+254086,Patrón: ceñidor ígneo
+254088,Patrón: ceñidor negro
+254089,Ceñidor dorado
+254090,Patrón: ceñidor dorado
+254091,Ceñidor radiante
+254092,Patrón: ceñidor radiante
+254093,Botas de tejido terráneo
+254094,Patrón: botas de tejido terráneo
+254095,Guantes áureos
+254096,Patrón: guantes áureos
+254097,Guantes rabiosos
+254098,Patrón: guantes rabiosos
+254099,Guantes ígneos
+254100,Patrón: guantes ígneos
+254101,Guantes negros
+254102,Patrón: guantes negros
+254103,Guantes dorados
+254104,Patrón: guantes dorados
+254105,Guantes radiantes
+254106,Patrón: guantes radiantes
+254107,Sandalias áureas
+254108,Patrón: sandalias áureas
+254109,Sandalias rabiosas
+254110,Patrón: sandalias rabiosas
+254111,Sandalias ígneas
+254112,Patrón: sandalias ígneas
+254113,Sandalias negras
+254114,Patrón: sandalias negras
+254115,Sandalias doradas
+254116,Patrón: sandalias doradas
+254117,Sandalias radiantes
+254118,Patrón: sandalias radiantes
+254119,Manto de tejido terráneo
+254120,Patrón: manto de tejido terráneo
+254121,Jubón de tejido terráneo
+254122,Patrón: jubón de tejido terráneo
+254123,Puños de paño rúnico
+254124,Patrón: puños de paño rúnico
+254125,Leotardos de tejido terráneo
+254126,Patrón: leotardos de tejido terráneo
+254127,Manto Telafantasma
+254128,Patrón: manto Telafantasma
+254129,Botas Telafantasma
+254130,Patrón: botas Telafantasma
+254131,Puños de tejido terráneo
+254132,Patrón: puños de tejido terráneo
+254133,Bolsa de componentes de tela lunar
+254134,Patrón: bolsa de componentes de tela lunar
+254135,Caperuza Telafantasma
+254136,Patrón: caperuza Telafantasma
+254137,Corona de tejido terráneo
+254138,Patrón: corona de tejido terráneo
+254139,Bolsa de componentes sin fondo
+254140,Patrón: bolsa de componentes sin fondo
+254681,Patrón: pantalones de paño tormentoso
+254682,Patrón: guantes de paño tormentoso
+254683,Patrón: jubón de paño tormentoso
+254684,Patrón: cinta de paño tormentoso
+254685,Patrón: hombreras de paño tormentoso
+254686,Patrón: botas de paño tormentoso
+255007,Isomuelle de gólem
+255645,Glándula de veneno inflamada
+255715,Antídoto potente
+255716,Cataplasma sencilla
+255717,Cataplasma ingeniosa
+255718,Cataplasma excelente
+255719,Cataplasma poderosa
+255720,Torniquete de lana
+255721,Torniquete de cuero
+255722,Torniquete quirúrgico
+255723,Manual: poción de sanación superior
+255724,Manual: cataplasma ingeniosa
+255725,Manual: poción de sanación excelente
+255726,Manual: torniquete de cuero
+255727,Manual: cataplasma excelente
+255728,Manual: antídoto potente
+255729,Manual: poción de sanación sublime
+255730,Manual: torniquete quirúrgico
+255731,Manual: cataplasma poderosa
+260784,SECUR-lengüetas
+260792,SECUR-dinamita
+260793,SECUR-bomba de cobre
+260794,Envoltura Ez-Thro
+260795,Bomba de cobre EZ-Thro XL
+260796,SECUR-relleno antideslizante
+260797,SECUR-bomba de bronce
+260798,SECUR-dinamita gigante
+260799,SECUR-campana
+260800,Oveja de seguridad
+260801,Mecha a prueba de fuego EZ-Thro
+260802,Mortero de bronce EZ-Thro
+260803,Granada EZ-Thro
+260804,SECUR-carcasa
+260805,SECUR-bomba
+260806,Capa de campo de emergencia
+260807,Transportador de alimañas compacto
+260808,EZ-Thro Tru-Trigger
+260809,Bomba de fragmentación con veriactivador
+260810,SECUR-paracaídas desechable
+260811,Navaja gnómica
+260812,Despojador a distancia
+260813,SECUR-tubo
+260814,SECUR-dinamita ingeniosa
+260815,Casquillo EZ-Thro
+260816,Granada de torio EZ-Thro
+260817,Bomba oscura EZ-Thro
+260818,Bomba de maná EZ-Thro
+260819,Transportador de campo EZ-Thro: Gadgetzan
+260820,SECUR-desgarrador de emergencia: Vista Eterna
+260821,SECUR-transportador de campo Ez-Thro: Monte Hyjal
+260822,Batería recargable ultrasegura
+260823,Transportador dimensional: Monte Hyjal
+260824,Pollotizador gnómico
+260825,Parapente goblin ultraligero
+260826,Gnomish Weather Machine NYI
+260827,Sigilador 52
+260828,SECUR-propulsiones de nitro
+260829,Desplazador magnético EZ-Thro
+260830,SECUR-teletransporte
+263509,Suflé del Muro Celeste
+263511,Receta: suflé del Muro Celeste
+263512,Pinchitos de cangrejo
+263513,Receta: pinchitos de cangrejo
+264201,Esquema: SECUR-lengüetas
+264202,Esquema: SECUR-dinamita
+264203,Esquema: SECUR-bomba de cobre
+264204,Esquema: envoltura EZ-Thro
+264205,Esquema: bomba de cobre EZ-Thro XL
+264206,Esquema: SECUR-relleno antideslizante
+264207,Esquema: SECUR-bomba de bronce
+264208,Esquema: SECUR-dinamita gigante
+264209,Esquema: SECUR-campana
+264210,Esquema: oveja de seguridad
+264211,Esquema: mecha a prueba de fuego EZ-Thro
+264212,Esquema: mortero de bronce EZ-Thro
+264213,Esquema: granada EZ-Thro
+264214,Esquema: SECUR-carcasa
+264215,Esquema: SECUR-bomba
+264216,Esquema: capa de campo de emergencia
+264217,Esquema: transportador de alimañas compacto
+264218,Schematic: EZ-Thro Tru-Trigger
+264219,Schematic: Tru-Trigger Frag Bomb
+264220,Esquema: SECUR-paracaídas desechable
+264221,Esquema: navaja gnómica
+264222,Esquema: despojador a distancia
+264223,Esquema: SECUR-tubo
+264224,Esquema: SECUR-dinamita ingeniosa
+264225,Esquema: casquillo EZ-Thro
+264226,Esquema: granada de torio EZ-Thro
+264227,Esquema: bomba oscura EZ-Thro
+264228,Esquema: bomba de maná EZ-Thro
+264229,Esquema: transportador de campo EZ-Thro: Gadgetzan
+264230,Esquema: SECUR-desgarrador de emergencia: Vista Eterna
+264231,Esquema: SECUR-transportador de campo EZ-Thro: Monte Hyjal
+264232,Esquema: batería recargable ultrasegura
+264233,Esquema: transportador dimensional: Monte Hyjal
+264234,Esquema: pollotizador gnómico
+264235,Esquema: parapente goblin ultraligero
+264236,Esquema: máquina de clima gnómica
+264237,Esquema: Sigilador 52
+264238,Esquema: SECUR-propulsiones de nitro
+264239,Esquema: desplazador magnético EZ-Thro
+264240,Esquema: SECUR-teletransporte
+267341,Mermelada patadulce
+269900,Dispositivo de despliegue de estandarte centauro
+269901,Esquema: dispositivo de despliegue de estandarte centauro
+269902,Pedal de pie con forma de pezuña
+269903,Esquema: pedal de pie con forma de pezuña
+272941,Troncos gruesos
+273085,Plano: fermentador
+273086,Plano: yunque
+273087,Plano: hoguera de oficial
+273092,Plano: robot de reparaciones
+273096,Plano: bastidor para pieles
+273099,Plano: rueca
+273101,Plano: hoguera de experto
+273102,Plano: festín de Cocinitas
+273103,Plano: recuperador Arcano
+273105,Plano: estudio sobre toxinas
+273112,Plano: laboratorio de alquimia
+273113,Plano: forja de maestro
+273115,Blueprint: Iron Oven
+273116,Plano: forja Arcana
+273117,Plano: banco de trabajo de anarquista
+273118,Plano: laboratorio de doctor de peste
+273121,Plano: máquina de costura
+273124,Plano: telar
+273125,Dedo índice de exánime
+273127,Corazón de gólem
+273128,Chispa de hacedor
+273129,Esencia de la anarquía
+273130,Motor de no-muerte
+273131,Gritos embotellados
+273952,Patrón: calzas de guardia de la arboleda
+273953,Patrón: mandiletes de guardia de la arboleda
+273954,Patrón: hombreras de guardia de la arboleda
+273955,Patrón: apisonadoras de guardia de la arboleda
+273956,Patrón: falda de guardia de la arboleda
+273957,Patrón: mitones de guardia de la arboleda
+273958,Patrón: manto de guardia de la arboleda
+273959,Patrón: sandalias de guardia de la arboleda
+273960,Patrón: musleras de guardia de la arboleda
+273961,Patrón: manoplas de guardia de la arboleda
+273962,Patrón: espaldares de guardia de la arboleda
+273963,Patrón: botas de guardia de la arboleda
+273964,Patrón: leotardos de guardia de la arboleda
+273965,Patrón: guanteletes de guardia de la arboleda
+273966,Patrón: bufas de guardia de la arboleda
+273967,Patrón: botines de guardia de la arboleda
+273968,Patrón: musleras de acechador salvaje
+273969,Patrón: guanteletes de acechador salvaje
+273970,Patrón: bufas de acechador salvaje
+273971,Patrón: grebas de acechador salvaje
+273972,Patrón: pantalones de bengala de maná
+273973,Patrón: guantes de bengala de maná
+273974,Patrón: manto de bengala de maná
+273975,Patrón: botas de bengala de maná
+273976,Diseño: leotardos de justicia
+273977,Diseño: guanteletes de justicia
+273978,Diseño: bufas de justicia
+273979,Diseño: grebas de justicia
+273980,Diseño: quijotes de justicia
+273981,Diseño: guantes de justicia
+273982,Diseño: cubrehombros de justicia
+273983,Diseño: botines de justicia
+273984,Diseño: musleras de justicia
+273985,Diseño: manoplas de justicia
+273986,Diseño: espaldares de justicia
+273987,Diseño: escarpes de justicia
+273988,Patrón: pantalones de convicción
+273989,Patrón: guantes de convicción
+273990,Patrón: manto de convicción
+273991,Patrón: botines de convicción
+273992,Patrón: leotardos de convicción
+273993,Patrón: manoplas de convicción
+273994,Patrón: espaldares de convicción
+273995,Patrón: botas de convicción
+273996,Patrón: pantalones de costura nefasta
+273997,Patrón: guantes de costura nefasta
+273998,Patrón: bufas de costura nefasta
+273999,Patrón: botas de costura nefasta
+274017,Diseño: manoplas de gloria
+274000,Patrón: leotardos de clamaespíritus
+274001,Patrón: mandiletes de clamaespíritus
+274002,Patrón: bufas de clamaespíritus
+274003,Patrón: botines de clamaespíritus
+274004,Patrón: pantalones de clamaespíritus
+274005,Patrón: guanteletes de clamaespíritus
+274006,Patrón: cubrehombros de clamaespíritus
+274007,Patrón: grebas de clamaespíritus
+274008,Patrón: leotardos de corazón demoníaco
+274009,Patrón: guantes de corazón demoníaco
+274010,Patrón: bufas de corazón demoníaco
+274011,Patrón: botas de corazón demoníaco
+274012,Diseño: quijotes de gloria
+274013,Diseño: guanteletes de gloria
+274014,Diseño: sobrehombros de gloria
+274015,Diseño: grebas de gloria
+274016,Diseño: musleras de gloria
+274018,Diseño: espaldares de gloria
+274019,Diseño: escarpes de gloria
+274030,Esencia maleable de la Naturaleza
+274273,Frasco de acierto natural
+274274,Frasco de agresividad natural
+274275,Frasco de precisión natural
+274276,Frasco de presteza natural
+274277,Receta: frasco de acierto natural
+274278,Receta: frasco de agresividad natural
+274279,Receta: frasco de precisión natural
+274280,Receta: frasco de presteza natural
+274387,Flecha Plumaveloz
+274388,Bala golpeveloz
+274389,Esquema: flecha Plumaveloz
+274390,Esquema: bala Golpeveloz
+274391,Formula: Enchant Off Hand - Superior Intellect
+274392,Formula: Enchant Off Hand - Excellent Spirit
+274393,Formula: Enchant Off Hand - Wisdom
+274394,Formula: Enchant 2H Weapon - Spellblasting
+274395,Fórmula: Encantar escudo: aguante excelente
+274398,Fórmula: Encantar guantes: fuerza excelente
+274399,Fórmula: Encantar capa: agilidad
+274400,Fórmula: Encantar escudo: golpe crítico
+274401,Fórmula: Encantar brazales: poder con hechizos superior
+274415,Receta: mermelada patadulce
+274424,Fórmula: Encantar guantes: garra de loto
+274971,Estofado de marisco salobre
+274972,Receta: estofado de marisco salobre
+274976,Colmillopálido sencillo
+274977,Receta: colmillopálido sencillo
+275580,Patrón: guantes de vómito venenoso
+275581,Patrón: cordón de vómito venenoso
+275582,Patrón: escarpines de vómito venenoso
+275583,Patrón: guantes de cuidaenjambres
+275584,Patrón: cordón de cuidaenjambres
+275585,Patrón: escarpines de cuidaenjambres
+275586,Patrón: garras de ampollabilis
+275587,Patrón: faja de ampollabilis
+275588,Patrón: botas de ampollabilis
+275589,Patrón: garras de descarnacolmenas
+275590,Patrón: faja de descarnacolmenas
+275591,Patrón: botas de descarnacolmenas
+275592,Patrón: apretadoras de escamatripa
+275593,Patrón: cinturón de escamatripa
+275594,Patrón: botines de escamatripa
+275595,Patrón: apretadoras de guardacrías
+275596,Patrón: cinturón de guardacrías
+275597,Patrón: botines de guardacrías
+275598,Diseño: mandiletes acuchillavísceras
+275599,Diseño: ajustador acuchillavísceras
+275600,Diseño: apisonadoras acuchillavísceras
+275601,Diseño: mandiletes de señor del nido
+275602,Diseño: ajustador de señor del nido
+275603,Diseño: apisonadoras de señor del nido
+275604,Guantes de vómito venenoso
+275605,Cordón de vómito venenoso
+275606,Escarpines de vómito venenoso
+275607,Guantes de cuidaenjambres
+275608,Cordón de cuidaenjambres
+275609,Escarpines de cuidaenjambres
+275610,Garras de ampollabilis
+275611,Faja de ampollabilis
+275612,Botas de ampollabilis
+275613,Garras de descarnacolmenas
+275614,Faja de descarnacolmenas
+275615,Botas de descarnacolmenas
+275616,Apretadoras de escamatripa
+275617,Cinturón de escamatripa
+275618,Botines de escamatripa
+275619,Apretadoras de guardacrías
+275620,Cinturón de guardacrías
+275621,Botines de guardacrías
+275622,Mandiletes acuchillavísceras
+275623,Ajustador acuchillavísceras
+275624,Apisonadoras acuchillavísceras
+275625,Mandiletes de señor del nido
+275626,Ajustador de señor del nido
+275627,Apisonadoras de señor del nido
+276538,Falda de clamaespíritus
+276539,Guantes de clamaespíritus
+276540,Manto de clamaespíritus
+276541,Botas de clamaespíritus
+276542,Patrón: falda de clamaespíritus
+276543,Patrón: guantes de clamaespíritus
+276544,Patrón: manto de clamaespíritus
+276545,Patrón: botas de clamaespíritus
+276928,Diseño: malla nublada cieloforjada
+276929,Diseño: muñequeras nubladas cieloforjadas
+276930,Diseño: guanteletes nublados cieloforjados
+276931,Diseño: cadena nublada cieloforjada
+276932,Diseño: musleras nubladas cieloforjadas
+276933,Diseño: grebas nubladas cieloforjadas
+276934,Patrón: arnés nublado tejido por el viento
+276935,Patrón: brazales nublados tejidos por el viento
+276936,Patrón: guantes nublados tejidos por el viento
+276937,Patrón: cinturón nublado tejido por el viento
+276938,Patrón: calzas nubladas tejidas por el viento
+276939,Patrón: botas nubladas tejidas por el viento
+276940,Patrón: chaleco nublado hilado por el viento
+276941,Patrón: guardabrazos nublados hilados por el viento
+276942,Patrón: mitones nublados hilados por el viento
+276943,Patrón: correa nublada hilada por el viento
+276944,Patrón: pantalones nublados hilados por el viento
+276945,Patrón: borceguíes nublados hilados por el viento
+276946,Patrón: jubón nublado cosido por la tormenta
+276947,Patrón: puños nublados cosidos por la tormenta
+276948,Patrón: manijas nubladas cosidas por la tormenta
+276949,Patrón: cordón nublado cosido por la tormenta
+276950,Patrón: leotardos nublados cosidos por la tormenta
+276951,Patrón: zapatos nublados cosidos por la tormenta
+276952,Diseño: malla de anillas azur cieloforjada
+276953,Diseño: muñequeras azures cieloforjadas
+276954,Diseño: guanteletes azures cieloforjados
+276955,Diseño: cadena azur cieloforjada
+276956,Diseño: musleras azures cieloforjadas
+276957,Diseño: grebas azures cieloforjadas
+276958,Patrón: arnés azur tejido por el viento
+276959,Patrón: brazales azures tejidos por el viento
+276960,Patrón: guantes azures tejidos por el viento
+276961,Patrón: cinturón azur tejido por el viento
+276962,Patrón: calzas azures tejidas por el viento
+276963,Patrón: botas azures tejidas por el viento
+276964,Patrón: chaleco azur hilado por el viento
+276965,Patrón: guardabrazos azures hilados por el viento
+276966,Patrón: mitones azures hilados por el viento
+276967,Patrón: correa azur hilada por el viento
+276968,Patrón: pantalones azures hilados por el viento
+276969,Patrón: borceguíes azures hilados por el viento
+276970,Patrón: jubón azur cosido por la tormenta
+276971,Patrón: puños azures cosidos por la tormenta
+276972,Patrón: manijas azures cosidas por la tormenta
+276973,Patrón: cordón azur cosido por la tormenta
+276974,Patrón: leotardos azures cosidos por la tormenta
+276975,Patrón: zapatos azures cosidos por la tormenta
+276976,Diseño: yelmo nublado cieloforjado
+276977,Diseño: espaldares nublados cieloforjados
+276978,Patrón: caperuza nublada tejida por el viento
+276979,Patrón: bufas nubladas tejidas por el viento
+276980,Patrón: cobertura nublada hilada por el viento
+276981,Patrón: mantones nublados hilados por el viento
+276982,Patrón: capucha nublada cosida por la tormenta
+276983,Patrón: cubrehombros nublados cosidos por la tormenta
+276984,Diseño: yelmo azur cieloforjado
+276985,Diseño: espaldares azures cieloforjados
+276986,Patrón: caperuza azur tejida por el viento
+276987,Patrón: bufas azures tejidas por el viento
+276988,Patrón: cobertura azur hilada por el viento
+276989,Patrón: mantones azures hilados por el viento
+276990,Patrón: capucha azur cosida por la tormenta
+276991,Patrón: cubrehombros azures cosidos por la tormenta
+276992,Malla nublada cieloforjada
+276993,Muñequeras nubladas cieloforjadas
+276994,Guanteletes nublados cieloforjados
+276995,Cadena nublada cieloforjada
+276996,Musleras nubladas cieloforjadas
+276997,Grebas nubladas cieloforjadas
+276998,Arnés nublado tejido por el viento
+276999,Brazales nublados tejidos por el viento
+277000,Guantes nublados tejidos por el viento
+277001,Cinturón nublado tejido por el viento
+277002,Calzas nubladas tejidas por el viento
+277003,Botas nubladas tejidas por el viento
+277004,Chaleco nublado hilado por el viento
+277005,Guardabrazos nublados hilados por el viento
+277006,Mitones nublados hilados por el viento
+277007,Correa nublada hilada por el viento
+277008,Pantalones nublados hilados por el viento
+277009,Borceguíes nublados hilados por el viento
+277010,Jubón nublado cosido por la tormenta
+277011,Puños nublados cosidos por la tormenta
+277012,Manijas nubladas cosidas por la tormenta
+277013,Cordón nublado cosido por la tormenta
+277014,Leotardos nublados cosidos por la tormenta
+277015,Zapatos nublados cosidos por la tormenta
+277016,Malla de anillas azur cieloforjada
+277017,Muñequeras azures cieloforjadas
+277018,Guanteletes azures cieloforjados
+277019,Cadena azur cieloforjada
+277020,Musleras azures cieloforjadas
+277021,Grebas azures cieloforjadas
+277022,Arnés azur tejido por el viento
+277023,Brazales azures tejidos por el viento
+277024,Guantes azures tejidos por el viento
+277025,Cinturón azur tejido por el viento
+277026,Calzas azures tejidas por el viento
+277027,Botas azures tejidas por el viento
+277028,Chaleco azur hilado por el viento
+277029,Guardabrazos azures hilados por el viento
+277030,Mitones azures hilados por el viento
+277031,Correa azur hilada por el viento
+277032,Pantalones azures hilados por el viento
+277033,Borceguíes azures hilados por el viento
+277034,Jubón azur cosido por la tormenta
+277035,Puños azures cosidos por la tormenta
+277036,Manijas azures cosidas por la tormenta
+277037,Cordón azur cosido por la tormenta
+277038,Leotardos azures cosidos por la tormenta
+277039,Zapatos azures cosidos por la tormenta
+277040,Yelmo nublado cieloforjado
+277041,Espaldares nublados cieloforjados
+277042,Caperuza nublada tejida por el viento
+277043,Bufas nubladas tejidas por el viento
+277044,Cobertura nublada hilada por el viento
+277045,Mantones nublados hilados por el viento
+277046,Capucha nublada cosida por la tormenta
+277047,Cubrehombros nublados cosidos por la tormenta
+277048,Yelmo azur cieloforjado
+277049,Espaldares azures cieloforjados
+277050,Caperuza azur tejida por el viento
+277051,Bufas azures tejidas por el viento
+277052,Cobertura azur hilada por el viento
+277053,Mantones azures hilados por el viento
+277054,Capucha azur cosida por la tormenta
+277055,Cubrehombros azures cosidos por la tormenta
+277132,Emisor de anulación de cosechador
+277470,Esquema: emisor de anulación de cosechador
+277672,Botas de anillas de cobre toscas
+277673,Diseño: botas de anillas de cobre toscas
+277715,Bolsa de componentes de cuero ligero
+277716,Patrón: bolsa de componentes de cuero ligero
+279246,Antorcha de luz
+279247,Tratado sobre firmeza
+279248,Tratado sobre infusión
+279249,Tótem de urgencia
+279250,Ídolo de presteza
+279251,Ídolo de los gemelos osunos
+279252,Ceñidor de Saucoancestro
+279253,Collera de forajido
+279254,Pantalones de Saucoancestro
+279255,Espaldares de la eternidad
+279256,Guardamuñecas tranquilos
+279257,Manoplas de luto
+279258,Refuerzo para armadura de cuero salvaje
+279259,Hoja de maderaférrea
+279260,Hacha de defensor del bosque
+279261,Martilloverde
+279262,Escudo siempreverde
+279263,Escarpes de torio agotados
+279264,Guanteletes de torio pesados
+279265,Quijotes de azerothium
+279266,Togas de devastación ígnea
+279267,Cordón imbuido de maná
+279268,Botas incrustadas de helada
+279269,Capa vil
+279270,Capa de tierra y cielo
+279271,Bolsa de almas de sangrevil
+279272,SECUR-mira de ultraprecisión
+279273,Rifle de francotirador hiperlujoso Mk XVII
+279295,Fórmula: antorcha de Luz
+279296,Fórmula: tratado sobre firmeza
+279297,Fórmula: tratado sobre infusión
+279298,Fórmula: tótem de urgencia
+279299,Fórmula: ídolo de presteza
+279300,Fórmula: ídolo de los gemelos osunos
+279301,Patrón: ceñidor de Saucoancestro
+279302,Patrón: collera de forajido
+279303,Patrón: pantalones de Saucoancestro
+279304,Patrón: espaldares de la eternidad
+279305,Patrón: guardamuñecas tranquilos
+279306,Patrón: manoplas de luto
+279307,Patrón: refuerzo para armadura de cuero salvaje
+279308,Diseño: hoja de maderaférrea
+279318,Patrón: capa vil
+279309,Diseño: hacha de defensor del bosque
+279310,Diseño: martilloverde
+279311,Diseño: escudo siempreverde
+279312,Diseño: escarpes de torio agotados
+279313,Diseño: guanteletes de torio pesados
+279314,Diseño: quijotes de azerothium
+279315,Patrón: togas de devastación ígnea
+279316,Patrón: cordón imbuido de maná
+279317,Patrón: botas incrustadas de helada
+279319,Patrón: capa de tierra y cielo
+279320,Patrón: bolsa de almas de sangrevil
+279321,Esquema: SECUR-mira de ultraprecisión
+279322,Rifle de francotirador hiperlujoso Mk XVII
+279940,Estudio sobre toxinas
+279941,Bastidor para pieles
+279943,Rueca
+279944,Rueda de afilar
+279945,Máquina de costura
+279949,Robot de reparaciones
+279950,Robot de componentes
+279951,Laboratorio de doctor de peste
+279955,Forja de maestro
+279956,Pozo de maná
+279957,Festín de Cocinitas
+279959,Telar
+279961,Equipo de hoguera de oficial
+279968,Equipo de primeros auxilios
+279970,Fermentador
+279972,Estandarte de facción
+279973,Estandarte de facción
+279974,Equipo de hoguera de experto
+279976,Laúd encantado
+279978,Tienda de campamento
+279981,Equipo de hoguera básica
+279982,Horno de hierro
+279985,Recuperador Arcano
+279987,Forja Arcana
+279988,Yunque
+279989,Banco de trabajo de anarquista
+279990,Laboratorio de alquimia
+280306,Ajustador caprichoso
+280307,Faja de cacharros
+280308,Cordón ruidoso
+280310,Gafas moldeables
+280311,Gafas dobladas
+280312,Gafas con un botón atascado
+280313,Gafas abolladas
+280321,Esquema: ajustador caprichoso
+280322,Esquema: faja de cacharros
+280323,Esquema: cordón ruidoso
+280324,Esquema: correa dentada
+280325,Esquema: gafas moldeables
+280326,Esquema: gafas dobladas
+280327,Esquema: gafas con un botón atascado
+280328,Esquema: gafas abolladas
+284869,Granada sin santificar
+284870,Esquema: granada sin santificar
+284871,Receta: transmutar legionita
+285275,Bolsa de bombas de cobre
+285276,Bolsa de bombas de bronce
+285277,Bolsa de bombas de hierro
+285278,Bolsa de bombas Hierro Negro
+285279,Martillo de herrería resquebrajado
+285280,Martillo de herrería de mitril
+285281,Martillo de herrería de arcanita
+285285,Esquema: bolsa de bombas de cobre
+285286,Esquema: bolsa de bombas de bronce
+285287,Esquema: bolsa de bombas de hierro
+285288,Esquema: bolsa de bombas Hierro Negro
+285289,Diseño: martillo de herrería resquebrajado
+285290,Diseño: martillo de herrería de mitril
+285291,Diseño: martillo de herrería de arcanita
+286076,Esquema: cohete morado pequeño
+286077,Esquema: cohete blanco pequeño
+286078,Esquema: cohete amarillo pequeño
+286079,Esquema: cohete morado grande
+286080,Esquema: cohete blanco grande
+286081,Esquema: cohete amarillo grande
+286082,Esquema: traca de cohetes morados
+286083,Esquema: traca de cohetes blancos
+286084,Esquema: traca de cohetes amarillos
+286085,Esquema: traca de cohetes grandes morados
+286086,Esquema: traca de cohetes grandes blancos
+286087,Esquema: traca de cohetes grandes amarillos
+286152,Pez coraza de placas
+286153,Receta: pez coraza de placas

@@ -1,0 +1,46 @@
+## Interface: 16001
+## Title: Crafter's Journal
+## Notes: The cheapest way to level every profession and your full recipe collection, with where to get each recipe.
+## Notes-esES: La forma más barata de subir cada profesión y tu colección de recetas, con dónde conseguir cada una.
+## Author: Bruno
+## Version: 0.34.1
+## Category: Professions
+## SavedVariables: CraftersJournalDB
+## IconTexture: Interface\Icons\INV_Misc_Coin_01
+## AddonCompartmentFunc: CraftersJournal_OnAddonCompartmentClick
+## OptionalDeps: QuestieDB, Questie, TomTom, ShortestPathForever
+
+Data\Leatherworking.lua
+Data\Enchanting.lua
+Data\Tailoring.lua
+Data\Blacksmithing.lua
+Data\Alchemy.lua
+Data\Engineering.lua
+Data\Cooking.lua
+Data\FirstAid.lua
+Data\Fishing.lua
+Data\Sources.lua
+Data\Names_esES.lua
+
+Locale.lua
+Locales\enUS.lua
+
+Core.lua
+Jobs.lua
+History.lua
+Market.lua
+Waypoints.lua
+Scanner.lua
+Planner.lua
+Mail.lua
+Earn.lua
+Collection.lua
+UI.lua
+ProfessionUI.lua
+FishingUI.lua
+HomeUI.lua
+HeaderUI.lua
+AuctionUI.lua
+EarnUI.lua
+CollectionUI.lua
+PatternsUI.lua

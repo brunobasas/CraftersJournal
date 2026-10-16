@@ -1,0 +1,1115 @@
+local _, ES = ...
+local L = ES.L
+
+-- Detalle de una profesión, al estilo del diario de mazmorras:
+--   cabecera: icono, nombre, nivel actual (el del personaje) y objetivo editable;
+--             a la derecha, usar bolsas (icono) y las vistas Ruta / Profit /
+--             Lista de compra / Recetas
+--   franja:   materiales, profit, instructor y herramientas, total
+--   lista:    filas de dos líneas según la vista
+
+local MAX_SKILL = ES.MAX_SKILL
+local LOW_CHANCE_CRAFTS = 3 -- más fabricaciones por punto que esto: se avisa
+local ROW_HEIGHT, ROW_GAP, SECTION_HEIGHT = 40, 4, 24
+local LIST_WIDTH = 762
+
+local SOURCE_LABEL = ES.Localize({
+  vendor = "Vendedor", ah = "AH", craft = "Fabricar", stock = "Tuyo",
+  owned = "Bolsas",
+})
+local LEARN_LABEL = ES.Localize({ trainer = "instructor", vendor = "receta del vendedor", scroll = "pergamino AH", unknown = "pergamino/drop, precio ?",
+  quest = "misión", ah = "pergamino en la AH", owned = "pergamino en tus bolsas", known = "ya la sabes" })
+local RANK_NAMES = ES.Localize({ [150] = "Oficial", [225] = "Experto", [300] = "Artesano" })
+local GOLD, GREEN, GREY, RED, ORANGE = "|cffffd100", "|cff40ff40", "|cff999999", "|cffff4040", "|cffff9933"
+
+local VIEWS = ES.Localize({
+  { key = "route",  label = "Ruta",            width = 82,  icon = "Interface\\Icons\\INV_Misc_Map_01" },
+  { key = "profit", label = "Profit",          width = 88,  icon = "Interface\\Icons\\INV_Misc_Coin_02" },
+  { key = "shop",   label = "Lista de compra", width = 128, icon = "Interface\\Icons\\INV_Misc_Note_01" },
+}, "label")
+local VIEW_KEYS = { route = true, profit = true, shop = true }
+
+-- Coste con signo: lo que pagas en rojo con "-", lo que ganas en verde con "+"
+-- (`copper` es coste: positivo = pagas, negativo = ganas)
+local function Signed(copper)
+  if copper <= -0.5 then return GREEN .. "+" .. ES.Money(-copper) .. "|r" end
+  if copper >= 0.5 then return RED .. "-" .. ES.Money(copper) .. "|r" end
+  return ES.Money(0)
+end
+
+-- Nombre del objeto en su color de calidad. Si el juego aún no lo ha cargado, el
+-- nombre de los datos del addon (o `fallback`); el tercer valor dice que falta
+function ES:ItemName(itemID)
+  return (self:GetItemData(itemID)) or self:DataItemName(itemID)
+end
+
+local function ItemLabel(itemID, fallback)
+  local name, quality, texture = ES:GetItemData(itemID)
+  local color = name and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality or 1]
+  if name and color and color.hex then
+    name = color.hex .. name .. "|r"
+  end
+  return name or ES:DataItemName(itemID) or fallback, texture, name == nil
+end
+
+local function Label(parent, text, template)
+  local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontNormalSmall")
+  fs:SetText(text)
+  return fs
+end
+
+local function CheckBox(parent, text, onClick)
+  local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+  cb:SetSize(24, 24)
+  local label = Label(parent, text, "GameFontHighlightSmall")
+  label:SetPoint("LEFT", cb, "RIGHT", 2, 1)
+  cb:SetScript("OnClick", onClick)
+  cb.label = label
+  return cb
+end
+
+local function Panel(parent, r, g, b, a)
+  local p = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+  p:SetBackdrop({
+    bgFile = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 12,
+    insets = { left = 3, right = 3, top = 3, bottom = 3 },
+  })
+  p:SetBackdropColor(r or 0.13, g or 0.09, b or 0.05, a or 0.94)
+  p:SetBackdropBorderColor(0.52, 0.38, 0.17, 1)
+  return p
+end
+
+-- ¿La AH activa es la neutral? (más depósito y 15% de comisión)
+function ES:IsNeutralAH()
+  return self:RealmKey():match("%-Neutral$") ~= nil
+end
+
+-- Marco desplazable con la rueda del ratón, sin barra de desplazamiento a la vista
+local function WheelScroll(parent, step)
+  local scroll = CreateFrame("ScrollFrame", nil, parent)
+  scroll:EnableMouseWheel(true)
+  scroll:SetScript("OnMouseWheel", function(self, delta)
+    -- Sin la plantilla, algunos clientes no recalculan solos el alto del contenido
+    if self.UpdateScrollChildRect then self:UpdateScrollChildRect() end
+    local range = tonumber(self:GetVerticalScrollRange()) or 0
+    local cur = tonumber(self:GetVerticalScroll()) or 0
+    self:SetVerticalScroll(math.max(0, math.min(range, cur - delta * (step or 40))))
+  end)
+  return scroll
+end
+
+-- Utilidades compartidas con otras pestañas
+ES.UI = { Label = Label, CheckBox = CheckBox, ItemLabel = ItemLabel, Panel = Panel, WheelScroll = WheelScroll }
+
+-- Objetivo de una profesión (editable en su detalle; por defecto, el máximo).
+-- Lo usan la tarjeta de la portada y el detalle, para que el coste coincida.
+function ES:ProfessionTarget(profKey)
+  local settings = self.db.prof and self.db.prof[profKey] or {}
+  return math.max(1, math.min(MAX_SKILL, tonumber(settings.target) or MAX_SKILL))
+end
+
+-- Opciones del plan de una profesión con los ajustes guardados. Las usan el
+-- detalle y la tarjeta de la portada, para que el coste salga igual en los dos.
+-- Depósito de subasta de 24 h y reutilizar lo fabricado: fijos por ahora.
+function ES:PlanOptions(profKey, from, to, cap)
+  self.db.prof = self.db.prof or {}
+  local settings = self.db.prof[profKey] or {}
+  return {
+    from = from, to = to, cap = cap,
+    hours = 24,
+    neutral = self:IsNeutralAH(),
+    owned = settings.useBags and self:GetOwnedReagents(ES.Data[profKey]) or nil,
+    ignoreSupply = true, -- no se mira cuántos hay a la venta: el plan no se para por existencias
+    includeScrolls = false, -- recetas de pergamino/drop: pendiente para una versión futura
+    reuseCrafted = true,
+    -- Prueba piloto: recetas de pergamino por sus fuentes reales (misión, vendedor, AH)
+    sourcedScrolls = ES.Waypoints.SOURCED_PROFESSIONS[profKey] or nil,
+    noQuests = settings.useQuests == false or nil, -- icono de misión desactivado
+  }
+end
+
+-- Plan de una profesión con su nivel actual y su objetivo, sin necesidad de abrir
+-- su página (lo usan la lista de compra de la AH). nil si ya estás en el objetivo.
+function ES:ProfessionPlan(profKey)
+  local data = ES.Data[profKey]
+  local rank, maxRank = self:GetProfessionSkill(data.skillLine)
+  local from, to = rank or 1, self:ProfessionTarget(profKey)
+  if from >= to then return nil, from, to end
+  local cap = rank and maxRank or nil
+  local key = self:PlanKey(profKey, from, to, cap)
+  local cached = self.homePlanCache[profKey]
+  if cached and cached.key == key then return cached.plan, from, to end
+  local plan = self.Planner:Plan(data, self:PlanOptions(profKey, from, to, cap))
+  self.homePlanCache[profKey] = { key = key, plan = plan }
+  return plan, from, to
+end
+
+-- Rutas ya calculadas, una por profesión: las comparten la portada, la página de
+-- la profesión y la lista de compra de la AH. La clave recoge todo lo que cambia
+-- la ruta; ES:ClearHomeCache (precios, bolsas, recetas aprendidas...) sube planGen.
+ES.planGen = 0
+function ES:PlanKey(profKey, from, to, cap)
+  local settings = self.db.prof and self.db.prof[profKey] or {}
+  local scan = self.db.scans and self.db.scans[self:RealmKey()]
+  return table.concat({ profKey, self.planGen, scan and scan.time or 0, from, to, tostring(cap), tostring(settings.useBags),
+    tostring(settings.useQuests), self:RealmKey() }, ":")
+end
+
+-- Ruta de una profesión: la de la caché si vale; si no, se calcula repartida entre
+-- fotogramas (Jobs.lua) y al acabar se llama a onDone(plan). Devuelve la ruta si ya
+-- está (en caché, o calculada de golpe fuera del juego). `owner` identifica a quien
+-- la pide (la portada, una página) para no avisarle dos veces.
+function ES:RequestPlan(profKey, from, to, cap, onDone, owner)
+  local key = self:PlanKey(profKey, from, to, cap)
+  local cached = self.homePlanCache[profKey]
+  if cached and cached.key == key then return cached.plan end
+  local inline = true
+  self.Jobs.Run("plan:" .. profKey .. ":" .. tostring(owner), key, function()
+    return self.Planner:Plan(ES.Data[profKey], self:PlanOptions(profKey, from, to, cap))
+  end, function(plan)
+    if self:PlanKey(profKey, from, to, cap) == key then self.homePlanCache[profKey] = { key = key, plan = plan } end
+    if not inline and onDone then onDone(plan) end
+  end, owner)
+  inline = false
+  cached = self.homePlanCache[profKey]
+  if cached and cached.key == key then return cached.plan end
+end
+
+---------------------------------------------------------------------------
+-- Tooltips
+---------------------------------------------------------------------------
+-- Por qué se para un plan, en una frase
+local function StopReason(plan)
+  local short, missing = {}, 0
+  for itemID in pairs(plan.shortSupply) do
+    short[#short + 1] = (ItemLabel(itemID, L["objeto "] .. itemID))
+    if #short >= 3 then break end
+  end
+  for _ in pairs(plan.missingPrice) do missing = missing + 1 end
+  if #short > 0 then
+    return L["no quedan suficientes en la AH de: "] .. table.concat(short, ", ")
+  elseif missing > 0 then
+    return string.format(L["%d materiales sin precio (no están en la AH)"], missing)
+  end
+  return L["no hay más recetas de instructor para ese nivel"]
+end
+
+local function RecipeTooltip(step, plan)
+  return function(row)
+    local r = step.recipe
+    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(ItemLabel(r.out and r.out[1] or 0, r.name))
+    GameTooltip:AddLine(string.format(L["Amarilla desde %d · verde desde %d · gris desde %d"], r.t[2], r.t[3], r.t[4]), 0.8, 0.8, 0.8)
+
+    -- Por qué hacen falta tantas fabricaciones
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(string.format(L["De %d a %d: probabilidad de subir del %d%% al %d%%"], step.from, step.to,
+      math.floor(step.firstChance * 100 + 0.5), math.floor(step.lastChance * 100 + 0.5)), 1, 0.82, 0)
+    GameTooltip:AddLine(string.format(L["%d puntos necesitan unas %s fabricaciones (se redondea a %d)."],
+      step.to - step.from, ES.Num(step.expected), step.crafts), 0.8, 0.8, 0.8, true)
+
+    -- Si sale caro por baja probabilidad, explicar por qué no hay algo mejor
+    if step.expected / (step.to - step.from) > LOW_CHANCE_CRAFTS then
+      if #step.blocked > 0 then
+        GameTooltip:AddLine(L["Hay recetas con más probabilidad, pero falta el precio de algún material en la AH:"], 1, 0.5, 0, true)
+        for i, rid in ipairs(step.blocked) do
+          if i > 4 then break end
+          local br = plan.ctx.data.recipes[rid]
+          local missing = {}
+          for itemID in pairs(step.blocked[rid]) do missing[#missing + 1] = (ItemLabel(itemID, L["objeto "] .. itemID)) end
+          GameTooltip:AddLine("  " .. (ItemLabel(br.out and br.out[1] or 0, br.name)) .. L[": falta "] .. table.concat(missing, ", "), 1, 0.7, 0.4, true)
+        end
+        GameTooltip:AddLine(L["Si consigues esos materiales (o aparecen en la AH), el plan las usará."], 0.8, 0.8, 0.8, true)
+      else
+        GameTooltip:AddLine(L["No hay ninguna receta de instructor mejor en este tramo: esta es la única opción."], 1, 0.5, 0, true)
+      end
+    end
+
+    -- Materiales de todo el paso, con su precio medio real de compra
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(L["Materiales de este paso:"], 1, 0.82, 0)
+    for _, rg in ipairs(step.reagents) do
+      local name = ItemLabel(rg.item, L["Objeto "] .. rg.item)
+      local kinds = {}
+      for kind in pairs(rg.kinds) do kinds[#kinds + 1] = SOURCE_LABEL[kind] or kind end
+      GameTooltip:AddDoubleLine(string.format("%dx %s", math.ceil(rg.qty - 0.001), name),
+        string.format("%s %s(%s/u, %s)|r", ES.Money(rg.cost), GREY, ES.Money(rg.cost / rg.qty), table.concat(kinds, "+")),
+        1, 1, 1, 1, 1, 1)
+    end
+
+    -- Parte de lo fabricado se usa más adelante en el plan
+    local kept = r.out and plan.keptByItem[r.out[1]]
+    if kept then
+      GameTooltip:AddLine(" ")
+      GameTooltip:AddLine(string.format(L["Guarda %d para pasos posteriores (en total en el plan). Se cuentan a su precio de venta: es lo que dejas de ganar por no venderlos, y a cambio no tienes que comprarlos."], kept), 0.6, 1, 0.6, true)
+    end
+
+    -- La cuenta del total del paso
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddDoubleLine(L["Coste medio por fabricación"], ES.Money(step.unitCost), 1, 1, 1, 1, 1, 1)
+    GameTooltip:AddDoubleLine(L["Recuperas vendiendo (media)"], ES.Money(step.unitValue), 1, 1, 1, 1, 1, 1)
+    local net = step.unitCost - step.unitValue
+    GameTooltip:AddLine(string.format(L["Total = %d x (%s - %s)%s = %s"], step.crafts,
+      ES.Money(step.unitCost), ES.Money(step.unitValue),
+      step.fee > 0 and (" + " .. ES.Money(step.fee) .. L[" aprender"]) or "",
+      net * step.crafts + step.fee < 0 and ("+" .. ES.Money(-(net * step.crafts + step.fee)) .. L[" de beneficio"])
+        or ES.Money(net * step.crafts + step.fee)), 1, 1, 1, true)
+
+    local sale = step.sale
+    if sale then
+      GameTooltip:AddLine(" ")
+      GameTooltip:AddDoubleLine(L["Precio de vendedor"], ES.Money(sale.vendor), 0.8, 0.8, 0.8, 1, 1, 1)
+      if sale.ahMin then
+        GameTooltip:AddDoubleLine(L["Mínimo anunciado en la AH"], ES.Money(sale.ahMin), 0.8, 0.8, 0.8, 1, 1, 1)
+        ES.Market.AddFairToTooltip(sale.fair)
+      end
+      GameTooltip:AddDoubleLine(L["Depósito por unidad (subasta de 24 h)"], ES.Money(sale.deposit), 0.8, 0.8, 0.8, 1, 1, 1)
+      GameTooltip:AddLine(L["El plan cuenta la venta al vendedor: es lo único seguro."], 0.8, 0.8, 0.8, true)
+      if sale.ahNet then
+        GameTooltip:AddDoubleLine(L["En la AH te quedaría (igualando a la más barata)"], ES.Money(sale.ahNet), 0.8, 0.8, 0.8, 1, 1, 1)
+        GameTooltip:AddLine(string.format(L["Si lo vendes en la AH podrías sacar hasta %s más en este paso, pero no se sabe cuántos se venden."],
+          ES.Money(step.crafts * sale.qty * (sale.ahNet - sale.vendor))), 1, 0.82, 0, true)
+        ES.Market.AddToTooltip(sale.itemID)
+      elseif sale.ahMin then
+        GameTooltip:AddLine(L["En la AH no te quedaría más que en el vendedor."], 0.8, 0.8, 0.8, true)
+      end
+      if sale.risk then
+        GameTooltip:AddLine(L["Precio poco fiable: "] .. sale.risk .. ".", 1, 0.5, 0, true)
+      end
+    end
+    if step.learnSource then
+      GameTooltip:AddDoubleLine(L["Aprender ("] .. LEARN_LABEL[step.learnSource] .. ")",
+        step.learnSource == "unknown" and "?" or ES.Money(step.fee), 1, 1, 1, 1, 1, 1)
+    end
+    GameTooltip:Show()
+  end
+end
+
+local function DestinationTooltip(d, name, signals)
+  return function(row)
+    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(name)
+    GameTooltip:AddLine(string.format(L["Fabricas %d en total en el plan."], d.produced), 0.8, 0.8, 0.8)
+    GameTooltip:AddLine(" ")
+    if d.keep > 0 then
+      GameTooltip:AddLine(string.format(L["Guarda %d (no los vendas):"], d.keep), 0.4, 1, 0.4)
+      for _, u in ipairs(d.usedIn) do
+        local where = u.step and string.format(L[" (paso %d-%d)"], u.step.from, u.step.to) or ""
+        GameTooltip:AddLine(string.format(L["  %dx para %s%s"], u.qty, (ItemLabel(u.recipe.out and u.recipe.out[1] or 0, u.recipe.name)), where), 1, 1, 1, true)
+      end
+    end
+    if d.sell > 0 then
+      GameTooltip:AddLine(string.format(L["Te sobran %d. El plan cuenta venderlos al vendedor a %s cada uno."],
+        d.sell, ES.Money(d.sale.vendor)), 0.8, 0.8, 0.8, true)
+      if signals then
+        GameTooltip:AddLine(string.format(L["En la AH te quedarían %s cada uno igualando a la más barata (subasta de 24 h, comisión y depósito de %s descontados): hasta %s más en total."],
+          ES.Money(d.sale.ahNet), ES.Money(d.sale.deposit), ES.Money(d.ahExtra)), 1, 0.82, 0, true)
+        GameTooltip:AddLine(L["Pero el juego no dice cuántos se venden: puede que no los vendas todos, o ninguno. Anuncia unos pocos y mira las alertas:"], 1, 0.6, 0.2, true)
+        ES.Market.AddToTooltip(d.itemID)
+      end
+      -- Consejo final
+      local a = d.advice or ES.Planner.SaleAdvice(d)
+      GameTooltip:AddLine(" ")
+      if a.ah > 0 and a.verdict == "good" then
+        GameTooltip:AddLine(string.format(L["Consejo: pon los %d en la AH a %s (1 cobre menos que la más barata)."], a.ah, ES.Money(a.price)), 0.4, 1, 0.4, true)
+      elseif a.ah > 0 then
+        GameTooltip:AddLine(string.format(L["Consejo: pon solo %d en la AH a %s para probar y vende el resto al vendedor; si se venden, anuncia más."], a.ah, ES.Money(a.price)), 1, 0.82, 0, true)
+      elseif signals and signals.verdict == "avoid" then
+        GameTooltip:AddLine(L["Consejo: con estas alertas, mejor véndelos al vendedor."], 1, 0.4, 0.4, true)
+      elseif a.vendor > 0 then
+        GameTooltip:AddLine(L["Consejo: véndelos al vendedor; en la AH no compensa la diferencia."], 0.8, 0.8, 0.8, true)
+      end
+    end
+    GameTooltip:Show()
+  end
+end
+
+local function ShopTooltip(it, plan)
+  return function(row)
+    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+    GameTooltip:SetHyperlink("item:" .. it.itemID)
+    if it.source == "ah" then
+      GameTooltip:AddLine(" ")
+      GameTooltip:AddLine(string.format(L["%d uds a %s de media, comprando de la más barata a la más cara (ahora hay %d a la venta)."],
+        it.quantity, ES.Money(it.unit), it.supply or 0), 0.8, 0.8, 0.8, true)
+      if it.supply and it.quantity > it.supply then
+        GameTooltip:AddLine(string.format(L["Hacen falta más de las que hay: las %d que faltan se cuentan al precio típico (mediana)."],
+          it.quantity - it.supply), 1, 0.6, 0.2, true)
+      end
+    end
+    -- Si también se puede fabricar: por qué se compra en vez de hacerlo tú
+    local craftUnit, craftRecipe = ES.Planner.CraftUnitCost(plan.ctx, it.itemID)
+    if craftUnit then
+      local mats = {}
+      for _, rq in ipairs(craftRecipe.r) do
+        mats[#mats + 1] = rq[2] .. "x " .. (ItemLabel(rq[1], L["objeto "] .. rq[1]))
+      end
+      GameTooltip:AddLine(" ")
+      GameTooltip:AddDoubleLine(L["Fabricarlo tú ("] .. table.concat(mats, ", ") .. ")", ES.Money(craftUnit) .. " /u", 0.8, 0.8, 0.8, 1, 1, 1)
+      if craftUnit > it.unit then
+        GameTooltip:AddLine(string.format(L["Comprarlo hecho sale más barato (%s frente a %s por unidad), así que el plan lo compra."],
+          ES.Money(it.unit), ES.Money(craftUnit)), 0.6, 1, 0.6, true)
+      end
+    end
+    if it.source == "vendor" then
+      ES.Waypoints.AddToTooltip(L["Vendedor más cercano"], ES.Waypoints.Target("vendor", it.itemID))
+    end
+    GameTooltip:Show()
+  end
+end
+
+local function SimpleTooltip(itemID, text)
+  return function(row)
+    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+    GameTooltip:SetHyperlink("item:" .. itemID)
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(text, 0.6, 1, 0.6, true)
+    GameTooltip:Show()
+  end
+end
+
+---------------------------------------------------------------------------
+-- Filas de la lista
+---------------------------------------------------------------------------
+local function CreateRow(parent)
+  local row = CreateFrame("Button", nil, parent, "BackdropTemplate")
+  row:SetWidth(LIST_WIDTH)
+  row:SetBackdrop({
+    bgFile = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 10,
+    insets = { left = 2, right = 2, top = 2, bottom = 2 },
+  })
+  local hl = row:CreateTexture(nil, "HIGHLIGHT")
+  hl:SetPoint("TOPLEFT", 2, -2)
+  hl:SetPoint("BOTTOMRIGHT", -2, 2)
+  hl:SetColorTexture(1, 0.82, 0.25, 0.08)
+
+  row.icon = row:CreateTexture(nil, "ARTWORK")
+  row.icon:SetSize(30, 30)
+  row.icon:SetPoint("LEFT", 6, 0)
+  row.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+
+  row.title = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  row.title:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 10, -1)
+  row.title:SetPoint("RIGHT", -170, 0)
+  row.title:SetJustifyH("LEFT")
+  row.title:SetWordWrap(false)
+
+  row.sub = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  row.sub:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 10, 1)
+  row.sub:SetPoint("RIGHT", -170, 0)
+  row.sub:SetJustifyH("LEFT")
+  row.sub:SetWordWrap(false)
+  row.sub:SetTextColor(0.75, 0.72, 0.65)
+
+  row.value = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  row.value:SetPoint("RIGHT", -12, 0)
+  row.value:SetJustifyH("RIGHT")
+
+  -- Encabezado de sección (sin recuadro)
+  row.section = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  row.section:SetPoint("LEFT", 4, 0)
+
+  row:SetScript("OnEnter", function(self) if self.tooltip then self.tooltip(self) end end)
+  row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  -- Filas de instructor o vendedor: clic para marcar el camino al más cercano
+  row:SetScript("OnClick", function(self)
+    if self.onClick then self.onClick() elseif self.go then ES.Waypoints.Go(self.go) end
+  end)
+  return row
+end
+
+-- Tooltip de una fila con camino: qué es, y el instructor o vendedor más cercano
+local function TravelTooltip(title, text, label, pick)
+  return function(row)
+    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(title)
+    if text then GameTooltip:AddLine(text, 0.8, 0.8, 0.8, true) end
+    ES.Waypoints.AddToTooltip(label, pick)
+    GameTooltip:Show()
+  end
+end
+
+local function StyleRow(row, line)
+  local isSection = line.section ~= nil
+  row:SetHeight(isSection and SECTION_HEIGHT or ROW_HEIGHT)
+  if isSection then
+    row:SetBackdropColor(0, 0, 0, 0)
+    row:SetBackdropBorderColor(0, 0, 0, 0)
+  elseif line.total then
+    row:SetBackdropColor(0.20, 0.14, 0.06, 0.95)
+    row:SetBackdropBorderColor(0.68, 0.52, 0.20, 1)
+  else
+    row:SetBackdropColor(0.10, 0.075, 0.045, 0.92)
+    row:SetBackdropBorderColor(0.40, 0.29, 0.13, 1)
+  end
+  row.section:SetText(isSection and (GOLD .. line.section .. "|r") or "")
+  row.icon:SetShown(not isSection and line.icon ~= nil)
+  if line.icon == ES.QUEST_ICON then ES.SetQuestIcon(row.icon) else row.icon:SetTexture(line.icon) end
+  row.title:SetText(line.title or "")
+  row.sub:SetText(line.sub or "")
+  row.value:SetText(line.value or "")
+  -- Sin icono, el texto empieza más a la izquierda
+  row.title:ClearAllPoints()
+  row.sub:ClearAllPoints()
+  local anchor, x = row.icon, 10
+  if not line.icon then anchor, x = row, 12 end
+  if line.icon then
+    row.title:SetPoint("TOPLEFT", anchor, "TOPRIGHT", x, -1)
+    row.sub:SetPoint("BOTTOMLEFT", anchor, "BOTTOMRIGHT", x, 1)
+  else
+    row.title:SetPoint("TOPLEFT", anchor, "TOPLEFT", x, -7)
+    row.sub:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", x, 7)
+  end
+  row.title:SetPoint("RIGHT", -170, 0)
+  row.sub:SetPoint("RIGHT", -170, 0)
+  row.tooltip = line.tooltip
+  row.go = line.go
+  row.onClick = line.onClick
+end
+
+-- Filas de dos líneas compartidas con otras páginas (Ganar dinero, Colección)
+ES.UI.CreateRow, ES.UI.StyleRow, ES.UI.Signed = CreateRow, StyleRow, Signed
+ES.UI.ROW_HEIGHT, ES.UI.ROW_GAP, ES.UI.SECTION_HEIGHT, ES.UI.LIST_WIDTH = ROW_HEIGHT, ROW_GAP, SECTION_HEIGHT, LIST_WIDTH
+
+-- Pinta una lista de líneas (ver StyleRow) en page.content con page.rows
+function ES.UI.RenderLines(page, lines)
+  local y = 0
+  page.pendingItems = false
+  for i, line in ipairs(lines) do
+    local row = page.rows[i] or CreateRow(page.content)
+    page.rows[i] = row
+    StyleRow(row, line)
+    row:ClearAllPoints()
+    row:SetPoint("TOPLEFT", 0, -y)
+    y = y + (line.section and SECTION_HEIGHT or ROW_HEIGHT) + ROW_GAP
+    if line.item and not ES:GetItemData(line.item) then page.pendingItems = true end
+    row:Show()
+  end
+  for i = #lines + 1, #page.rows do page.rows[i]:Hide() end
+  page.content:SetHeight(math.max(1, y))
+end
+
+---------------------------------------------------------------------------
+-- Página de la profesión
+---------------------------------------------------------------------------
+function ES:CreateProfessionPage(page, profKey)
+  local data = ES.Data[profKey]
+  if data.guide then return self:CreateFishingPage(page, profKey) end -- Pesca: guía de zonas (FishingUI.lua)
+  self.db.prof = self.db.prof or {}
+  self.db.prof[profKey] = self.db.prof[profKey] or {}
+  local settings = self.db.prof[profKey]
+  settings.sellAH, settings.duration, settings.reuseCrafted = nil, nil, nil -- opciones retiradas
+
+  local prof
+  for _, p in ipairs(ES.PROFESSIONS) do if p.key == profKey then prof = p end end
+  page.data, page.profKey, page.rows, page.lines = data, profKey, {}, {}
+  page.profName = ES:ProfLabel(profKey)
+  page.profIcon = prof and prof.icon or ES.ICON
+  page.view = "route"
+  for _, v in ipairs(VIEWS) do if v.key == settings.view then page.view = v.key end end
+
+  -- Cabecera de la profesión
+  local head = Panel(page)
+  head:SetPoint("TOPLEFT", 10, -2)
+  head:SetPoint("TOPRIGHT", -10, -2)
+  head:SetHeight(66)
+  page.head = head
+
+  local icon = head:CreateTexture(nil, "ARTWORK")
+  icon:SetSize(44, 44)
+  icon:SetPoint("LEFT", 12, 0)
+  icon:SetTexture(prof and prof.icon or ES.ICON)
+  icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+
+  local name = Label(head, page.profName, "GameFontNormalHuge")
+  name:SetPoint("TOPLEFT", icon, "TOPRIGHT", 12, 2)
+  name:SetTextColor(0.96, 0.79, 0.25)
+
+  page.levelText = Label(head, "", "GameFontHighlight")
+  page.levelText:SetPoint("BOTTOMLEFT", icon, "BOTTOMRIGHT", 12, 0)
+
+  -- Objetivo: lo único editable; al cambiarlo se recalcula
+  page.toBox = CreateFrame("EditBox", nil, head, "InputBoxTemplate")
+  page.toBox:SetSize(36, 18)
+  page.toBox:SetAutoFocus(false)
+  page.toBox:SetNumeric(true)
+  page.toBox:SetMaxLetters(3)
+  page.toBox:SetJustifyH("CENTER")
+  page.toBox:SetPoint("LEFT", page.levelText, "RIGHT", 10, 0)
+  page.toBox:SetText(ES:ProfessionTarget(profKey))
+  local function TargetChanged(self)
+    self:ClearFocus()
+    ES:CalculatePlan(page)
+  end
+  page.toBox:SetScript("OnEnterPressed", TargetChanged)
+  page.toBox:SetScript("OnEditFocusLost", function(self)
+    if tonumber(self:GetText()) ~= page.lastTarget then ES:CalculatePlan(page) end
+  end)
+  page.toBox:SetScript("OnEscapePressed", function(self)
+    self:SetText(page.lastTarget or MAX_SKILL)
+    self:ClearFocus()
+  end)
+  local toHint = Label(head, L["(máx. "] .. MAX_SKILL .. ")", "GameFontDisableSmall")
+  toHint:SetPoint("LEFT", page.toBox, "RIGHT", 6, 0)
+
+  -- Botones de vista, de derecha a izquierda
+  page.viewButtons = {}
+  local prev
+  for i = #VIEWS, 1, -1 do
+    local v = VIEWS[i]
+    local b = CreateFrame("Button", nil, head, "UIPanelButtonTemplate")
+    b:SetSize(v.width, 26)
+    if prev then b:SetPoint("RIGHT", prev, "LEFT", -4, 0) else b:SetPoint("RIGHT", -12, 0) end
+    b:SetText("|T" .. v.icon .. ":16:16:0:0:64:64:5:59:5:59|t " .. v.label)
+    b:SetScript("OnClick", function() ES:SelectProfessionView(page, v.key) end)
+    b.key = v.key
+    page.viewButtons[#page.viewButtons + 1] = b
+    prev = b
+  end
+
+  -- Filtros: iconos que se tachan al desactivarlos y recalculan al pulsarlos.
+  -- isOn() lee el ajuste; toggle() lo cambia; lines() da el texto del tooltip
+  local function FilterIcon(anchor, texture, title, isOn, toggle, lines)
+    local b = CreateFrame("Button", nil, head, "BackdropTemplate")
+    b:SetSize(30, 30)
+    b:SetPoint("RIGHT", anchor, "LEFT", anchor == prev and -12 or -6, 0)
+    b:SetBackdrop({ edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 10 })
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetPoint("TOPLEFT", 3, -3)
+    b.icon:SetPoint("BOTTOMRIGHT", -3, 3)
+    if texture == ES.QUEST_ICON then ES.SetQuestIcon(b.icon) else b.icon:SetTexture(texture) end
+    if texture:find("Icons") then b.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93) end
+    b.cross = b:CreateTexture(nil, "OVERLAY")
+    b.cross:SetPoint("TOPLEFT", 4, -4)
+    b.cross:SetPoint("BOTTOMRIGHT", -4, 4)
+    b.cross:SetTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
+    local hl = b:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(b.icon)
+    hl:SetColorTexture(1, 1, 1, 0.15)
+    function b:Refresh()
+      local on = isOn()
+      self.icon:SetDesaturated(not on)
+      self.icon:SetAlpha(on and 1 or 0.55)
+      self.cross:SetShown(not on)
+      self:SetBackdropBorderColor(on and 1 or 0.4, on and 0.82 or 0.4, on and 0.25 or 0.4, 1)
+    end
+    b:SetScript("OnClick", function(self)
+      toggle()
+      self:Refresh()
+      ES:CalculatePlan(page)
+      if self:IsMouseOver() then self:GetScript("OnEnter")(self) end
+    end)
+    b:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+      GameTooltip:AddLine(title)
+      for i, l in ipairs(lines()) do GameTooltip:AddLine(l, i == 1 and 1 or 0.7, i == 1 and 1 or 0.7, i == 1 and 1 or 0.7, true) end
+      GameTooltip:AddLine(L["Pulsa para cambiarlo."], 0.5, 0.8, 1)
+      GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    b:Refresh()
+    return b
+  end
+
+  -- Usar bolsas y banco
+  page.bagsButton = FilterIcon(prev, "Interface\\Icons\\INV_Misc_Bag_08", L["Usar lo que tienes en bolsas y banco"],
+    function() return settings.useBags and true or false end,
+    function() settings.useBags = not settings.useBags end,
+    function()
+      return { settings.useBags and L["Activado: en la misma ruta, usa tus materiales (gratis) antes de comprar."]
+        or L["Desactivado: el plan compra todo, aunque lo tengas."],
+        L["La ruta no cambia por lo que lleves: solo baja el coste."] }
+    end)
+
+  -- Contar misiones para conseguir recetas (prueba piloto: solo en las profesiones con fuentes reales)
+  if ES.Waypoints.SOURCED_PROFESSIONS[profKey] then
+    page.questButton = FilterIcon(page.bagsButton, ES.QUEST_ICON, L["Recetas de misiones"],
+      function() return settings.useQuests ~= false end,
+      function() settings.useQuests = settings.useQuests == false end,
+      function()
+        return { settings.useQuests ~= false and L["Activado: si una misión de tu bando da la receta, cuenta como gratis."]
+          or L["Desactivado: las recetas solo se consiguen comprándolas (vendedor o Casa de Subastas)."],
+          L["Útil si no quieres ir a hacer la misión."] }
+      end)
+  end
+
+  -- Franja de resumen: materiales, profit, instructor y herramientas, total
+  local strip = CreateFrame("Frame", nil, page)
+  strip:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 4, -6)
+  strip:SetPoint("TOPRIGHT", head, "BOTTOMRIGHT", -4, -6)
+  strip:SetHeight(46)
+  page.strip = strip
+  page.stats = {}
+  local STATS = {
+    { key = "materials", label = L["Materiales"] },
+    { key = "profit",    label = L["Profit (vendiendo lo que fabricas)"] },
+    { key = "fees",      label = L["Instructor y herramientas"] },
+    { key = "total",     label = L["Total"] },
+  }
+  for i, s in ipairs(STATS) do
+    local label = Label(strip, s.label, "GameFontDisableSmall")
+    label:SetPoint("TOPLEFT", (i - 1) * 196 + 6, -2)
+    local value = Label(strip, "", i == #STATS and "GameFontNormalLarge" or "GameFontHighlightLarge")
+    value:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -3)
+    page.stats[s.key] = value
+  end
+  page.status = Label(page, "", "GameFontHighlightSmall")
+  page.status:SetPoint("TOPLEFT", strip, "BOTTOMLEFT", 2, -2)
+  page.status:SetPoint("RIGHT", strip, "RIGHT", 0, 0)
+  page.status:SetJustifyH("LEFT")
+  page.status:SetWordWrap(false)
+
+  -- Lista
+  local list = Panel(page, 0.07, 0.05, 0.03, 0.9)
+  list:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -70)
+  list:SetPoint("BOTTOMRIGHT", -10, 4)
+  page.listPanel = list
+  local scroll = WheelScroll(list)
+  scroll:SetPoint("TOPLEFT", 8, -8)
+  scroll:SetPoint("BOTTOMRIGHT", -8, 8)
+  page.content = CreateFrame("Frame", nil, scroll)
+  page.content:SetSize(LIST_WIDTH, 1)
+  scroll:SetScrollChild(page.content)
+  page.scroll = scroll
+  page.empty = Label(page.content, "", "GameFontDisable")
+  page.empty:SetPoint("TOP", 0, -30)
+  page.empty:SetWidth(600)
+
+  ES.SafeRegister(page, "GET_ITEM_INFO_RECEIVED")
+  page:SetScript("OnEvent", function(self)
+    if not self.plan or self.refreshQueued then return end
+    -- Faltaban nombres (repintar) o precios de vendedor (recalcular)
+    local needsRecalc = self.plan.pendingInfo
+    if self.pendingItems or needsRecalc then
+      self.refreshQueued = true
+      C_Timer.After(0.5, function()
+        self.refreshQueued = false
+        if not self:IsVisible() then return end
+        if needsRecalc then ES:CalculatePlan(self) else ES:RenderPlan(self) end
+      end)
+    end
+  end)
+
+  -- Al mostrarse: nivel actual del personaje (puede haber subido) y recalcular
+  page:SetScript("OnShow", function(self)
+    self.initialized = true
+    ES:DetectSkill(self)
+    ES:CalculatePlan(self)
+    ES:SelectProfessionView(self, self.view)
+  end)
+
+  self.professionPages = self.professionPages or {}
+  self.professionPages[#self.professionPages + 1] = page
+end
+
+-- Nivel actual: el del personaje (no se edita); si no tiene la profesión, 1
+function ES:DetectSkill(page)
+  local rank, maxRank = self:GetProfessionSkill(page.data.skillLine)
+  page.from = rank or 1
+  page.detected = rank and { rank = rank, cap = maxRank } or nil -- tope real (p. ej. 75 sin Oficial)
+  page.levelText:SetText(string.format(L["Nivel %s%d|r%s   %sObjetivo:|r"], GOLD, page.from,
+    rank and "" or (GREY .. L[" (no la tienes)|r"]), GREY))
+end
+
+function ES:SelectProfessionView(page, key)
+  if not VIEW_KEYS[key] then key = "route" end -- "market" (Recetas) ya no existe: está en Colección
+  page.view = key
+  self.db.prof[page.profKey].view = key
+  self.db.lastProf = page.profKey -- la lista de compra de la AH empieza por esta
+  for _, b in ipairs(page.viewButtons) do
+    if b.key == key then b:LockHighlight() else b:UnlockHighlight() end
+  end
+  self:RenderPlan(page)
+end
+
+-- Solo la que está a la vista: las demás se recalculan al mostrarse (OnShow),
+-- así un escaneo no congela el juego recalculando las 8 profesiones
+function ES:RefreshProfessionPages()
+  for _, page in ipairs(self.professionPages or {}) do
+    if page.initialized and page:IsVisible() then self:CalculatePlan(page) end
+  end
+end
+
+---------------------------------------------------------------------------
+-- Cálculo y pintado
+---------------------------------------------------------------------------
+function ES:CalculatePlan(page)
+  local from = page.from or 1
+  local to = tonumber(page.toBox:GetText()) or MAX_SKILL
+  to = math.max(1, math.min(MAX_SKILL, to))
+  page.toBox:SetText(to)
+  page.lastTarget = to
+  self.db.prof[page.profKey].target = to
+  page.calculating = nil
+  if from >= to then
+    page.plan, page.planKey = nil, nil -- y si llega una ruta pedida antes, se descarta
+  else
+    -- Con el nivel detectado se usa el tope real para saber qué rangos faltan.
+    -- Si no está en la caché, se calcula repartida entre fotogramas: mientras, se
+    -- ve "Calculando la ruta…" (o la ruta anterior) y al acabar se repinta
+    local cap = page.detected and page.detected.cap or nil
+    local key = self:PlanKey(page.profKey, from, to, cap)
+    page.planKey = key
+    local plan = self:RequestPlan(page.profKey, from, to, cap, function(result)
+      if page.planKey ~= key then return end -- se pidió otra ruta después
+      page.calculating = nil
+      page.plan = result
+      self:RenderPlan(page)
+    end, page)
+    if plan then page.plan = plan else page.calculating = true end
+  end
+  self:RenderPlan(page)
+end
+
+-- Líneas de la vista Ruta: pasos con entrenamientos, herramientas y lo que hay
+-- que fabricar antes, cada cosa en su sitio
+local TRAIN_ICON = "Interface\\Icons\\INV_Misc_Book_09"   -- libro del instructor
+local RECIPE_ICON = "Interface\\Icons\\INV_Scroll_03"     -- receta comprada (vendedor/AH)
+local LEARN_WHERE = ES.Localize({ trainer = "Instructor", vendor = "Vendedor de recetas", scroll = "Pergamino en la AH", unknown = "Pergamino o botín" })
+local WP = ES.Waypoints
+local QUEST_ICON = ES.QUEST_ICON -- se pinta con el atlas en alta resolución (Core.lua)
+local AH_ICON = "Interface\\Icons\\INV_Misc_Coin_01"
+
+local function CostOrFree(copper)
+  if copper and copper >= 0.5 then return Signed(copper) end
+  return GREEN .. L["gratis|r"]
+end
+
+-- Prueba piloto: fila "Conseguir receta" con su mejor fuente (misión, vendedor
+-- o AH), el clic a quien da la misión o la vende, y todas las fuentes en el tooltip
+local function SourcedLearnLine(r, st, profName, plan)
+  local src = WP.RecipeSource(r, plan.ctx.prices, plan.ctx.opts.noQuests)
+  local best = src and src.best
+  if not best then return nil end
+  local title = L["Conseguir receta: "] .. r.name
+  local also = src.ah and best.kind ~= "ah" and (L[" · también en la AH: "] .. ES.Money(src.ah.price)) or ""
+  local icon, sub, pick, label
+  if best.kind == "owned" then
+    icon, title = RECIPE_ICON, L["Aprender receta: "] .. r.name
+    sub = string.format(L["La tienes en la bolsa%s · úsala para aprenderla"], best.count > 1 and (" (" .. best.count .. ")") or "")
+  elseif best.kind == "quest" then
+    icon, label = QUEST_ICON, L["Da la misión"]
+    sub = L["Misión: "] .. best.quest.name .. also
+    pick = function() return WP.Nearest(best.quest.starters) end
+  elseif best.kind == "vendor" then
+    icon, label = RECIPE_ICON, L["Vendedor más cercano"]
+    sub = L["Vendedor de recetas"] .. also
+    pick = function() return WP.Nearest(src.vendors) end
+  else
+    icon = AH_ICON
+    sub = string.format(L["Casa de Subastas · la más barata ahora (%d a la venta)"], src.ah.listings)
+  end
+
+  local function Tooltip(row)
+    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(L["Receta: "] .. r.name)
+    GameTooltip:AddDoubleLine(L["Requiere "] .. profName, tostring(r.train or st.from), 0.8, 0.8, 0.8, 1, 1, 1)
+    GameTooltip:AddLine(" ")
+    local function Mark(kind) return best.kind == kind and ES.Market.ICON_OK or ES.Market.ICON_NONE end
+    if src.owned then
+      GameTooltip:AddDoubleLine(Mark("owned") .. L["En tus bolsas"], src.owned .. L[" · gratis"], 1, 0.82, 0, 1, 1, 1)
+    end
+    for _, q in ipairs(src.quests) do
+      if src.questsOff then
+        GameTooltip:AddDoubleLine(ES.Market.ICON_BAD .. L["Misión"], q.name .. L[" · desactivada"], 0.6, 0.6, 0.6, 0.6, 0.6, 0.6)
+      else
+        GameTooltip:AddDoubleLine(Mark("quest") .. L["Misión"], q.name .. L[" · gratis"], 1, 0.82, 0, 1, 1, 1)
+      end
+      local starter = WP.Nearest(q.starters)
+      local npc = starter and WP.NPC(starter)
+      if npc then GameTooltip:AddDoubleLine(" ", npc.name .. " · " .. WP.LocationText(npc), 1, 1, 1, 0.6, 0.6, 0.6) end
+      if q.level > 0 then GameTooltip:AddDoubleLine(" ", L["nivel "] .. q.level, 1, 1, 1, 0.6, 0.6, 0.6) end
+    end
+    if src.vendors[1] then
+      local opt
+      for _, o in ipairs(src.options) do if o.kind == "vendor" then opt = o end end
+      GameTooltip:AddDoubleLine(Mark("vendor") .. L["Vendedores"], string.format("%d · %s", #src.vendors,
+        opt and opt.unknownPrice and L["precio ?"] or ES.Money(opt and opt.cost or 0)), 1, 0.82, 0, 1, 1, 1)
+      local v = WP.Nearest(src.vendors)
+      local npc = v and WP.NPC(v)
+      if npc then GameTooltip:AddDoubleLine(" ", npc.name .. " · " .. WP.LocationText(npc), 1, 1, 1, 0.6, 0.6, 0.6) end
+    end
+    if src.ah then
+      GameTooltip:AddDoubleLine(Mark("ah") .. L["AH ahora"], string.format(L["%s · %d a la venta"], ES.Money(src.ah.price), src.ah.listings),
+        1, 0.82, 0, 1, 1, 1)
+    else
+      GameTooltip:AddDoubleLine(ES.Market.ICON_NONE .. L["AH ahora"], L["no hay ninguna"], 1, 0.82, 0, 0.6, 0.6, 0.6)
+    end
+    if src.noQuestie then
+      GameTooltip:AddLine(L["Sin Questie no se saben misiones ni vendedores: solo cuenta la AH."], 1, 0.6, 0.2, true)
+    end
+    GameTooltip:AddLine(" ")
+    if best.kind == "owned" then
+      GameTooltip:AddLine(L["Ya la tienes: haz clic derecho sobre el pergamino en la bolsa para aprenderla."], 0.5, 0.8, 1, true)
+    elseif pick then
+      GameTooltip:AddLine(L["Clic: marcar el camino ("] .. (best.kind == "quest" and L["a quien da la misión"] or L["al vendedor"]) .. ").", 0.5, 0.8, 1)
+    else
+      GameTooltip:AddLine(L["Cómprala en la Casa de Subastas."], 0.5, 0.8, 1)
+    end
+    GameTooltip:Show()
+  end
+
+  return { icon = icon, title = title, sub = sub, value = CostOrFree(st.fee), go = pick, tooltip = Tooltip }
+end
+
+local function RouteLines(plan, page)
+  local lines = {}
+  local profIcon, profName = page.profIcon or ES.ICON, page.profName
+  -- Lo que se fabrica antes va justo delante del primer paso que lo usa
+  local craftBefore = {}
+  for _, c in ipairs(plan.crafted) do
+    local at = 1
+    for i, st in ipairs(plan.steps) do
+      local uses = false
+      for _, rg in ipairs(st.reagents) do
+        if rg.item == c.itemID and rg.kinds.craft then uses = true break end
+      end
+      if uses then at = i break end
+    end
+    craftBefore[at] = craftBefore[at] or {}
+    table.insert(craftBefore[at], c)
+  end
+  local events = {}
+  for _, rk in ipairs(plan.ranks) do events[#events + 1] = { skill = rk.skill, rank = rk } end
+  for _, tl in ipairs(plan.tools) do events[#events + 1] = { skill = tl.skill, tool = tl } end
+  table.sort(events, function(a, b) return a.skill < b.skill end)
+
+  local ev = 1
+  local function AddEvent(e)
+    if e.rank then
+      local rk = e.rank
+      local rankName = RANK_NAMES[rk.cap] or (L["rango "] .. rk.cap)
+      -- En las secundarias, Experto es un libro del vendedor (y Artesano, una misión)
+      local secondary = (page.profKey == "Cooking" or page.profKey == "FirstAid") and rk.cap > 150
+      local book = secondary and WP.RANK_BOOKS[page.profKey] and WP.RANK_BOOKS[page.profKey][rk.cap]
+      local where = secondary and (rk.cap > 225 and L["Misión"] or L["Libro del vendedor"]) or L["Instructor"]
+      local pick, label
+      if book then
+        pick, label = WP.Target("vendor", book), L["Vendedor más cercano"]
+      elseif not secondary then
+        pick, label = WP.Target("trainer", page.profKey, rk.cap), L["Instructor más cercano"]
+      end
+      local line = {
+        icon = profIcon, -- como en el instructor: el rango lleva el icono de la profesión
+        title = string.format(L["Entrenar %s %s(%s)|r"], rankName, GREY, profName),
+        sub = string.format(L["%s · requiere %s (%d)%s · sube el tope a %d"], where,
+          profName, rk.skill, (rk.level or 0) > 0 and (L[" y nivel "] .. rk.level) or "", rk.cap),
+        value = Signed(rk.fee), go = pick,
+      }
+      if pick then
+        line.tooltip = TravelTooltip(string.format(L["Entrenar %s (%s)"], rankName, profName),
+          string.format(L["Sube el tope de %s a %d."], profName, rk.cap), label, pick)
+      end
+      lines[#lines + 1] = line
+    else
+      local tl = e.tool
+      local name, texture = ItemLabel(tl.item, L["Herramienta "] .. tl.item)
+      lines[#lines + 1] = {
+        icon = texture or 134400, title = L["Herramienta: "] .. name,
+        sub = string.format(L["Desde el nivel %d · se consigue una vez y no se gasta"], tl.skill),
+        value = Signed(tl.cost), item = tl.item,
+        tooltip = SimpleTooltip(tl.item, L["Los siguientes pasos la necesitan. Sus materiales están en la lista de compra."]),
+      }
+    end
+  end
+  for i, st in ipairs(plan.steps) do
+    while events[ev] and events[ev].skill <= st.from do AddEvent(events[ev]) ev = ev + 1 end
+    for _, c in ipairs(craftBefore[i] or {}) do
+      local name, texture = ItemLabel(c.itemID, L["Objeto "] .. c.itemID)
+      local conversion = c.recipe and c.recipe.conversion
+      lines[#lines + 1] = {
+        icon = texture or 134400,
+        title = string.format("%s %d× %s", conversion and L["Convierte"] or L["Fabrica"], c.quantity, name),
+        sub = conversion and L["Clic derecho sobre las esencias en la bolsa"] or L["Para los pasos siguientes: sale más barato que comprarlo"],
+        item = c.itemID,
+        tooltip = SimpleTooltip(c.itemID, L["Sale más barato fabricarlo que comprarlo; sus materiales ya están en la lista de compra."]),
+      }
+    end
+    local r = st.recipe
+    local name, texture = ItemLabel(r.out and r.out[1] or 0, r.name)
+    -- Aprender la receta: fila propia (como en el instructor), con su coste
+    -- Ya la sabes ("known"): sin fila de aprender
+    local learnSource = st.learnSource ~= "known" and st.learnSource or nil
+    local sourcedLine = learnSource and r.scroll and not r.fee and WP.SOURCED_PROFESSIONS[page.profKey]
+      and SourcedLearnLine(r, st, profName, plan)
+    if sourcedLine then
+      lines[#lines + 1] = sourcedLine
+    elseif learnSource then
+      local trainer = st.learnSource == "trainer"
+      local learnAt = r.train or st.from
+      -- Al pulsar: el instructor que enseña hasta ese nivel, o quien vende la receta
+      local pick, label
+      if trainer then
+        pick, label = WP.Target("trainer", page.profKey, learnAt + 1), L["Instructor más cercano"]
+      elseif r.scroll then
+        pick, label = WP.Target("vendor", r.scroll), L["Vendedor más cercano"]
+      end
+      local title = string.format("%s %s", trainer and L["Entrenar"] or L["Comprar receta:"], r.name)
+      lines[#lines + 1] = {
+        icon = trainer and TRAIN_ICON or RECIPE_ICON,
+        title = title,
+        sub = string.format(L["%s · requiere %s (%d)"], LEARN_WHERE[st.learnSource] or "?", profName, learnAt),
+        value = st.learnSource == "unknown" and (GREY .. "?|r") or Signed(st.fee),
+        go = pick,
+        tooltip = pick and TravelTooltip(title, string.format(L["%s · requiere %s (%d) · cuesta %s"], LEARN_WHERE[st.learnSource] or "?",
+          profName, learnAt, ES.Money(st.fee)), label, pick) or nil,
+      }
+    end
+    local perPoint = st.expected / (st.to - st.from)
+    lines[#lines + 1] = {
+      icon = texture or 134400,
+      title = name,
+      sub = string.format(L["%s%d fabricaciones|r · de %d a %d · %s/u"], perPoint > LOW_CHANCE_CRAFTS and ORANGE or "",
+        st.crafts, st.from, st.to, ES.Money(st.unitCost)),
+      value = Signed(st.total - st.fee), item = r.out and r.out[1], -- lo de aprender va en su fila
+      tooltip = RecipeTooltip(st, plan),
+    }
+  end
+  while events[ev] do AddEvent(events[ev]) ev = ev + 1 end
+  if plan.stoppedAt then
+    lines[#lines + 1] = { title = ORANGE .. L["El plan se queda en "] .. plan.stoppedAt .. "|r", sub = StopReason(plan) }
+  end
+  lines[#lines + 1] = { total = true, title = L["Total"], sub = string.format(L["Subir de %d a %d"], plan.from, plan.reached), value = Signed(plan.net) }
+  return lines
+end
+
+-- Líneas de la vista Profit: qué hacer con todo lo que fabricas
+local function ProfitLines(plan)
+  local lines = {}
+  local dests = {}
+  for _, d in ipairs(plan.destinations) do dests[#dests + 1] = d end
+  table.sort(dests, function(a, b) return a.income + (a.ahExtra or 0) > b.income + (b.ahExtra or 0) end)
+  local total, extra = 0, 0
+  for _, d in ipairs(dests) do
+    local name, texture = ItemLabel(d.itemID, L["Objeto "] .. d.itemID)
+    local parts = { string.format(L["Fabricas %d"], d.produced) }
+    if d.keep > 0 then parts[#parts + 1] = GREEN .. L["guarda "] .. d.keep .. L[" para pasos siguientes|r"] end
+    local signals = d.sale.ahNet and d.sell > 0 and ES.Market:Signals(d.itemID)
+    local advice = ES.Planner.SaleAdvice(d)
+    d.advice = advice
+    if advice.ah > 0 then
+      parts[#parts + 1] = string.format(L["%spon %d en la AH a %s|r (%s)"], GOLD, advice.ah, ES.Money(advice.price),
+        ES.Market.LABELS[advice.verdict])
+    end
+    if advice.vendor > 0 then
+      parts[#parts + 1] = string.format(L["%s %d al vendedor"], advice.ah > 0 and L["el resto,"] or L["vende"], advice.vendor)
+    end
+    if advice.unsold > 0 then
+      parts[#parts + 1] = GREY .. advice.unsold .. L[" no los compra el vendedor|r"]
+    end
+    if signals then extra = extra + d.ahExtra end
+    total = total + d.income
+    lines[#lines + 1] = {
+      icon = texture or 134400, title = name, sub = table.concat(parts, " · "),
+      value = d.income > 0 and Signed(-d.income) or (GREY .. "—|r"), item = d.itemID,
+      tooltip = DestinationTooltip(d, name, signals),
+    }
+  end
+  if #lines == 0 then return lines end
+  lines[#lines + 1] = {
+    total = true, title = L["Recuperas vendiendo al vendedor"],
+    sub = extra > 0 and string.format(L["Vendiendo en la AH podrías sacar hasta %s más (sin garantía de venta)"], ES.Money(extra)) or L["Lo que no se guarda para pasos siguientes"],
+    value = Signed(-total),
+  }
+  return lines
+end
+
+-- Líneas de la vista Lista de compra
+local function ShopLines(plan)
+  local lines = {}
+  local total = 0
+  local function Section(title, items, build)
+    if #items == 0 then return end
+    lines[#lines + 1] = { section = title }
+    for _, it in ipairs(items) do lines[#lines + 1] = build(it) end
+  end
+  local ah, vendor = {}, {}
+  for _, it in ipairs(plan.shopping) do
+    if it.source == "ah" then ah[#ah + 1] = it else vendor[#vendor + 1] = it end
+    total = total + it.total
+  end
+  local function Buy(it)
+    local name, texture = ItemLabel(it.itemID, L["Objeto "] .. it.itemID)
+    local sub = it.source == "ah"
+      and string.format("AH · %s/u%s", ES.Money(it.unit), it.supply and string.format(L[" · hay %d a la venta"], it.supply) or "")
+      or string.format(L["Vendedor · %s/u"], ES.Money(it.unit))
+    return { icon = texture or 134400, title = it.quantity .. "× " .. name, sub = sub, value = Signed(it.total),
+      item = it.itemID, tooltip = ShopTooltip(it, plan),
+      go = it.source == "vendor" and WP.Target("vendor", it.itemID) or nil }
+  end
+  Section(L["Comprar en la Casa de Subastas"], ah, Buy)
+  Section(L["Comprar al vendedor"], vendor, Buy)
+  Section(L["Usar de tus bolsas y banco"], plan.owned, function(it)
+    local name, texture = ItemLabel(it.itemID, L["Objeto "] .. it.itemID)
+    return { icon = texture or 134400, title = it.quantity .. "× " .. name, sub = L["Ya lo tienes: se usa antes de comprar"],
+      item = it.itemID, tooltip = SimpleTooltip(it.itemID, L["Ya lo tienes: el plan lo usa antes de comprar nada."]) }
+  end)
+  if #plan.shopping > 0 then
+    lines[#lines + 1] = { total = true, title = L["Total de la compra"], sub = L["Materiales y herramientas a comprar"], value = Signed(total) }
+  end
+  return lines
+end
+
+function ES:RenderPlan(page)
+  local plan = page.plan
+
+  -- Calculando la primera ruta: nada que enseñar aún
+  local stats = page.stats
+  if page.calculating and not plan then
+    for _, fs in pairs(stats) do fs:SetText(GREY .. "—|r") end
+    page.status:SetText(GREY .. L["Calculando la ruta…"] .. "|r")
+    page.lines = {}
+    page.empty:SetText("")
+    ES.UI.RenderLines(page, page.lines)
+    return
+  end
+
+  -- Franja de resumen
+  if plan and #plan.steps > 0 then
+    stats.materials:SetText(Signed(plan.reagentCost))
+    stats.profit:SetText(Signed(-plan.resale))
+    stats.fees:SetText(Signed(plan.fees + plan.toolsCost))
+    stats.total:SetText(Signed(plan.net))
+  else
+    for _, fs in pairs(stats) do fs:SetText(GREY .. "—|r") end
+  end
+
+  local status
+  if not plan then
+    status = GREEN .. L["Ya estás en el objetivo. Sube el objetivo para ver la ruta.|r"]
+  elseif #plan.steps == 0 then
+    status = ORANGE .. L["No se puede subir desde "] .. plan.from .. ": " .. StopReason(plan) .. ".|r"
+  elseif plan.stoppedAt then
+    status = ORANGE .. L["Con recetas de instructor el plan llega hasta "] .. plan.stoppedAt .. ": " .. StopReason(plan) .. ".|r"
+  elseif not plan.scanTime then
+    status = ORANGE .. L["Sin escaneo de la AH: solo precios de vendedor. Escanea para un coste real.|r"]
+  else
+    status = GREY .. string.format(L["Precios de la AH de hace %d min · lo fabricado se cuenta vendido al vendedor"],
+      math.floor((time() - plan.scanTime) / 60)) .. "|r"
+  end
+  -- Ruta con coste simbólico por fabricación: cuánto ahorra frente a la más barata
+  if plan and plan.cheapest then
+    local saved = plan.cheapest.crafts - self.Planner.TotalCrafts(plan)
+    local extra = plan.net - plan.cheapest.net
+    status = status .. GREY .. string.format(L[" · %d fabricaciones menos que la ruta más barata%s|r"], saved,
+      extra >= 0.5 and (L[", por "] .. ES.Money(extra) .. L[" más"]) or "")
+  end
+  -- Recalculando: se ve la ruta anterior hasta que esté la nueva
+  if page.calculating then status = GREY .. L["Calculando la ruta…"] .. "|r" end
+  page.status:SetText(status)
+
+  local lines = {}
+  if plan and #plan.steps > 0 then
+    if page.view == "profit" then lines = ProfitLines(plan)
+    elseif page.view == "shop" then lines = ShopLines(plan)
+    else lines = RouteLines(plan, page) end
+  end
+  page.lines = lines
+  page.empty:SetText(#lines == 0 and (plan and #plan.steps > 0 and L["Nada que mostrar en esta vista."] or "") or "")
+
+  ES.UI.RenderLines(page, lines)
+end
