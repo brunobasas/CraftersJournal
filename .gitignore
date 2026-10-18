@@ -1,3 +1,5 @@
 # Archivos temporales de Python (las herramientas de tools/)
 __pycache__/
 *.pyc
+# Zips generados por tools/package.py
+dist/
