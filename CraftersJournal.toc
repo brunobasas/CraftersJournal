@@ -3,10 +3,11 @@
 ## Notes: The cheapest way to level every profession and your full recipe collection, with where to get each recipe.
 ## Notes-esES: La forma más barata de subir cada profesión y tu colección de recetas, con dónde conseguir cada una.
 ## Author: Bruno
-## Version: 0.34.1
+## Version: 0.34.3
 ## Category: Professions
 ## SavedVariables: CraftersJournalDB
-## IconTexture: Interface\Icons\INV_Misc_Coin_01
+## IconTexture: Interface\Icons\Trade_BlackSmithing
+## X-Curse-Project-ID: 1752523
 ## AddonCompartmentFunc: CraftersJournal_OnAddonCompartmentClick
 ## OptionalDeps: QuestieDB, Questie, TomTom, ShortestPathForever
 
@@ -44,3 +45,4 @@ AuctionUI.lua
 EarnUI.lua
 CollectionUI.lua
 PatternsUI.lua
+Options.lua

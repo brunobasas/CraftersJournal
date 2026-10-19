@@ -7,7 +7,7 @@ import os
 sys.path.insert(0, os.environ.get("ESLUA", r"C:\Users\bruno\AppData\Local\Temp\eslua"))  # carpeta con lupa (Lua 5.1)
 from lupa import lua51
 
-ADDON = Path(r"C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns\CraftersJournal")
+ADDON = Path(__file__).resolve().parent.parent  # el repositorio (no depende del enlace en AddOns)
 lua = lua51.LuaRuntime(unpack_returned_tuples=True)
 
 lua.execute(r"""
@@ -25,7 +25,9 @@ local function Mock(name)
     if k == "GetText" then return function(self) return self._text or "" end end
     if k == "SetText" then return function(self, v) self._text = v and tostring(v) end end
     if k == "GetCenter" then return function() return 0, 0 end end
-    if k == "IsShown" or k == "IsVisible" or k == "GetChecked" then return function() return true end end
+    if k == "IsShown" or k == "IsVisible" then return function() return true end end
+    if k == "GetChecked" then return function(self) if self._checked == nil then return true end return self._checked end end
+    if k == "SetChecked" then return function(self, v) self._checked = v and true or false end end
     -- Como en WoW: solo los métodos (con mayúscula) existen; los campos propios no
     if type(k) ~= "string" or not k:match("^%u") then return nil end
     return function() return Mock(k) end
@@ -491,6 +493,10 @@ step("escanear con barrera de 15 min", function()
   -- Tras pedir, la barrera corre desde la petición: cuenta atrás y no se vuelve a pedir
   log[#log+1] = "     tras el escaneo: " .. tostring(f.scanButton._text)
   assert(f.scanButton._text == "15:00", "cuenta atrás de 15 min: " .. tostring(f.scanButton._text))
+  -- Junto al botón se avisa de que el último intento no acabó
+  log[#log+1] = "     tras cancelar: " .. tostring(f.lastScan._text)
+  assert(tostring(f.lastScan._text):find("Cancelado"), "debería avisar del escaneo cancelado: " .. tostring(f.lastScan._text))
+  ES.db.lastScanFail = nil
   started = false
   ES.Scanner:Start()
   assert(not started and not ES.Scanner:IsBusy(), "no debe pedirse otra vez antes de 15 min")
@@ -727,12 +733,26 @@ step("cabecera: buscador e idioma", function()
   ES.Scanner.IsBusy = savedBusy
   ES:RefreshScanButtons()
   assert(f.scanButton._text == "Escanear", "al acabar el botón vuelve a decir Escanear")
-  -- "Último escaneo: hace N min" junto al botón
+  -- "Último escaneo: hace N min" junto al botón (sin intentos cancelados de pasos anteriores)
+  ES.db.lastScanFail = nil
+  ES:UpdateLastScan()
   log[#log+1] = "     junto al botón: " .. tostring(f.lastScan._text)
   assert(tostring(f.lastScan._text):find("Último escaneo") or f.lastScan._text == "Sin escanear", "último escaneo")
   -- Idioma: desplegable con Español
   f.languageButton._scripts.OnClick(f.languageButton)
   f.languageButton._scripts.OnEnter(f.languageButton)
+  -- Informar de un error: ventana con el enlace del Discord listo para copiar
+  assert(f.reportButton, "falta el botón Informar")
+  f.reportButton._scripts.OnEnter(f.reportButton)
+  f.reportButton._scripts.OnClick(f.reportButton)
+  local d = CraftersJournalReportDialog
+  assert(d, "no se creó la ventana de informar")
+  d._scripts.OnShow(d)
+  assert(d.box._text == ES.DISCORD_URL, "el enlace del Discord: " .. tostring(d.box._text))
+  d.box._scripts.OnTextChanged(d.box, true)
+  assert(d.box._text == ES.DISCORD_URL, "el enlace no se puede editar")
+  log[#log+1] = "     informar: " .. tostring(d.title._text) .. " · " .. d.box._text
+  d.ok._scripts.OnClick(d.ok)
   ES:SelectPage("home")
 end)
 step("ir al instructor o vendedor más cercano", function()
@@ -869,9 +889,15 @@ end)
 step("interruptor de desarrollo: vista de jugador", function()
   ES:ShowMainFrame("home")
   local f = ES:GetMainFrame()
-  assert(f.devToggle, "en la copia de desarrollo debería estar el interruptor")
-  log[#log+1] = "     interruptor: " .. tostring(f.devToggle.text._text)
-  f.devToggle._scripts.OnClick(f.devToggle)
+  assert(not f.devToggle, "el interruptor ya no va en la cabecera (sale en las capturas)")
+  -- Está en Opciones > AddOns > Crafter's Journal
+  local panel = ES.optionsPanel
+  assert(panel and panel.devCheck, "en la copia de desarrollo el panel de opciones debería tener el interruptor")
+  panel._scripts.OnShow(panel)
+  assert(not panel.devCheck:GetChecked(), "en modo DEV la casilla debería estar desmarcada")
+  log[#log+1] = "     interruptor: " .. tostring(panel.devCheck.label._text)
+  panel.devCheck:SetChecked(true)
+  panel.devCheck._scripts.OnClick(panel.devCheck)
   -- Vista de jugador: ventana nueva sin las pestañas, el buscador ni la Pesca
   local g = ES:GetMainFrame()
   assert(ES.DEV == false and ES.db.userPreview == true, "no pasó a vista de jugador")
@@ -881,9 +907,10 @@ step("interruptor de desarrollo: vista de jugador", function()
     if c._shown ~= false then assert(c.key ~= "Fishing", "la Pesca no debería verse") end
   end
   assert(ES.homePage.shownCards == #ES.PROFESSIONS - 1, "tarjetas en vista de jugador: " .. ES.homePage.shownCards)
-  log[#log+1] = "     vista de jugador: " .. tostring(g.devToggle.text._text) .. ", " .. #g.tabs .. " pestañas"
+  log[#log+1] = "     vista de jugador: " .. #g.tabs .. " pestañas"
   -- Y vuelta al modo desarrollo
-  g.devToggle._scripts.OnClick(g.devToggle)
+  panel.devCheck:SetChecked(false)
+  panel.devCheck._scripts.OnClick(panel.devCheck)
   assert(ES.DEV == true and not ES.db.userPreview and #ES:GetMainFrame().tabs == 4, "no volvió al modo desarrollo")
 end)
 step("pesca: guía por tramos", function()

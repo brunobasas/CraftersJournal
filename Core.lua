@@ -2,7 +2,7 @@ local ADDON_NAME, ES = ...
 local L = ES.L
 _G.CraftersJournal = ES
 
-ES.ICON = "Interface\\Icons\\INV_Misc_Coin_01"
+ES.ICON = "Interface\\Icons\\Trade_BlackSmithing" -- martillo y yunque: profesiones (minimapa y lista de addons)
 ES.ahOpen = false
 
 -- Modo desarrollo: lo que aún no está listo para los jugadores (pestañas Ganar
@@ -457,7 +457,9 @@ events:SetScript("OnEvent", function(_, event, arg1)
     C_Timer.After(0.2, function()
       if session ~= ES.ahSession or AHFrameShown() then return end -- ya se reabrió, o sigue abierta
       ES.ahOpen = false
-      ES.Scanner:Abort(L["Has cerrado la Casa de Subastas; escaneo cancelado."])
+      -- El servidor ya contó la petición: hay que esperar sus 15 min igualmente
+      ES.Scanner:Abort(string.format(L["Has cerrado la Casa de Subastas; escaneo cancelado. Déjala abierta hasta que termine. Podrás volver a escanear en %s."],
+        ES.Countdown(ES.Scanner:SecondsUntilNextScan())))
       ES:RefreshScanButtons()
     end)
   end

@@ -272,35 +272,99 @@ local function CreateLanguage(f)
 end
 
 ---------------------------------------------------------------------------
--- Interruptor de desarrollo: solo existe en la copia de desarrollo (ES.DEV_BUILD).
--- "DEV" = se ve todo; "JUGADOR" = como lo verá quien se baje el addon.
+-- Informar de un error: el juego no abre enlaces, así que se muestra el del
+-- Discord seleccionado para copiarlo con Ctrl+C
 ---------------------------------------------------------------------------
-local function CreateDevToggle(f)
-  if not ES.DEV_BUILD then return end
+ES.DISCORD_URL = "https://discord.gg/DjT4HatsF"
+local BUG_ICON = "Interface\\HelpFrame\\HelpIcon-Bug"
+
+local reportDialog
+local function ReportDialog()
+  if reportDialog then return reportDialog end
+  local d = CreateFrame("Frame", "CraftersJournalReportDialog", UIParent, "BackdropTemplate")
+  reportDialog = d
+  d:SetSize(440, 200)
+  d:SetPoint("CENTER", 0, 120)
+  d:SetFrameStrata("DIALOG")
+  d:EnableMouse(true)
+  d:SetBackdrop({
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 32, edgeSize = 32,
+    insets = { left = 11, right = 12, top = 12, bottom = 11 },
+  })
+  tinsert(UISpecialFrames, "CraftersJournalReportDialog") -- Escape lo cierra
+  d:Hide()
+
+  d.title = d:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  d.title:SetPoint("TOP", 0, -22)
+  d.text = d:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  d.text:SetPoint("TOP", d.title, "BOTTOM", 0, -12)
+  d.text:SetWidth(390)
+  d.label = d:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  d.label:SetPoint("TOP", d.text, "BOTTOM", 0, -14)
+
+  local box = CreateFrame("EditBox", nil, d, "InputBoxTemplate")
+  d.box = box
+  box:SetSize(330, 22)
+  box:SetPoint("TOP", d.label, "BOTTOM", 0, -6)
+  box:SetAutoFocus(false)
+  box:SetJustifyH("CENTER")
+  -- Solo para copiar: si se escribe algo, vuelve el enlace
+  box:SetScript("OnTextChanged", function(self, user)
+    if user then self:SetText(ES.DISCORD_URL) self:HighlightText() end
+  end)
+  box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+  box:SetScript("OnMouseUp", function(self) self:HighlightText() end)
+  box:SetScript("OnEscapePressed", function() d:Hide() end)
+  box:SetScript("OnEnterPressed", function() d:Hide() end)
+
+  local ok = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
+  d.ok = ok
+  ok:SetSize(110, 24)
+  ok:SetPoint("BOTTOM", 0, 20)
+  ok:SetText(OKAY or "Ok")
+  ok:SetScript("OnClick", function() d:Hide() end)
+
+  d:SetScript("OnShow", function()
+    -- Textos al mostrarse: el idioma puede haber cambiado
+    d.title:SetText(L["Informar de un error"])
+    d.text:SetText(L["¿Has visto información incorrecta, un error o algo nuevo que falte? Cuéntalo en el Discord con una captura de pantalla."])
+    d.label:SetText(L["Discord (Ctrl+C para copiar):"])
+    box:SetText(ES.DISCORD_URL)
+    box:SetFocus()
+    box:HighlightText()
+  end)
+  return d
+end
+
+function ES:ShowReportDialog()
+  ReportDialog():Show()
+end
+
+local function CreateReport(f)
   local b = CreateFrame("Button", nil, f, "BackdropTemplate")
-  f.devToggle = b
-  b:SetSize(84, 24)
-  b:SetPoint("RIGHT", f.languageButton, "LEFT", -8, 0)
+  f.reportButton = b
+  b:SetSize(92, 24)
+  b:SetPoint("TOPLEFT", 18, -15) -- a la izquierda del todo: a la derecha tapaba "Último escaneo"
   SetBackdrop(b, 12, 4)
+  b:SetBackdropColor(0.12, 0.115, 0.105, 0.98)
+  b:SetBackdropBorderColor(0.48, 0.40, 0.27, 1)
   b:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
-  b.text = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  b.text:SetPoint("CENTER")
-  if ES.DEV then
-    b:SetBackdropColor(0.30, 0.10, 0.35, 0.98)
-    b:SetBackdropBorderColor(0.75, 0.45, 0.90, 1)
-    b.text:SetText("|cffe0a0ff" .. L["Modo DEV"] .. "|r")
-  else
-    b:SetBackdropColor(0.10, 0.22, 0.10, 0.98)
-    b:SetBackdropBorderColor(0.45, 0.80, 0.40, 1)
-    b.text:SetText("|cff90ff90" .. L["Vista jugador"] .. "|r")
-  end
-  b:SetScript("OnClick", function() ES:SetUserPreview(ES.DEV) end)
+  b.icon = b:CreateTexture(nil, "OVERLAY")
+  b.icon:SetTexture(BUG_ICON)
+  b.icon:SetSize(18, 18)
+  b.icon:SetPoint("LEFT", 6, 0)
+  b.text = b:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  b.text:SetPoint("LEFT", b.icon, "RIGHT", 4, 0)
+  b.text:SetPoint("RIGHT", -6, 0)
+  b.text:SetTextColor(1, 0.82, 0.27)
+  b.text:SetText(L["Informar"])
+  b:SetScript("OnClick", function() ES:ShowReportDialog() end)
   b:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:AddLine(L["Modo desarrollo"])
-    GameTooltip:AddLine(L["Solo en tu copia de desarrollo: la versión de CurseForge no tiene este botón."], 0.8, 0.8, 0.8, true)
-    GameTooltip:AddLine(ES.DEV and L["Pulsa para ver el addon como lo verán los jugadores (sin Ganar dinero, Subastas, Pesca ni buscador)."]
-      or L["Pulsa para volver al modo desarrollo (todo a la vista)."], 0.5, 0.8, 1, true)
+    GameTooltip:AddLine(L["Informar de un error"])
+    GameTooltip:AddLine(L["Errores, datos incorrectos o sugerencias: en nuestro Discord."], 0.8, 0.8, 0.8, true)
     GameTooltip:Show()
   end)
   b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -356,6 +420,10 @@ function ES:CreateHeader(f)
     else
       GameTooltip:AddLine(L["Descarga todas las subastas y actualiza precios, rutas y alertas."], 0.8, 0.8, 0.8, true)
     end
+    local fail = ES:LastScanFail()
+    if fail and fail.reason then
+      GameTooltip:AddLine(string.format(L["Último intento (%s): %s"], date("%H:%M", fail.time), fail.reason), 1, 0.6, 0.2, true)
+    end
     GameTooltip:Show()
   end)
   scan:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -365,7 +433,7 @@ function ES:CreateHeader(f)
   -- "Último escaneo: hace 3 min", en pequeño junto al botón; se actualiza cada 30 s
   f.lastScan = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   f.lastScan:SetPoint("LEFT", scan, "RIGHT", 8, 0)
-  f.lastScan:SetWidth(140)
+  f.lastScan:SetWidth(170) -- cabe "Cancelado · último: hace 2 días"
   f.lastScan:SetJustifyH("LEFT")
   f.lastScan:SetWordWrap(false)
   local ticker = CreateFrame("Frame", nil, f)
@@ -379,8 +447,12 @@ function ES:CreateHeader(f)
 
   CreateSearch(f)
   if not ES.DEV then f.globalSearch:Hide() end -- buscador: solo en modo desarrollo (no en la 1.0)
-  CreateLanguage(f)
-  CreateDevToggle(f)
+  CreateLanguage(f) -- el interruptor de desarrollo está en Opciones > AddOns (Options.lua)
+  CreateReport(f)
+  -- El buscador (solo DEV) pasa a la derecha de Informar, algo más estrecho
+  f.globalSearch:ClearAllPoints()
+  f.globalSearch:SetPoint("LEFT", f.reportButton, "RIGHT", 8, 0)
+  f.globalSearch:SetWidth(180)
 
   local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", -3, -3)

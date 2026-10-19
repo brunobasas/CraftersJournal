@@ -8,7 +8,7 @@ import os
 sys.path.insert(0, os.environ.get("ESLUA", r"C:\Users\bruno\AppData\Local\Temp\eslua"))  # carpeta con lupa (Lua 5.1)
 from lupa import lua51
 
-ADDON = Path(r"C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns\CraftersJournal")
+ADDON = Path(__file__).resolve().parent.parent  # el repositorio (no depende del enlace en AddOns)
 SV = next(Path(r"C:\Program Files (x86)\World of Warcraft\_classic_beta_\WTF\Account").glob("*/SavedVariables/CraftersJournal.lua"))
 
 lua = lua51.LuaRuntime(unpack_returned_tuples=True)

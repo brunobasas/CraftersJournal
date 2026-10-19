@@ -1,6 +1,12 @@
 # Crafter's Journal
 
-## 0.34.1 (beta)
+## 0.34.3 (beta)
+
+- **Report a bug.** New "Report" button in the top-left corner of the window: it shows our Discord link, ready to copy, so you can send us bugs, wrong data or new discoveries (with a screenshot).
+- **Clearer Auction House scans.** If a scan doesn't finish (for example because the Auction House was closed before it ended), the header now says "Cancelled · last: …" instead of just showing the date of the previous scan, and the scan button's tooltip explains why. The message also reminds you to keep the Auction House open until the scan finishes.
+- New minimap and addon-list icon.
+
+## 0.34.2 (beta)
 
 First public beta for WoW Forever.
 

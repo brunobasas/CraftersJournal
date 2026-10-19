@@ -791,8 +791,23 @@ end
 -- "Último escaneo: hace 3 min" junto al botón (de la AH activa)
 function ES:UpdateLastScan()
   if not main or not main.lastScan then return end
-  local scan = self.db.scans and self.db.scans[self:RealmKey()]
-  main.lastScan:SetText(scan and (L["Último escaneo: "] .. TimeAgo(scan.time)) or L["Sin escanear"])
+  local key = self:RealmKey()
+  local scan = self.db.scans and self.db.scans[key]
+  local fail = self:LastScanFail()
+  if fail then
+    -- El último intento no acabó: que "hace 2 días" no parezca un escaneo perdido
+    main.lastScan:SetText("|cffff9933" .. L["Cancelado · último: "] .. (scan and TimeAgo(scan.time) or L["nunca"]) .. "|r")
+  else
+    main.lastScan:SetText(scan and (L["Último escaneo: "] .. TimeAgo(scan.time)) or L["Sin escanear"])
+  end
+end
+
+-- El último intento de escaneo, si falló después del último escaneo guardado
+function ES:LastScanFail()
+  local key = self:RealmKey()
+  local fail = type(self.db.lastScanFail) == "table" and self.db.lastScanFail[key]
+  local scan = self.db.scans and self.db.scans[key]
+  if fail and (not scan or fail.time > scan.time) then return fail end
 end
 
 function ES:OnAuctionHouseShow()

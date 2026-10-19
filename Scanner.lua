@@ -191,6 +191,10 @@ function Scanner:Abort(reason)
   self:UnmuteOthers()
   self.state = "idle"
   self.scanID = (self.scanID or 0) + 1 -- invalida lotes pendientes
+  -- Para avisar junto a "Último escaneo" de que el último intento no acabó
+  -- (si no, "hace 2 días" parece un fallo al guardar)
+  if type(ES.db.lastScanFail) ~= "table" then ES.db.lastScanFail = {} end
+  ES.db.lastScanFail[self.key or ES:RealmKey()] = { time = time(), reason = reason }
   if reason then
     ES:Print(reason)
     SetStatus(reason)
