@@ -1,5 +1,9 @@
 # Crafter's Journal
 
+## 0.35.2
+
+- **Waypoints for new Forever NPCs.** Some NPCs added in Forever have no location in the community databases yet, so clicking them said "unknown place". Odd Child (the quest "My First Real Potion" for Minor Discolored Healing Potion: inside the barn in Moonbrook, Westfall), Patricia Egan (Alchemy trainer, Dalaran) and Kaylaena Springwhisper (Engineering trainer, Mount Hyjal) now get a waypoint. For any NPC whose location still isn't known, the message now says so clearly.
+
 ## 0.35.1
 
 - **Fixed recipes learned at the trainer shown as known from the start.** Some recipes new to Forever (Mana Well, Camp Tent, Enchanted Lute, Sharpening Wheel, Reagent Bot, Faction Banner, Cerulean Dye, Sulfuric Acid) were treated as basic recipes you know from level 1, so the route could tell you to craft Mana Well at 15 when the trainer only teaches it at 20. They're now learned at the trainer at the right level (the trainer cost shows as "?" since it isn't known yet).

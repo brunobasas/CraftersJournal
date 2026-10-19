@@ -423,7 +423,11 @@ function WP.SetWaypoint(npcID)
   local npc = WP.NPC(npcID)
   if not npc then return false end
   if not npc.map then
-    ES:Print(string.format(L["%s está en %s."], npc.name, WP.LocationText(npc)))
+    if npc.area then -- en una mazmorra: se dice cuál
+      ES:Print(string.format(L["%s está en %s."], npc.name, WP.LocationText(npc)))
+    else -- PNJ nuevo de Forever que las bases de datos aún no han situado
+      ES:Print(string.format(L["Aún no se sabe dónde está %s: es nuevo de Forever y las bases de datos no lo tienen situado."], npc.name))
+    end
     return false
   end
   local where = WP.LocationText(npc)

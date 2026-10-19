@@ -226,6 +226,7 @@ ES.Locales.en = {
   [" · pulsa Empezar ruta antes de comprar|r"] = " · click Start route before buying|r",
   ["Hecho"] = "Done",
   ["precio desconocido"] = "unknown price",
+  ["Aún no se sabe dónde está %s: es nuevo de Forever y las bases de datos no lo tienen situado."] = "%s's location isn't known yet: it's new in Forever and the databases haven't placed it.",
   ["buscarlo en la AH"] = "search for it on the AH",
   [" · %d en el correo"] = " · %d in the mail",
   ["abrir la compra de %d en la AH"] = "open the AH purchase of %d",

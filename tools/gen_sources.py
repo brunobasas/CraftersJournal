@@ -8,6 +8,7 @@ quien da las misiones e instructores). Así el addon no necesita Questie para
 QuestieDB guarda sus datos "baked" en su .toc (Base64 + CBOR; los IDs con zlib).
 Uso:  python gen_sources.py
 """
+import csv
 import re
 import sys
 from pathlib import Path
@@ -142,6 +143,17 @@ def main():
             entry += [0, 0, 0, zone]  # mazmorra: sin mapa, solo la zona (para el nombre)
         npcs[npc_id] = entry
 
+    # PNJ nuevos de Forever que QuestieDB aún no ha situado (sin posición): la sacada
+    # de guías y bases de datos, con su fuente, en tools/forever/npc_locations.csv
+    fixed = 0
+    with open(HERE / "forever" / "npc_locations.csv", encoding="utf-8") as f:
+        for loc in csv.DictReader(f):
+            npc_id = int(loc["npc"])
+            if npc_id in npcs and len(npcs[npc_id]) <= 2:
+                npcs[npc_id] = [npcs[npc_id][0], loc["side"], int(loc["map"]),
+                                round(float(loc["x"]) / 100, 4), round(float(loc["y"]) / 100, 4)]
+                fixed += 1
+
     def lua_str(s):
         return '"' + str(s).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
@@ -199,7 +211,7 @@ def main():
     dest = ADDON / "Data" / "Sources.lua"
     dest.write_text("\n".join(out), encoding="utf-8")
     print(f"{dest}: {len(items)} objetos con fuente, {len(quests)} misiones, {len(npcs)} PNJ "
-          f"({sum(1 for e in npcs.values() if len(e) > 2)} con posición), {len(auctioneers)} subastadores, "
+          f"({sum(1 for e in npcs.values() if len(e) > 2)} con posición, {fixed} de npc_locations.csv), {len(auctioneers)} subastadores, "
           f"{len(sell_vendors)} que compran, {dest.stat().st_size // 1024} KB")
 
 
