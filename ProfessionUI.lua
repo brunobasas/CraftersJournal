@@ -1508,7 +1508,15 @@ local function ShopLines(plan, page)
       for _, e in ipairs(ES.VendorShop:List()) do if e.itemID == it.itemID then vendorEntry = e end end
     end
     if it.source == "ah" and ES:IsAuctionHouseOpen() then
-      action, onClick = L["buscarlo en la AH"], function() ES:SearchAuction(it.itemID) end
+      -- Abre la compra con lo que falta ya puesto (solo queda "Comprar ahora" de Blizzard)
+      local have = GetItemCount and (GetItemCount(it.itemID, true) or 0) or 0
+      local missing = math.ceil((need[it.itemID] or it.quantity) - 0.001) - have
+      if missing > 0 then
+        action = string.format(L["abrir la compra de %d en la AH"], missing)
+        onClick = function() ES:OpenAuctionBuy(it.itemID, missing) end
+      else
+        action, onClick = L["buscarlo en la AH"], function() ES:SearchAuction(it.itemID) end
+      end
     elseif vendorEntry then
       action = string.format(L["comprar %d a este vendedor"], vendorEntry.qty)
       onClick = function() ES.VendorShop:Buy(vendorEntry) end

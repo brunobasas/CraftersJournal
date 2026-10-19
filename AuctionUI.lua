@@ -79,6 +79,38 @@ function ES:SearchAuction(itemID, tries)
   ES:RenderAuctionPanel()
 end
 
+-- Cantidad en la página de compra de materiales de la AH moderna (la de Blizzard)
+local function SetBuyQuantity(qty)
+  local buy = AuctionHouseFrame and AuctionHouseFrame.CommoditiesBuyFrame
+  local display = buy and (buy.BuyDisplay or (buy.GetBuyDisplay and buy:GetBuyDisplay()))
+  if not (display and buy:IsShown()) then return false end
+  if display.SetQuantitySelected then
+    return pcall(display.SetQuantitySelected, display, qty)
+  end
+  local input = display.QuantityInput
+  if input and input.SetQuantity then return pcall(input.SetQuantity, input, qty) end
+  return false
+end
+
+-- Abre la compra de un material en la AH con la cantidad ya puesta (solo falta
+-- pulsar "Comprar ahora" de Blizzard). Si no es un material de la AH moderna, o el
+-- juego no deja, se busca como siempre (ES:SearchAuction)
+function ES:OpenAuctionBuy(itemID, qty)
+  local A, f = C_AuctionHouse, AuctionHouseFrame
+  if not (A and A.MakeItemKey and f and f.SelectBrowseResult and f.CommoditiesBuyFrame) then
+    return self:SearchAuction(itemID)
+  end
+  local ok = pcall(function()
+    f:SelectBrowseResult({ itemKey = A.MakeItemKey(itemID), minPrice = 0, totalQuantity = 0, containsOwnerItem = false })
+  end)
+  if not ok or not f.CommoditiesBuyFrame:IsShown() then return self:SearchAuction(itemID) end
+  state.searching = itemID
+  -- Los resultados llegan un momento después: se pone la cantidad en cuanto se pueda
+  SetBuyQuantity(qty)
+  C_Timer.After(0.4, function() SetBuyQuantity(qty) end)
+  C_Timer.After(1.2, function() SetBuyQuantity(qty) end)
+end
+
 -- Lo que hay ahora en la página de resultados para el objeto buscado
 local function ReadLivePrice()
   local itemID = state.searching
@@ -185,7 +217,12 @@ local function CreateRow(parent, i)
   row.sub:SetTextColor(0.75, 0.72, 0.65)
   row.section = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   row.section:SetPoint("LEFT", 2, 0)
-  row:SetScript("OnClick", function(self) if self.itemID then ES:SearchAuction(self.itemID) end end)
+  row:SetScript("OnClick", function(self)
+    if not self.itemID then return end
+    -- Con lo que falta: la compra abierta con la cantidad puesta; si no, buscarlo
+    local left = Remaining(self.itemID)
+    if left > 0 then ES:OpenAuctionBuy(self.itemID, left) else ES:SearchAuction(self.itemID) end
+  end)
   row:SetScript("OnEnter", function(self)
     if not self.itemID then return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -263,7 +300,7 @@ local function CreatePanel(ahFrame)
   p.nextButton:SetText(L["Buscar siguiente"])
   p.nextButton:SetScript("OnClick", function()
     local id = NextToBuy()
-    if id then ES:SearchAuction(id) end
+    if id then ES:OpenAuctionBuy(id, Remaining(id)) end
   end)
 
   local recalc = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")

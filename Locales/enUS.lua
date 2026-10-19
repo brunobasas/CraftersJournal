@@ -216,6 +216,7 @@ ES.Locales.en = {
   [" · pulsa Empezar ruta antes de comprar|r"] = " · click Start route before buying|r",
   ["Hecho"] = "Done",
   ["buscarlo en la AH"] = "search for it on the AH",
+  ["abrir la compra de %d en la AH"] = "open the AH purchase of %d",
   ["comprar %d a este vendedor"] = "buy %d from this vendor",
   ["%d de %d fabricaciones · faltan %s%d|r · %s/u"] = "%d of %d crafts · %s%d left|r · %s/ea",
   ["¡Ruta completada! %s de %d a %d."] = "Route completed! %s from %d to %d.",

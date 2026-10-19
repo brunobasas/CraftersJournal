@@ -763,6 +763,16 @@ step("portada: tarjetas de profesiones", function()
   for _, l in ipairs(page.lines) do if l.item == ahLine.item and l.onClick then l.onClick() end end
   assert(searched == ahLine.item, "con la AH abierta, el clic debería buscar el objeto")
   ES.SearchAuction, ES.IsAuctionHouseOpen = savedSearch, savedOpen
+  -- AH moderna: abre la compra del material con la cantidad que falta ya puesta
+  local selected, qtySet
+  local savedAHF, savedCAH = AuctionHouseFrame, C_AuctionHouse
+  AuctionHouseFrame = { SelectBrowseResult = function(_, r) selected = r.itemKey end,
+    CommoditiesBuyFrame = { IsShown = function() return true end,
+      BuyDisplay = { SetQuantitySelected = function(_, q) qtySet = q end } } }
+  C_AuctionHouse = { MakeItemKey = function(id) return { itemID = id } end }
+  ES:OpenAuctionBuy(ahLine.item, 7)
+  assert(selected and selected.itemID == ahLine.item and qtySet == 7, "no abrió la compra con la cantidad puesta")
+  AuctionHouseFrame, C_AuctionHouse = savedAHF, savedCAH
   -- Empezar ruta: comprar (cambian las bolsas) no cambia la ruta ni su coste
   page.view = "route"
   bags = 0
