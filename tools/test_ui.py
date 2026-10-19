@@ -840,15 +840,8 @@ step("portada: tarjetas de profesiones", function()
   log[#log+1] = "     paso actual: " .. tostring(cur.level) .. " · " .. tostring(cur.sub)
   ES.DetectSkill = savedDetect
   ES:DetectSkill(page)
-  -- Solo "Recalcular ruta" la libera: ni las opciones, ni el objetivo, ni la ✕, ni llegar al final
+  -- Llegar al objetivo no libera la ruta: se queda como completada
   local lp = ES.db.prof.Leatherworking
-  local bagsBefore = lp.useBags
-  page.bagsButton._scripts.OnClick(page.bagsButton)
-  assert(lp.lock and lp.useBags == bagsBefore, "un icono de opción liberó o cambió la ruta empezada")
-  page.toBox._text = "150"
-  ES:CalculatePlan(page)
-  assert(lp.lock and page.toBox._text == "225", "cambiar el objetivo liberó la ruta empezada")
-  for _, l in ipairs(page.lines) do assert(not l.onSkip, "con la ruta empezada no debería haber ✕") end
   ES.DetectSkill = function(_, p) p.from = 225 end
   ES:RefreshAfterSkill()
   assert(lp.lock and lp.lock.completed, "al llegar al objetivo la ruta debería quedar completada, no liberarse")
@@ -1189,6 +1182,14 @@ step("interruptor de desarrollo: vista de jugador", function()
   panel.devCheck:SetChecked(false)
   panel.devCheck._scripts.OnClick(panel.devCheck)
   assert(ES.DEV == true and not ES.db.userPreview and #ES:GetMainFrame().tabs == 4, "no volvió al modo desarrollo")
+end)
+step("al volver a abrir, sigue donde estabas", function()
+  local mf = ES:GetMainFrame()
+  ES:SelectPage("Leatherworking")
+  mf.openPage = nil
+  mf._scripts.OnShow(mf) -- cerrar y volver a abrir la ventana
+  assert(ES.db.lastPage == "Leatherworking", "al abrir debería seguir en la profesión: " .. tostring(ES.db.lastPage))
+  ES:SelectPage("home")
 end)
 step("merchant's favor: solo con su icono", function()
   -- Por defecto la ruta no usa recetas de Merchant's Favor; con el icono, sí (0 oro)

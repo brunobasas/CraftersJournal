@@ -13,6 +13,7 @@ local LOW_CHANCE_CRAFTS = 3 -- más fabricaciones por punto que esto: se avisa
 local ROW_HEIGHT, ROW_GAP, SECTION_HEIGHT = 40, 4, 24
 local LIST_WIDTH = 762
 local LEVEL_W = 70 -- columna de nivel de la vista Ruta (cabe "225–300")
+local VIEW_BUTTON_H = 32 -- botones Ruta / Profit / Lista de compra (como los del diario de mazmorras)
 
 local SOURCE_LABEL = ES.Localize({
   vendor = "Vendedor", ah = "AH", craft = "Fabricar", stock = "Tuyo",
@@ -24,9 +25,9 @@ local RANK_NAMES = ES.Localize({ [150] = "Oficial", [225] = "Experto", [300] = "
 local GOLD, GREEN, GREY, RED, ORANGE = "|cffffd100", "|cff40ff40", "|cff999999", "|cffff4040", "|cffff9933"
 
 local VIEWS = ES.Localize({
-  { key = "route",  label = "Ruta",            width = 82,  icon = "Interface\\Icons\\INV_Misc_Map_01" },
-  { key = "profit", label = "Profit",          width = 88,  icon = "Interface\\Icons\\INV_Misc_Coin_02" },
-  { key = "shop",   label = "Lista de compra", width = 128, icon = "Interface\\Icons\\INV_Misc_Note_01" },
+  { key = "route",  label = "Ruta",            width = 96,  icon = "Interface\\Icons\\INV_Misc_Map_01" },
+  { key = "profit", label = "Profit",          width = 96,  icon = "Interface\\Icons\\INV_Misc_Coin_02" },
+  { key = "shop",   label = "Lista de compra", width = 136, icon = "Interface\\Icons\\INV_Misc_Note_01" },
 }, "label")
 local VIEW_KEYS = { route = true, profit = true, shop = true }
 
@@ -664,10 +665,18 @@ function ES:CreateProfessionPage(page, profKey)
   page.view = "route"
   for _, v in ipairs(VIEWS) do if v.key == settings.view then page.view = v.key end end
 
+  -- Fondo que agrupa toda la página (como el del diario de mazmorras): un marrón más
+  -- claro, de la tarjeta de la profesión hasta debajo del total
+  local group = Panel(page, 0.19, 0.14, 0.08, 0.92)
+  group:SetPoint("TOPLEFT", 2, 0)
+  group:SetPoint("BOTTOMRIGHT", -2, 2)
+  group:SetFrameLevel(page:GetFrameLevel())
+  page.group = group
+
   -- Cabecera de la profesión
   local head = Panel(page)
-  head:SetPoint("TOPLEFT", 10, -2)
-  head:SetPoint("TOPRIGHT", -10, -2)
+  head:SetPoint("TOPLEFT", 10, -8)
+  head:SetPoint("TOPRIGHT", -10, -8)
   head:SetHeight(66)
   page.head = head
 
@@ -761,10 +770,23 @@ function ES:CreateProfessionPage(page, profKey)
   local prev
   for i = #VIEWS, 1, -1 do
     local v = VIEWS[i]
+    -- Como los del diario de mazmorras: más altos, icono grande a la izquierda
     local b = CreateFrame("Button", nil, head, "UIPanelButtonTemplate")
-    b:SetSize(v.width, 26)
-    if prev then b:SetPoint("RIGHT", prev, "LEFT", -4, 0) else b:SetPoint("RIGHT", -12, 0) end
-    b:SetText("|T" .. v.icon .. ":16:16:0:0:64:64:5:59:5:59|t " .. v.label)
+    b:SetSize(v.width, VIEW_BUTTON_H)
+    if prev then b:SetPoint("RIGHT", prev, "LEFT", -6, 0) else b:SetPoint("RIGHT", -12, 0) end
+    b.icon = b:CreateTexture(nil, "OVERLAY")
+    b.icon:SetSize(VIEW_BUTTON_H - 6, VIEW_BUTTON_H - 6)
+    b.icon:SetPoint("LEFT", 3, 0)
+    b.icon:SetTexture(v.icon)
+    b.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    b:SetText(v.label)
+    local label = b:GetFontString()
+    if label then
+      label:ClearAllPoints()
+      label:SetPoint("LEFT", b.icon, "RIGHT", 4, 0)
+      label:SetPoint("RIGHT", -6, 0)
+      label:SetJustifyH("CENTER")
+    end
     b:SetScript("OnClick", function() ES:SelectProfessionView(page, v.key) end)
     b.key = v.key
     page.viewButtons[#page.viewButtons + 1] = b
@@ -798,13 +820,9 @@ function ES:CreateProfessionPage(page, profKey)
       self:SetBackdropBorderColor(on and 1 or 0.4, on and 0.82 or 0.4, on and 0.25 or 0.4, 1)
     end
     b:SetScript("OnClick", function(self)
-      -- Ruta empezada: las opciones no se tocan (solo "Recalcular ruta" la libera)
-      if ES:RouteLock(profKey) then
-        ES:Print(L["Ruta empezada: pulsa Recalcular ruta para cambiar esto."])
-        return
-      end
       toggle()
       self:Refresh()
+      ES:StopRoute(profKey) -- otra opción es otra ruta: decisión tuya (comprar o fabricar no la libera)
       ES:CalculatePlan(page)
       if self:IsMouseOver() then self:GetScript("OnEnter")(self) end
     end)
@@ -812,10 +830,9 @@ function ES:CreateProfessionPage(page, profKey)
       GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
       GameTooltip:AddLine(title)
       for i, l in ipairs(lines()) do GameTooltip:AddLine(l, i == 1 and 1 or 0.7, i == 1 and 1 or 0.7, i == 1 and 1 or 0.7, true) end
+      GameTooltip:AddLine(L["Pulsa para cambiarlo."], 0.5, 0.8, 1)
       if ES:RouteLock(profKey) then
-        GameTooltip:AddLine(L["Ruta empezada: pulsa Recalcular ruta para cambiar esto."], 1, 0.6, 0.2, true)
-      else
-        GameTooltip:AddLine(L["Pulsa para cambiarlo."], 0.5, 0.8, 1)
+        GameTooltip:AddLine(L["Con la ruta empezada, cambiarlo calcula una ruta nueva."], 1, 0.6, 0.2, true)
       end
       GameTooltip:Show()
     end)
@@ -903,7 +920,7 @@ function ES:CreateProfessionPage(page, profKey)
   -- Lista
   local list = Panel(page, 0.07, 0.05, 0.03, 0.9)
   list:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -74)
-  list:SetPoint("BOTTOMRIGHT", -10, 4)
+  list:SetPoint("BOTTOMRIGHT", -10, 10)
   page.listPanel = list
   local scroll = WheelScroll(list)
   scroll:SetPoint("TOPLEFT", 8, -8)
@@ -1020,12 +1037,13 @@ function ES:CalculatePlan(page)
   local from = page.from or 1
   local to = tonumber(page.toBox:GetText()) or MAX_SKILL
   to = math.max(1, math.min(MAX_SKILL, to))
-  -- Ruta empezada: solo "Recalcular ruta" la libera. El objetivo es el suyo (no se
-  -- cambia) y al llegar a él se queda como completada hasta que la recalcules
+  -- Ruta empezada: cambiar el objetivo es otra ruta (decisión tuya: se libera). Lo
+  -- que pasa jugando no la libera: subir de nivel, comprar... y al llegar al
+  -- objetivo se queda como completada hasta que la recalcules
   local lock = self:RouteLock(page.profKey)
   if lock and to ~= lock.to then
-    to = lock.to
-    self:Print(L["Ruta empezada: pulsa Recalcular ruta para cambiar el objetivo."])
+    self:StopRoute(page.profKey)
+    lock = nil
   end
   if lock and from >= lock.to and not lock.completed then
     lock.completed = true
@@ -1194,13 +1212,13 @@ local function RouteLines(plan, page)
   local profIcon, profName = page.profIcon or ES.ICON, page.profName
   local settings = ES.db.prof[page.profKey]
   local locked = settings.lock ~= nil
-  -- ✕ de cada paso: quita la receta y se recalcula la ruta con otra en su lugar.
-  -- Con la ruta empezada no hay ✕ (solo "Recalcular ruta" la libera)
+  -- ✕ de cada paso: quita la receta y se recalcula la ruta con otra en su lugar
+  -- (con la ruta empezada, la libera: es decisión tuya cambiarla)
   local function Skip(id)
-    if locked then return nil end
     return function()
       settings.excluded = settings.excluded or {}
       settings.excluded[id] = true
+      ES:StopRoute(page.profKey)
       ES:CalculatePlan(page)
     end
   end
@@ -1293,14 +1311,14 @@ local function RouteLines(plan, page)
       local sub = string.format(L["Merchant's Favor: %d fichas"], r.favor)
         .. (r.favorRep and (" · " .. string.format(L["pide %s con el campamento"], ES.StandingName(r.favorRep))) or "")
       lines[#lines + 1] = {
-        level = tostring(r.train or st.from),
+        level = tostring(st.from), -- cuándo toca en la ruta (la columna va en orden)
         icon = "Interface\\Icons\\INV_Misc_Coin_17", title = title, sub = sub,
         value = string.format("|cff66bbff%d|r", r.favor), go = pick, onSkip = Skip(st.id),
         tooltip = TravelTooltip(title, sub, L["Vendedor más cercano"], pick),
       }
     elseif sourcedLine then
       sourcedLine.onSkip = Skip(st.id)
-      sourcedLine.level = tostring(r.train or st.from)
+      sourcedLine.level = tostring(st.from) -- cuándo toca en la ruta (la columna va en orden)
       lines[#lines + 1] = sourcedLine
     elseif learnSource then
       local trainer = st.learnSource == "trainer"
@@ -1314,7 +1332,7 @@ local function RouteLines(plan, page)
       end
       local title = string.format("%s %s", trainer and L["Entrenar"] or L["Comprar receta:"], r.name)
       lines[#lines + 1] = {
-        level = tostring(learnAt),
+        level = tostring(st.from), -- cuándo toca en la ruta (se puede aprender desde learnAt)
         icon = trainer and TRAIN_ICON or RECIPE_ICON,
         title = title,
         sub = LEARN_WHERE[st.learnSource] or "?",
@@ -1369,7 +1387,7 @@ local function RouteLines(plan, page)
     local r = page.data.recipes[id]
     if r then excluded[#excluded + 1] = r.name end
   end
-  if #excluded > 0 and not locked then -- con la ruta empezada no se cambian
+  if #excluded > 0 then
     table.sort(excluded)
     lines[#lines + 1] = {
       icon = "Interface\\Buttons\\UI-RefreshButton",
@@ -1377,6 +1395,7 @@ local function RouteLines(plan, page)
       sub = L["Clic para volver a tenerlas en cuenta"],
       onClick = function()
         settings.excluded = nil
+        ES:StopRoute(page.profKey)
         ES:CalculatePlan(page)
       end,
       tooltip = function(row)
@@ -1678,8 +1697,6 @@ function ES:RenderPlan(page)
     status = status .. GREY .. L[" · pulsa Empezar ruta antes de comprar|r"]
   end
   page.routeButton:SetText(lock and L["Recalcular ruta"] or L["Empezar ruta"])
-  -- Ruta empezada: el objetivo es el suyo (se cambia con "Recalcular ruta")
-  if lock then page.toBox:Disable() else page.toBox:Enable() end
   page.pricesButton:SetText(L["Actualizar precios"])
   page.pricesButton:SetShown(newPrices)
   page.status:SetPoint("RIGHT", newPrices and page.pricesButton or page.routeButton, "LEFT", -10, 0)
