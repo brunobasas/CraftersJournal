@@ -447,10 +447,13 @@ end
 
 -- Para una fila de la ruta: devuelve una función que elige el PNJ al pulsar
 -- (la posición del jugador puede cambiar) y las líneas del tooltip.
--- kind: "trainer" (profKey, cap) o "vendor" (itemID)
+-- kind: "trainer" (profKey, cap), "vendor" (itemID), "auction" (subastador) o
+-- "sell" (un PNJ que compra lo que fabricas: posadero o vendedor de materiales)
 function WP.Target(kind, a, b)
   return function()
     if kind == "trainer" then return WP.Nearest(WP.Trainers(a, b)) end
+    if kind == "auction" then return WP.Nearest(ES.Data.Auctioneers) end
+    if kind == "sell" then return WP.Nearest(ES.Data.SellVendors) end
     return WP.Nearest(WP.Vendors(a))
   end
 end

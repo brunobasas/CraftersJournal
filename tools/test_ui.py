@@ -688,6 +688,26 @@ step("portada: tarjetas de profesiones", function()
   assert(math.abs(cardPlan.net - detailCost) < 1, "tarjeta y detalle no coinciden con objetivo 150")
   page.toBox._text = "225"
   ES:CalculatePlan(page)
+  -- Clic en un paso: abre la receta en la profesión; "Fabricar N" fabrica (C_TradeSkillUI)
+  local opened, crafted
+  C_TradeSkillUI = { OpenRecipe = function(id) opened = id end, CraftRecipe = function(id, n) crafted = { id, n } end }
+  local savedKnown = ES.IsRecipeKnown
+  ES.IsRecipeKnown = function() return true end
+  ES:RenderPlan(page)
+  local craftLine
+  for _, l in ipairs(page.lines) do if l.onCraft then craftLine = l break end end
+  assert(craftLine, "los pasos con receta sabida deberían tener Fabricar")
+  craftLine.onClick()
+  assert(opened == page.plan.steps[1].id, "el clic no abrió la receta del paso")
+  craftLine.onCraft()
+  assert(crafted and crafted[1] == page.plan.steps[1].id and crafted[2] == page.plan.steps[1].crafts, "Fabricar no fabricó lo del paso")
+  local craftRow
+  for _, row in ipairs(page.rows) do if row.onCraft then craftRow = row break end end
+  assert(craftRow and craftRow.craft._shown ~= false, "falta el botón Fabricar en la fila")
+  craftRow.craft._scripts.OnEnter(craftRow.craft)
+  log[#log+1] = "     fabricar: " .. tostring(craftLine.craftLabel)
+  ES.IsRecipeKnown, C_TradeSkillUI = savedKnown, nil
+  ES:RenderPlan(page)
   -- ✕ en un paso: la receta sale de la ruta y una fila permite recuperarla
   local firstStep = page.plan.steps[1].id
   local skipRow
@@ -746,6 +766,44 @@ step("portada: tarjetas de profesiones", function()
   assert(#rebuilt.steps == #before.steps and rebuilt.steps[1].id == before.steps[1].id, "la ruta fijada cambió al recargar")
   assert(math.abs(rebuilt.net - net) < 1, "el coste de la ruta fijada cambió al recargar")
   log[#log+1] = string.format("     ruta fijada: %d pasos, %s", #rebuilt.steps, tostring(page.routeButton._text))
+  -- Gasto real: comprar un material de la ruta al vendedor y vender algo fabricado
+  local buyItem, sellItem = rebuilt.shopping[1].itemID, nil
+  for _, st in ipairs(rebuilt.steps) do if st.sale then sellItem = st.sale.itemID break end end
+  local counts = { [buyItem] = 0, [sellItem] = 10 }
+  GetItemCount = function(id) return counts[id] or 0 end
+  GetMerchantNumItems = function() return 1 end
+  GetMerchantItemID = function() return buyItem end
+  GetMerchantItemInfo = function() return "x", nil, 300, 3 end -- 3 por 300: 100 cada uno
+  ES.Ledger:SetWhere("merchant")
+  ES.Ledger.Snapshot()
+  counts[buyItem], counts[sellItem] = 6, 7
+  ES.Ledger.Process()
+  local real = ES.Ledger:Summary("Leatherworking")
+  assert(real.buy == 600, "compra al vendedor: " .. tostring(real.buy))
+  assert(real.sold[sellItem] == 3 and real.sell == 3 * (ES:VendorSellPrice(sellItem) or 0), "venta al vendedor: " .. tostring(real.sell))
+  ES.Ledger:SetWhere(nil)
+  ES:RenderPlan(page)
+  assert(tostring(page.real.materials._text):find("Real"), "falta la fila Real en la franja")
+  page.view = "profit"
+  ES:RenderPlan(page)
+  local soldLine
+  for _, l in ipairs(page.lines) do if l.item == sellItem and l.sub and l.sub:find("vendidos 3") then soldLine = l end end
+  assert(soldLine, "la vista Profit debería decir cuántos llevas vendidos")
+  assert(soldLine.go, "sin vendedor ni AH abiertos, el clic marca dónde venderlo")
+  log[#log+1] = string.format("     gasto real: compras %d, ventas %d · %s", real.buy, real.sell, page.real.total._text)
+  page.view = "route"
+  GetMerchantNumItems, GetMerchantItemID, GetMerchantItemInfo = nil, nil, nil
+  -- Portada: la tarjeta de la profesión con la ruta en curso se distingue
+  ES:SelectPage("home")
+  ES:RenderHome()
+  local activeCard
+  for _, c in ipairs(ES.homePage.cards) do if c.key == "Leatherworking" then activeCard = c end end
+  assert(activeCard and activeCard.active and tostring(activeCard.note._text):find("Ruta en curso"),
+    "la tarjeta no indica la ruta en curso: " .. tostring(activeCard and activeCard.note._text))
+  activeCard._scripts.OnEnter(activeCard)
+  activeCard._scripts.OnLeave(activeCard)
+  log[#log+1] = "     portada: " .. tostring(activeCard.note._text)
+  ES:SelectPage("Leatherworking")
   -- Recalcular ruta la libera
   page.routeButton._scripts.OnClick(page.routeButton)
   assert(not ES.db.prof.Leatherworking.lock, "Recalcular ruta no la liberó")
@@ -977,6 +1035,27 @@ step("interruptor de desarrollo: vista de jugador", function()
   panel.devCheck:SetChecked(false)
   panel.devCheck._scripts.OnClick(panel.devCheck)
   assert(ES.DEV == true and not ES.db.userPreview and #ES:GetMainFrame().tabs == 4, "no volvió al modo desarrollo")
+end)
+step("merchant's favor: solo con su icono", function()
+  -- Por defecto la ruta no usa recetas de Merchant's Favor; con el icono, sí (0 oro)
+  local data = ES.Data.Engineering
+  local plan = ES.Planner:Plan(data, ES:PlanOptions("Engineering", 1, 225, nil))
+  for _, st in ipairs(plan.steps) do assert(not st.recipe.favor, "receta de Merchant's Favor sin el icono: " .. st.recipe.name) end
+  local favor
+  for _, r in pairs(data.recipes) do if r.favor then favor = r break end end
+  assert(ES.Planner.LearnSkill(favor, { useFavor = true }) == (favor.train or 1), "con el icono se puede aprender")
+  local page
+  for _, p in ipairs(ES.professionPages) do if p.profKey == "Engineering" then page = p end end
+  assert(page and page.favorButton, "falta el icono de Merchant's Favor")
+  page.favorButton._scripts.OnEnter(page.favorButton)
+  page.favorButton._scripts.OnClick(page.favorButton)
+  assert(ES.db.prof.Engineering.useFavor, "el icono no activó Merchant's Favor")
+  local withFavor = ES.Planner:Plan(data, ES:PlanOptions("Engineering", 1, 225, nil))
+  local used = 0
+  for _, st in ipairs(withFavor.steps) do if st.recipe.favor then used = used + 1 end end
+  log[#log+1] = string.format("     merchant's favor: %d pasos con el icono, neto %.1f oro (sin él %.1f)", used, withFavor.net / 10000, plan.net / 10000)
+  page.favorButton._scripts.OnClick(page.favorButton)
+  assert(not ES.db.prof.Engineering.useFavor, "el icono no desactivó Merchant's Favor")
 end)
 step("pesca: guía por tramos", function()
   -- Página propia: tramos con cómo conseguir el rango y las zonas; marca el tuyo

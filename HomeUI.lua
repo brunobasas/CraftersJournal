@@ -38,6 +38,7 @@ local MIN_CARD_W, CARD_H, GAP = 383, 112, 12
 local GREEN, RED, GREY, ORANGE, GOLD = "|cff40ff40", "|cffff4040", "|cff9d9d9d", "|cffff9933", "|cffffd100"
 local BORDER = { 0.55, 0.45, 0.28 }
 local BORDER_HOVER = { 1, 0.82, 0.25 }
+local BORDER_ACTIVE = { 0.35, 0.85, 0.35 } -- profesión con una ruta en curso ("Empezar ruta")
 local INSET = 4 -- borde de la tarjeta
 
 -- Ilustraciones del libro de profesiones oficial de Forever (atlas del cliente).
@@ -190,7 +191,7 @@ local function CreateCard(parent)
     if self.tooltip then self.tooltip(self) end
   end)
   card:SetScript("OnLeave", function(self)
-    self:SetBackdropBorderColor(unpack(BORDER))
+    self:SetBackdropBorderColor(unpack(self.active and BORDER_ACTIVE or BORDER))
     GameTooltip:Hide()
   end)
   card:SetScript("OnClick", function(self)
@@ -203,13 +204,15 @@ end
 ES.UI.CreateCard, ES.UI.SetCardArt = CreateCard, SetCardArt
 ES.UI.CARD_MIN_W, ES.UI.CARD_H, ES.UI.CARD_GAP = MIN_CARD_W, CARD_H, GAP
 
--- Pinta las tarjetas `cards` ({ key, name, icon, learned, cost, level, note, tooltip, onClick })
--- en page.content (page.cards guarda los marcos) y las coloca
+-- Pinta las tarjetas `cards` ({ key, name, icon, learned, cost, level, note, tooltip, onClick, active })
+-- en page.content (page.cards guarda los marcos) y las coloca. active: ruta en curso (borde verde)
 function ES.UI.RenderCards(page, cards)
   for i, c in ipairs(cards) do
     local card = page.cards[i] or CreateCard(page.content)
     page.cards[i] = card
     card.key, card.tooltip, card.iconPath, card.onClick = c.key, c.tooltip, c.icon, c.onClick
+    card.active = c.active
+    card:SetBackdropBorderColor(unpack(c.active and BORDER_ACTIVE or BORDER))
     card.icon:SetTexture(c.icon)
     card.name:SetText(c.name)
     card.cost:SetText(c.cost)
@@ -366,6 +369,11 @@ local function ProfessionTooltip(e)
       GameTooltip:AddLine(string.format(L["El objetivo se cambia dentro de la profesión (máximo %d)."], ES.MAX_SKILL), 0.6, 0.6, 0.6, true)
     end
     local plan = e.plan
+    local lock = ES:RouteLock(e.key)
+    if lock and plan then
+      GameTooltip:AddLine(string.format(L["Ruta en curso (de %d a %d): lo que compras no cambia la ruta ni su coste"], lock.from, lock.to),
+        0.4, 1, 0.4, true)
+    end
     if plan then
       local W = { 0.8, 0.8, 0.8, 1, 1, 1 }
       GameTooltip:AddLine(" ")
@@ -402,7 +410,11 @@ function ES:RenderHome()
   for _, e in ipairs(entries) do
     local plan = e.plan
     local note
-    if e.guide then
+    local lock = ES:RouteLock(e.key)
+    if lock and plan then
+      -- Ruta empezada: se ve de un vistazo (borde verde y aviso)
+      note = GREEN .. string.format(L["Ruta en curso · de %d a %d"], lock.from, lock.to) .. "|r"
+    elseif e.guide then
       note = GREY .. string.format(L["Tramo %d-%d de la guía"], e.guide.from, e.guide.to) .. "|r"
     elseif e.pending then
       note = GREY .. L["Calculando la ruta…"] .. "|r"
@@ -421,7 +433,7 @@ function ES:RenderHome()
       key = e.key, name = ES:ProfLabel(e.key), icon = e.prof.icon or ES.ICON, learned = e.learned,
       cost = e.guide and (GREY .. L["Guía de zonas"] .. "|r") or plan and SignedCost(plan.net) or e.pending and (GREY .. "…|r") or (e.from >= e.target and (GREEN .. (e.from >= ES.MAX_SKILL and L["Al máximo"] or L["Objetivo cumplido"]) .. "|r") or (GREY .. "—|r")),
       level = string.format(L["Nivel %s%d|r / %d"], e.learned and GOLD or GREY, e.from, e.target),
-      note = note or "", tooltip = ProfessionTooltip(e),
+      note = note or "", tooltip = ProfessionTooltip(e), active = (lock and plan) and true or nil,
     }
   end
 

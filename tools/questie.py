@@ -19,7 +19,9 @@ TOC = QUESTIE / "QuestieDB_Forever.toc"
 ZONES = QUESTIE / "support" / "Forever" / "Zones"
 
 ITEM = {"npcDrops": 2, "objectDrops": 3, "vendors": 14, "questRewards": 6}
-NPC = {"name": 1, "minLevel": 4, "maxLevel": 5, "spawns": 7, "zoneID": 9, "friendlyToFaction": 13}
+NPC = {"name": 1, "minLevel": 4, "maxLevel": 5, "spawns": 7, "zoneID": 9, "friendlyToFaction": 13, "npcFlags": 15}
+# npcFlags de Forever (los de Classic, src/corrections/enum/expansions.lua de QuestieDB)
+NPC_VENDOR, NPC_INNKEEPER, NPC_AUCTIONEER = 4, 128, 4096
 QUEST = {"name": 1, "startedBy": 2, "requiredLevel": 4, "requiredRaces": 6}
 
 
@@ -86,6 +88,12 @@ def stored(key):
     if m:
         return "".join(store[f"{key}-{i}"] for i in range(1, int(m.group(1)) + 1))
     return v
+
+
+def all_ids(prefix):
+    """Todos los IDs de un tipo ("Npc", "Item"...) que hay en la base de datos"""
+    pat = re.compile(rf"X-{prefix}-(\d+)-")
+    return sorted({int(m.group(1)) for k in store for m in [pat.match(k)] if m})
 
 
 def row(prefix, eid):

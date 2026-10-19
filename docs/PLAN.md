@@ -128,7 +128,7 @@ La 1.0 son **Subir profesiones** y **Colección de recetas** (8 profesiones). Lo
 - [ ] **Ruta 1-225 de las 8 profesiones** revisada al menos una vez en el juego (instructor de cada rango, recetas de vendedor, intermedios). Empezar por la que estés subiendo.
 - [ ] **Instructores** de Herrería, Peletería, Encantamiento, Cocina y Primeros auxilios: comparar con guías de Forever (wow-professions.com tiene las 8) y corregir con `trainer_overrides.csv`.
 - [ ] **Barra de progreso de la colección** con los atlas exactos de la de Forever (`/es pestaña` sobre la barra de nivel del libro de profesiones).
-- [ ] **Merchant's Favor en la ruta:** el plan no puede contar con esas recetas (cuestan fichas y reputación). Marcarlas como "no disponibles" para la ruta o avisar.
+- [x] **Merchant's Favor en la ruta (0.35.0):** fuera de la ruta (Planner.LearnSkill); antes salían gratis (SAF-T Dynamite, Gizmo Girdle, Dented Goggles, Mystic Mushroom).
 - [ ] **Estaciones:** recetas que piden yunque, forja, fuego, horno o estación de campamento. Al menos avisarlo en la ruta y en la ficha.
 - [ ] **Textos en inglés** revisados por alguien que lo hable bien (los de CurseForge también).
 - [ ] **Panel de la AH:** confirmar que es útil en la 1.0 o esconderlo en modo DEV.
@@ -139,8 +139,10 @@ La 1.0 son **Subir profesiones** y **Colección de recetas** (8 profesiones). Lo
 - [ ] `CHANGELOG.md` para la 1.0 (el empaquetador lo usa como notas de la versión).
 
 ### Después de la 1.0
-- **Gasto real de la ruta (decidido el 2026-10-19):** con la ruta fijada ("Empezar ruta", 0.34.4), registrar lo que el jugador gasta en los materiales de la ruta: compras al vendedor (objeto, cantidad y precio, exacto), compras en la AH (lo pagado al comprar; las pujas, por la factura del correo, que Mail.lua ya lee). Mostrar "Gastado en la ruta: X de Y previstos", solo con los objetos de la lista de la compra.
-- Revisar la ruta de Peletería 169-225: con los datos reales pide ~1474 cueros pesados de 120 a 225 (Guardian Gloves, Nightscape, Wild Leather); comprobar si es real o si sobran intermedios.
+- [x] **Gasto real de la ruta (0.35.0, Ledger.lua):** con la ruta fijada, la franja enseña "Real" bajo lo previsto: compras al vendedor y en la AH, instructor y depósitos, ventas al vendedor y en la AH (correos). Solo los objetos de la ruta.
+- [x] **Vender y anunciar desde la vista Profit (0.35.0):** con el vendedor abierto, clic = vender lo que toca; con la AH abierta, clic = anunciar al precio sugerido; si no, marca el subastador o el vendedor más cercano (ES.Data.Auctioneers / SellVendors, de QuestieDB). **Regla cambiada el 2026-10-19:** el addon nunca compra ni vende sin un clic explícito del jugador que diga qué va a hacer (antes: nunca compra ni vende).
+- [ ] Probar en el juego la lectura del gasto real (sobre todo la AH de Forever: si las compras llegan a las bolsas o por correo) y el anuncio con C_AuctionHouse.PostItem/PostCommodity.
+- Revisado (2026-10-19): los ~1490 cueros pesados de Peletería 1-225 son 203 Thick Leather fabricados (6 pesados cada uno) para Nightscape y Wild Leather: con los precios del escaneo sale más barato que comprar el cuero grueso. Si en la AH baja el cuero grueso, la ruta lo compra.
 - Fuentes de los pergaminos nuevos de Forever cuando las publiquen (F1), regenerar con QuestieDB nuevo.
 - Pesca (ya hecha en modo DEV) y buscador de la cabecera: publicarlos en una 1.1.
 - Ganar dinero 2.0 (G) y Subastas.

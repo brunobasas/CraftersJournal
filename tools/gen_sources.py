@@ -13,7 +13,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from questie import ITEM, NPC, QUEST, at, field, ids, load_store, row, seq, zone_tables  # noqa: E402
+from questie import (ITEM, NPC, NPC_AUCTIONEER, NPC_INNKEEPER, QUEST, all_ids, at, field, ids,  # noqa: E402
+                     load_store, row, seq, zone_tables)
 
 HERE = Path(__file__).resolve().parent
 ADDON = HERE.parent
@@ -97,6 +98,26 @@ def main():
                          field("Quest", q, QUEST["requiredLevel"], qr) or 0, starters)
             npcs_needed.update(starters)
 
+    # Subastadores (para "poner en la AH" desde la vista Profit) y posaderos: hay
+    # uno en cada pueblo y, como cualquier vendedor, compran lo que fabricas
+    auctioneers, innkeepers = [], []
+    for npc_id in all_ids("Npc"):
+        r = row("Npc", npc_id)
+        flags = r and field("Npc", npc_id, NPC["npcFlags"], r)
+        if not isinstance(flags, int):
+            continue
+        name = field("Npc", npc_id, NPC["name"], r) or ""
+        if flags & NPC_AUCTIONEER and name.startswith("Auctioneer"):  # no los intendentes con la marca puesta
+            auctioneers.append(npc_id)
+        elif flags & NPC_INNKEEPER:
+            innkeepers.append(npc_id)
+    sell_vendors = set(innkeepers)
+    for item_id in vendor_items:  # quien vende hilo, sal... también compra
+        if item_id in items:
+            sell_vendors.update(items[item_id][0])
+    npcs_needed.update(auctioneers)
+    npcs_needed.update(sell_vendors)
+
     npcs = {}
     for npc_id in sorted(npcs_needed):
         r = row("Npc", npc_id)
@@ -170,11 +191,16 @@ def main():
         lv = levels(npc_id)
         if lv and npc_id in npcs:
             out.append("  [%d] = { %d, %d }," % (npc_id, lv[0], lv[1]))
-    out += ["}", ""]
+    out += ["}", "",
+            "-- Subastadores, y PNJ que compran lo que fabricas (posaderos y vendedores de materiales):",
+            "-- el clic de la vista Profit marca el más cercano",
+            "ES.Data.Auctioneers = " + lua_ids(sorted(n for n in auctioneers if n in npcs)),
+            "ES.Data.SellVendors = " + lua_ids(sorted(n for n in sell_vendors if n in npcs)), ""]
     dest = ADDON / "Data" / "Sources.lua"
     dest.write_text("\n".join(out), encoding="utf-8")
     print(f"{dest}: {len(items)} objetos con fuente, {len(quests)} misiones, {len(npcs)} PNJ "
-          f"({sum(1 for e in npcs.values() if len(e) > 2)} con posición), {dest.stat().st_size // 1024} KB")
+          f"({sum(1 for e in npcs.values() if len(e) > 2)} con posición), {len(auctioneers)} subastadores, "
+          f"{len(sell_vendors)} que compran, {dest.stat().st_size // 1024} KB")
 
 
 if __name__ == "__main__":

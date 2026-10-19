@@ -37,10 +37,56 @@ local MAX_EXTRA_MIN = 100     -- o 1 plata, lo que sea mayor
 -- Recetas de pago usadas menos puntos de los supuestos al elegirlas (ver Planner:Plan)
 local FEE_PASSES = 4          -- pasadas como mucho
 local FEE_SLACK = 0.75        -- se repite si se usó menos del 75% de lo supuesto
+-- Sin zigzag (ver Planner.Smooth)
+local SMOOTH_MIN = 3          -- pasos de menos puntos que esto son "cortos"
+local SMOOTH_TOLERANCE = 100  -- cobre que puede costar de más hacer el tramo con una sola receta
+local SMOOTH_PCT = 0.005      -- o el 0,5% de los materiales, lo que sea mayor
+local SMOOTH_PASSES = 4       -- tramos que se arreglan como mucho
 -- Recetas de pergamino que se prueba a quitar al acabar la ruta (ver Planner:Plan)
 local MAX_SEARCH = 3
 local SEARCH_MIN_SAVING = 10  -- cobre: por debajo no merece cambiar la ruta
 local SEARCH_SOURCES = { vendor = true, ah = true, scroll = true, quest = true }
+
+-- Tramos de pasos cortos (menos de SMOOTH_MIN puntos cada uno, al menos dos
+-- seguidos): se rehace la ruta con cada receta del tramo para todo él (ruta fijada,
+-- una pasada) y se queda la más barata de las que no cuestan más de SMOOTH_TOLERANCE
+-- (o SMOOTH_PCT de los materiales) que la original y llegan igual de lejos.
+function Planner.Smooth(data, opts, plan)
+  local skip = {} -- tramos (por su nivel de inicio) que no se pudieron arreglar
+  for _ = 1, SMOOTH_PASSES do
+    local steps, window = plan.steps, nil
+    local i = 1
+    while i <= #steps and not window do
+      local j = i
+      while j <= #steps and steps[j].to - steps[j].from < SMOOTH_MIN do j = j + 1 end
+      if j - i >= 2 and not skip[steps[i].from] then window = { i, j - 1 } else i = math.max(i + 1, j) end
+    end
+    if not window then return plan end
+    local from, to = steps[window[1]].from, steps[window[2]].to
+    local allowed = plan.net + math.max(SMOOTH_TOLERANCE, SMOOTH_PCT * (plan.reagentCost or 0))
+    local best, tried = nil, {}
+    for k = window[1], window[2] do
+      local id = steps[k].id
+      if not tried[id] then
+        tried[id] = true
+        local o = {}
+        for key, v in pairs(opts) do o[key] = v end
+        o.forced = {}
+        for s, c in pairs(plan.choice) do o.forced[s] = c end
+        for s = from, to - 1 do o.forced[s] = id end
+        local p = Planner:Plan(data, o)
+        if p.reached >= plan.reached and p.net <= allowed and (not best or p.net < best.net) then best = p end
+      end
+    end
+    if best then
+      best.cheapest, best.craftCostUsed = plan.cheapest, plan.craftCostUsed
+      plan = best
+    else
+      skip[from] = true -- ninguna sirve: se deja como estaba
+    end
+  end
+  return plan
+end
 
 -- Unidades de cada material que pide la ruta desde el nivel `level` hasta el final
 function Planner.NeedFrom(plan, level)
@@ -98,6 +144,9 @@ Planner.Annotate = Annotate
 function Planner.LearnSkill(recipe, opts)
   if Known(recipe) then return recipe.train or 1 end -- ya la sabes: siempre disponible
   if recipe.rep and not ES:RepMet(recipe.rep) then return nil end -- te falta reputación
+  -- Merchant's Favor: se compra con fichas y reputación del campamento, no con oro.
+  -- Solo con su icono activado (opts.useFavor; por defecto no): entonces cuesta 0 oro
+  if recipe.favor then return opts.useFavor and (recipe.train or 1) or nil end
   if Sourced(recipe, opts) then
     local src = ES.Waypoints.RecipeSource(recipe, ScanPrices(), opts.noQuests)
     return src and src.best and (recipe.train or 1) or nil
@@ -111,11 +160,13 @@ function Planner.LearnSkill(recipe, opts)
 end
 
 -- Cuánto cuesta aprender la receta y de dónde: "known" (ya la sabes), "trainer",
--- "vendor", "scroll", "owned" (pergamino en tus bolsas), "quest", "ah" o "unknown"
+-- "vendor", "scroll", "owned" (pergamino en tus bolsas), "quest", "ah", "favor"
+-- (Merchant's Favor: fichas, no oro) o "unknown"
 function Planner.LearnCost(ctx, recipe)
   if Known(recipe) then return 0, "known" end
   if recipe.rep and not ES:RepMet(recipe.rep) then return 0, "rep" end -- solo para la vista Recetas
   if recipe.fee then return recipe.fee, "trainer" end
+  if recipe.favor then return 0, "favor" end
   if Sourced(recipe, ctx.opts) then
     local src = ES.Waypoints.RecipeSource(recipe, ScanPrices(), ctx.opts.noQuests)
     if src and src.best then return src.best.cost, src.best.kind end
@@ -490,6 +541,16 @@ end
 -- opts = { from, to, includeScrolls, hours (duración subasta), neutral, reuseCrafted, ignoreSupply, cap,
 --          owned = { [itemID] = cantidad en bolsas/banco } }
 function Planner:Plan(data, opts)
+  -- Sin zigzag: donde la ruta alterna recetas en pasos de 1-2 puntos (Light Leather
+  -- y Light Armor Kit, punto sí punto no), se prueba a hacer todo el tramo con una
+  -- sola y se queda si apenas cuesta más (ver Smooth)
+  if not opts.forced and not opts.smoothed then
+    local o = {}
+    for k, v in pairs(opts) do o[k] = v end
+    o.smoothed = true
+    return Planner.Smooth(data, o, Planner:Plan(data, o))
+  end
+
   -- Con "usar bolsas y banco": la ruta se elige sin contar lo tuyo (ver abajo), así
   -- que una receta de pergamino puede ganar aunque la alternativa use materiales que
   -- ya llevas y salga más barata de verdad (Deviate Scale Cloak frente a Embossed

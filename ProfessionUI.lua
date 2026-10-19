@@ -17,7 +17,7 @@ local SOURCE_LABEL = ES.Localize({
   vendor = "Vendedor", ah = "AH", craft = "Fabricar", stock = "Tuyo",
   owned = "Bolsas",
 })
-local LEARN_LABEL = ES.Localize({ trainer = "instructor", vendor = "receta del vendedor", scroll = "pergamino AH", unknown = "pergamino/drop, precio ?",
+local LEARN_LABEL = ES.Localize({ trainer = "instructor", vendor = "receta del vendedor", scroll = "pergamino AH", unknown = "pergamino/drop, precio ?", favor = "Merchant's Favor",
   quest = "misión", ah = "pergamino en la AH", owned = "pergamino en tus bolsas", known = "ya la sabes" })
 local RANK_NAMES = ES.Localize({ [150] = "Oficial", [225] = "Experto", [300] = "Artesano" })
 local GOLD, GREEN, GREY, RED, ORANGE = "|cffffd100", "|cff40ff40", "|cff999999", "|cffff4040", "|cffff9933"
@@ -128,6 +128,7 @@ function ES:PlanOptions(profKey, from, to, cap)
     sourcedScrolls = ES.Waypoints.SOURCED_PROFESSIONS[profKey] or nil,
     noQuests = settings.useQuests == false or nil, -- icono de misión desactivado
     excluded = settings.excluded and next(settings.excluded) and settings.excluded or nil, -- quitadas con la ✕
+    useFavor = settings.useFavor or nil, -- recetas de Merchant's Favor (icono; por defecto no)
   }
 end
 
@@ -221,7 +222,7 @@ function ES:PlanKey(profKey, from, to, cap)
   local settings = self.db.prof and self.db.prof[profKey] or {}
   local scan = self.db.scans and self.db.scans[self:RealmKey()]
   return table.concat({ profKey, self.planGen, scan and scan.time or 0, from, to, tostring(cap), tostring(settings.useBags),
-    tostring(settings.useQuests), self:RealmKey(), ExcludedKey(settings) }, ":")
+    tostring(settings.useQuests), self:RealmKey(), ExcludedKey(settings), tostring(settings.useFavor) }, ":")
 end
 
 -- Ruta de una profesión: la de la caché si vale; si no, se calcula repartida entre
@@ -500,6 +501,21 @@ local function CreateRow(parent)
   skip:SetScript("OnLeave", function() GameTooltip:Hide() end)
   skip:Hide()
 
+  -- "Fabricar N" en los pasos de la ruta (line.onCraft): fabrica desde tu clic
+  local craft = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+  row.craft = craft
+  craft:SetSize(96, 20)
+  craft:SetPoint("RIGHT", row.value, "LEFT", -10, 0)
+  craft:SetScript("OnClick", function() if row.onCraft then row.onCraft() end end)
+  craft:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(self:GetText() or "")
+    GameTooltip:AddLine(L["Fabrica las que faltan para este paso (como mucho, las que te dan los materiales que llevas)."], 0.8, 0.8, 0.8, true)
+    GameTooltip:Show()
+  end)
+  craft:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  craft:Hide()
+
   row:SetScript("OnEnter", function(self) if self.tooltip then self.tooltip(self) end end)
   row:SetScript("OnLeave", function() GameTooltip:Hide() end)
   -- Filas de instructor o vendedor: clic para marcar el camino al más cercano
@@ -551,13 +567,17 @@ local function StyleRow(row, line)
     row.title:SetPoint("TOPLEFT", anchor, "TOPLEFT", x, -7)
     row.sub:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", x, 7)
   end
-  row.title:SetPoint("RIGHT", -170, 0)
-  row.sub:SetPoint("RIGHT", -170, 0)
+  local right = line.onCraft and -290 or -170 -- con "Fabricar N", el texto deja sitio al botón
+  row.title:SetPoint("RIGHT", right, 0)
+  row.sub:SetPoint("RIGHT", right, 0)
   row.tooltip = line.tooltip
   row.go = line.go
   row.onClick = line.onClick
   row.onSkip = line.onSkip
   row.skip:SetShown(line.onSkip ~= nil)
+  row.onCraft = line.onCraft
+  row.craft:SetShown(line.onCraft ~= nil)
+  if line.onCraft then row.craft:SetText(line.craftLabel) end
   row.value:ClearAllPoints()
   row.value:SetPoint("RIGHT", line.onSkip and -30 or -12, 0)
 end
@@ -648,10 +668,10 @@ function ES:CreateProfessionPage(page, profKey)
   toHint:SetPoint("LEFT", page.toBox, "RIGHT", 6, 0)
 
   -- Empezar ruta (la fija) / Recalcular ruta (la libera y la rehace con lo que llevas)
-  local routeButton = CreateFrame("Button", nil, head, "UIPanelButtonTemplate")
+  -- (a la derecha de la línea de estado, bajo la franja de resumen: se coloca allí abajo)
+  local routeButton = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
   page.routeButton = routeButton
-  routeButton:SetSize(120, 22)
-  routeButton:SetPoint("LEFT", toHint, "RIGHT", 12, 0)
+  routeButton:SetSize(130, 20)
   routeButton:SetMotionScriptsWhileDisabled(true)
   routeButton:SetScript("OnClick", function()
     if ES:RouteLock(profKey) then
@@ -758,6 +778,17 @@ function ES:CreateProfessionPage(page, profKey)
       end)
   end
 
+  -- Recetas de Merchant's Favor (fichas y reputación del campamento): por defecto no
+  page.favorButton = FilterIcon(page.questButton or page.bagsButton, "Interface\\Icons\\INV_Misc_Coin_17",
+    L["Recetas de Merchant's Favor"],
+    function() return settings.useFavor and true or false end,
+    function() settings.useFavor = not settings.useFavor or nil end,
+    function()
+      return { settings.useFavor and L["Activado: la ruta puede usar recetas que se compran con Merchant's Favor en el campamento de tu bando (cuestan fichas, no oro)."]
+        or L["Desactivado: la ruta no usa recetas de Merchant's Favor."],
+        L["Hace falta la reputación del campamento que pide cada una: el addon no puede comprobarla."] }
+    end)
+
   -- Franja de resumen: materiales, profit, instructor y herramientas, total
   local strip = CreateFrame("Frame", nil, page)
   strip:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 4, -6)
@@ -771,22 +802,39 @@ function ES:CreateProfessionPage(page, profKey)
     { key = "fees",      label = L["Instructor y herramientas"] },
     { key = "total",     label = L["Total"] },
   }
+  -- Con la ruta fijada, debajo: lo real (lo que llevas gastado y recuperado; Ledger.lua)
+  page.real = {}
   for i, s in ipairs(STATS) do
     local label = Label(strip, s.label, "GameFontDisableSmall")
     label:SetPoint("TOPLEFT", (i - 1) * 196 + 6, -2)
     local value = Label(strip, "", i == #STATS and "GameFontNormalLarge" or "GameFontHighlightLarge")
     value:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -3)
     page.stats[s.key] = value
+    local real = Label(strip, "", "GameFontHighlightSmall")
+    real:SetPoint("TOPLEFT", value, "BOTTOMLEFT", 0, -3)
+    page.real[s.key] = real
   end
+  -- Tooltip de la franja: qué es "Real"
+  strip:EnableMouse(true)
+  strip:SetScript("OnEnter", function(self)
+    if not ES:RouteLock(profKey) then return end
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    GameTooltip:AddLine(L["Previsto y real"])
+    GameTooltip:AddLine(L["Arriba, lo que cuesta la ruta. Debajo, lo que llevas de verdad desde que la empezaste: compras al vendedor y en la AH, instructor y depósitos, y lo que cobras vendiendo lo fabricado (al vendedor y en la AH, por los correos)."], 0.8, 0.8, 0.8, true)
+    GameTooltip:AddLine(L["Solo cuenta lo de la ruta: los materiales de la lista de la compra, sus recetas y lo que fabricas."], 0.6, 0.6, 0.6, true)
+    GameTooltip:Show()
+  end)
+  strip:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  page.routeButton:SetPoint("TOPRIGHT", strip, "BOTTOMRIGHT", 0, 0)
   page.status = Label(page, "", "GameFontHighlightSmall")
-  page.status:SetPoint("TOPLEFT", strip, "BOTTOMLEFT", 2, -2)
-  page.status:SetPoint("RIGHT", strip, "RIGHT", 0, 0)
+  page.status:SetPoint("TOPLEFT", strip, "BOTTOMLEFT", 2, -4)
+  page.status:SetPoint("RIGHT", page.routeButton, "LEFT", -10, 0)
   page.status:SetJustifyH("LEFT")
   page.status:SetWordWrap(false)
 
   -- Lista
   local list = Panel(page, 0.07, 0.05, 0.03, 0.9)
-  list:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -70)
+  list:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -74)
   list:SetPoint("BOTTOMRIGHT", -10, 4)
   page.listPanel = list
   local scroll = WheelScroll(list)
@@ -914,6 +962,43 @@ local LEARN_WHERE = ES.Localize({ trainer = "Instructor", vendor = "Vendedor de 
 local WP = ES.Waypoints
 local QUEST_ICON = ES.QUEST_ICON -- se pinta con el atlas en alta resolución (Core.lua)
 local AH_ICON = "Interface\\Icons\\INV_Misc_Coin_01"
+
+-- Abrir la receta en la ventana de la profesión y fabricar (la ventana moderna de
+-- Forever: C_TradeSkillUI). Solo desde un clic del jugador.
+function ES:OpenRecipe(recipeID)
+  if InCombatLockdown and InCombatLockdown() then
+    self:Print(L["No se pueden abrir las profesiones en combate."])
+    return false
+  end
+  local T = C_TradeSkillUI
+  if T and T.OpenRecipe and pcall(T.OpenRecipe, recipeID) then return true end
+  self:Print(L["Abre la ventana de tu profesión para ver la receta."])
+  return false
+end
+
+function ES:CraftRecipe(recipeID, count)
+  if InCombatLockdown and InCombatLockdown() then
+    self:Print(L["No se puede fabricar en combate."])
+    return
+  end
+  local T = C_TradeSkillUI
+  -- Como mucho, las que te dan los materiales (el juego lo sabe con la ventana abierta)
+  local info = T and T.GetRecipeInfo and select(2, pcall(T.GetRecipeInfo, recipeID))
+  if type(info) == "table" and info.numAvailable and info.numAvailable > 0 then
+    count = math.min(count, info.numAvailable)
+  end
+  if T and T.CraftRecipe then
+    local ok, err = pcall(T.CraftRecipe, recipeID, count)
+    if ok then
+      self:Print(string.format(L["Fabricando %d..."], count))
+      return
+    end
+    self:OpenRecipe(recipeID)
+    self:Print(L["No se pudo fabricar: "] .. tostring(err))
+    return
+  end
+  self:OpenRecipe(recipeID)
+end
 
 local function CostOrFree(copper)
   if copper and copper >= 0.5 then return Signed(copper) end
@@ -1088,9 +1173,20 @@ local function RouteLines(plan, page)
     -- Aprender la receta: fila propia (como en el instructor), con su coste
     -- Ya la sabes ("known"): sin fila de aprender
     local learnSource = not done and st.learnSource ~= "known" and st.learnSource or nil
-    local sourcedLine = learnSource and r.scroll and not r.fee and WP.SOURCED_PROFESSIONS[page.profKey]
+    local sourcedLine = learnSource and learnSource ~= "favor" and r.scroll and not r.fee and WP.SOURCED_PROFESSIONS[page.profKey]
       and SourcedLearnLine(r, st, profName, plan)
-    if sourcedLine then
+    if learnSource == "favor" then
+      -- Merchant's Favor: en el campamento de tu bando, con fichas (no oro)
+      local title = L["Conseguir receta: "] .. r.name
+      local pick = WP.Target("vendor", r.scroll)
+      local sub = string.format(L["Merchant's Favor: %d fichas"], r.favor)
+        .. (r.favorRep and (" · " .. string.format(L["pide %s con el campamento"], ES.StandingName(r.favorRep))) or "")
+      lines[#lines + 1] = {
+        icon = "Interface\\Icons\\INV_Misc_Coin_17", title = title, sub = sub,
+        value = string.format("|cff66bbff%d|r", r.favor), go = pick, onSkip = Skip(st.id),
+        tooltip = TravelTooltip(title, sub, L["Vendedor más cercano"], pick),
+      }
+    elseif sourcedLine then
       sourcedLine.onSkip = Skip(st.id)
       lines[#lines + 1] = sourcedLine
     elseif learnSource then
@@ -1115,14 +1211,28 @@ local function RouteLines(plan, page)
       }
     end
     local perPoint = st.expected / (st.to - st.from)
+    -- Lo que falta de este paso desde tu nivel (con la ruta empezada puedes ir por la mitad)
+    local level = math.max(st.from, math.min(st.to, page.from or st.from))
+    local left = math.ceil(st.expected * (st.to - level) / (st.to - st.from) - 0.001)
+    local canCraft = not done and left > 0 and ES:IsRecipeKnown(st.id)
+    local tooltip = RecipeTooltip(st, plan)
     lines[#lines + 1] = {
+      onClick = function() ES:OpenRecipe(st.id) end, -- abre la profesión con la receta
+      onCraft = canCraft and function() ES:CraftRecipe(st.id, left) end or nil,
+      craftLabel = canCraft and string.format(L["Fabricar %d"], left) or nil,
       icon = texture or 134400,
       title = done and (GREY .. "✓ " .. name .. "|r") or name,
       sub = done and (GREY .. string.format(L["Hecho · de %d a %d"], st.from, st.to) .. "|r")
         or string.format(L["%s%d fabricaciones|r · de %d a %d · %s/u"], perPoint > LOW_CHANCE_CRAFTS and ORANGE or "",
         st.crafts, st.from, st.to, ES.Money(st.unitCost)),
       value = Signed(st.total - st.fee), item = r.out and r.out[1], -- lo de aprender va en su fila
-      tooltip = RecipeTooltip(st, plan), onSkip = not done and Skip(st.id) or nil,
+      onSkip = not done and Skip(st.id) or nil,
+      tooltip = function(row)
+        tooltip(row)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(L["Clic: abrir la receta en tu profesión."], 0.5, 0.8, 1)
+        GameTooltip:Show()
+      end,
     }
   end
   while events[ev] do AddEvent(events[ev]) ev = ev + 1 end
@@ -1159,9 +1269,33 @@ local function RouteLines(plan, page)
   return lines
 end
 
+-- Clic de una fila de la vista Profit: con el vendedor abierto vende lo que toca
+-- vender; con la AH abierta anuncia lo que toca anunciar; si no, marca el
+-- subastador o el vendedor más cercano. Devuelve onClick, go, etiqueta del botón.
+local ACTION = "|cff80c0ff"
+local function SaleAction(d, advice, page)
+  local Ledger = ES.Ledger
+  if not Ledger then return nil end
+  local have = Ledger.BagCount(d.itemID)
+  local toVendor, toAH = math.min(have, advice.vendor), math.min(have, advice.ah)
+  local function Done() ES:RenderPlan(page) end
+  if Ledger:MerchantOpen() and toVendor > 0 then
+    return function() Ledger:SellToVendor(d.itemID, toVendor) C_Timer.After(0.5, Done) end, nil,
+      string.format(L["Vender %d al vendedor"], toVendor)
+  elseif ES:IsAuctionHouseOpen() and toAH > 0 then
+    return function() Ledger:PostOnAH(d.itemID, toAH, advice.price) C_Timer.After(0.5, Done) end, nil,
+      string.format(L["Anunciar %d en la AH a %s"], toAH, ES.Money(advice.price))
+  elseif advice.ah > 0 then
+    return nil, WP.Target("auction"), nil
+  elseif advice.vendor > 0 then
+    return nil, WP.Target("sell"), nil
+  end
+end
+
 -- Líneas de la vista Profit: qué hacer con todo lo que fabricas
-local function ProfitLines(plan)
+local function ProfitLines(plan, page)
   local lines = {}
+  local real = ES.Ledger and ES.Ledger:Summary(page.profKey) -- ruta fijada: cuántos llevas vendidos
   local dests = {}
   for _, d in ipairs(plan.destinations) do dests[#dests + 1] = d end
   table.sort(dests, function(a, b) return a.income + (a.ahExtra or 0) > b.income + (b.ahExtra or 0) end)
@@ -1185,10 +1319,25 @@ local function ProfitLines(plan)
     end
     if signals then extra = extra + d.ahExtra end
     total = total + d.income
+    local sold = real and real.sold[d.itemID]
+    if sold and sold > 0 then parts[#parts + 1] = GREEN .. string.format(L["vendidos %d"], sold) .. "|r" end
+    local onClick, go, action = SaleAction(d, advice, page)
+    local tip = DestinationTooltip(d, name, signals)
     lines[#lines + 1] = {
-      icon = texture or 134400, title = name, sub = table.concat(parts, " · "),
+      icon = texture or 134400, title = action and (name .. "   " .. ACTION .. "[" .. action .. "]|r") or name,
+      sub = table.concat(parts, " · "),
       value = d.income > 0 and Signed(-d.income) or (GREY .. "—|r"), item = d.itemID,
-      tooltip = DestinationTooltip(d, name, signals),
+      onClick = onClick, go = go,
+      tooltip = function(row)
+        tip(row)
+        if action then
+          GameTooltip:AddLine(" ")
+          GameTooltip:AddLine(L["Clic: "] .. action .. ".", 0.5, 0.8, 1)
+        elseif go then
+          WP.AddToTooltip(advice.ah > 0 and L["Subastador más cercano"] or L["Vendedor más cercano"], go)
+        end
+        GameTooltip:Show()
+      end,
     }
   end
   if #lines == 0 then return lines end
@@ -1271,6 +1420,15 @@ function ES:RenderPlan(page)
   else
     for _, fs in pairs(stats) do fs:SetText(GREY .. "—|r") end
   end
+  -- Ruta fijada: debajo, lo real; la lista baja para dejarle sitio
+  local real = plan and self.Ledger and self.Ledger:Summary(page.profKey)
+  local REAL = GREY .. L["Real: "] .. "|r"
+  page.real.materials:SetText(real and (REAL .. Signed(real.buy)) or "")
+  page.real.profit:SetText(real and (REAL .. Signed(-real.recovered)) or "")
+  page.real.fees:SetText(real and (REAL .. Signed(real.fees)) or "")
+  page.real.total:SetText(real and (REAL .. Signed(real.net)) or "")
+  page.strip:SetHeight(real and 62 or 46)
+  page.listPanel:SetPoint("TOPLEFT", page.head, "BOTTOMLEFT", 0, real and -90 or -74)
 
   local status
   if not plan then
@@ -1311,7 +1469,7 @@ function ES:RenderPlan(page)
 
   local lines = {}
   if plan and #plan.steps > 0 then
-    if page.view == "profit" then lines = ProfitLines(plan)
+    if page.view == "profit" then lines = ProfitLines(plan, page)
     elseif page.view == "shop" then lines = ShopLines(plan, page)
     else lines = RouteLines(plan, page) end
   end
