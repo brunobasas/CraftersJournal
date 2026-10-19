@@ -14,6 +14,8 @@ local ROW_HEIGHT, ROW_GAP, SECTION_HEIGHT = 40, 4, 24
 local LIST_WIDTH = 762
 local LEVEL_W = 70 -- columna de nivel de la vista Ruta (cabe "225–300")
 local VIEW_BUTTON_H = 32 -- botones Ruta / Profit / Lista de compra (como los del diario de mazmorras)
+local STATUS_BUTTON_H = 26 -- Empezar / Recalcular ruta y Actualizar precios (barra de estado)
+local LIST_TOP = 80        -- de la cabecera a la lista (sin la fila "Real")
 -- Marrones del diario de mazmorras: el fondo que agrupa la página, la tarjeta de la
 -- cabecera (la más clara), el panel de la lista y las filas (más oscuras que el panel)
 local BROWN = {
@@ -636,13 +638,24 @@ end
 ES.UI.CreateRow, ES.UI.StyleRow, ES.UI.Signed = CreateRow, StyleRow, Signed
 ES.UI.ROW_HEIGHT, ES.UI.ROW_GAP, ES.UI.SECTION_HEIGHT, ES.UI.LIST_WIDTH = ROW_HEIGHT, ROW_GAP, SECTION_HEIGHT, LIST_WIDTH
 
+-- Ancho de las filas: el de la zona de la lista (llegan hasta el borde, también al
+-- cambiar el tamaño de la ventana); sin ella, el fijo de siempre
+local function ListWidth(page)
+  local w = page.scroll and page.scroll:GetWidth()
+  return (w and w > 50) and w or LIST_WIDTH
+end
+ES.UI.ListWidth = ListWidth
+
 -- Pinta una lista de líneas (ver StyleRow) en page.content con page.rows
 function ES.UI.RenderLines(page, lines)
   local y = 0
   page.pendingItems = false
+  local width = ListWidth(page)
+  page.content:SetWidth(width)
   for i, line in ipairs(lines) do
     local row = page.rows[i] or CreateRow(page.content)
     page.rows[i] = row
+    row:SetWidth(width)
     StyleRow(row, line)
     row:ClearAllPoints()
     row:SetPoint("TOPLEFT", 0, -y)
@@ -729,7 +742,7 @@ function ES:CreateProfessionPage(page, profKey)
   -- (a la derecha de la línea de estado, bajo la franja de resumen: se coloca allí abajo)
   local routeButton = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
   page.routeButton = routeButton
-  routeButton:SetSize(130, 20)
+  routeButton:SetSize(140, STATUS_BUTTON_H)
   routeButton:SetMotionScriptsWhileDisabled(true)
   routeButton:SetScript("OnClick", function()
     if ES:RouteLock(profKey) then
@@ -757,7 +770,7 @@ function ES:CreateProfessionPage(page, profKey)
   -- Actualizar precios: misma ruta con el último escaneo (solo si hay uno más nuevo)
   local pricesButton = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
   page.pricesButton = pricesButton
-  pricesButton:SetSize(130, 20)
+  pricesButton:SetSize(140, STATUS_BUTTON_H)
   pricesButton:SetPoint("RIGHT", routeButton, "LEFT", -6, 0)
   pricesButton:SetScript("OnClick", function()
     ES:RefreshRoutePrices(profKey)
@@ -927,7 +940,7 @@ function ES:CreateProfessionPage(page, profKey)
 
   -- Lista
   local list = Panel(page, BROWN.list[1], BROWN.list[2], BROWN.list[3], BROWN.list[4])
-  list:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -74)
+  list:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -LIST_TOP)
   list:SetPoint("BOTTOMRIGHT", -10, 10)
   page.listPanel = list
   local scroll = WheelScroll(list)
@@ -937,6 +950,12 @@ function ES:CreateProfessionPage(page, profKey)
   page.content:SetSize(LIST_WIDTH, 1)
   scroll:SetScrollChild(page.content)
   page.scroll = scroll
+  -- Al cambiar el tamaño de la ventana, las filas siguen llegando hasta el borde
+  scroll:HookScript("OnSizeChanged", function()
+    local width = ListWidth(page)
+    page.content:SetWidth(width)
+    for _, row in ipairs(page.rows) do row:SetWidth(width) end
+  end)
   page.empty = Label(page.content, "", "GameFontDisable")
   page.empty:SetPoint("TOP", 0, -30)
   page.empty:SetWidth(600)
@@ -1667,7 +1686,7 @@ function ES:RenderPlan(page)
   page.real.fees:SetText(real and (REAL .. Signed(real.fees)) or "")
   page.real.total:SetText(real and (REAL .. Signed(real.net)) or "")
   page.strip:SetHeight(real and 62 or 46)
-  page.listPanel:SetPoint("TOPLEFT", page.head, "BOTTOMLEFT", 0, real and -90 or -74)
+  page.listPanel:SetPoint("TOPLEFT", page.head, "BOTTOMLEFT", 0, real and -(LIST_TOP + 16) or -LIST_TOP)
 
   local status
   if not plan then
