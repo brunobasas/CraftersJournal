@@ -84,6 +84,24 @@ local function FindIndex(itemID)
   end
 end
 
+-- Lo más que se puede pedir en una compra: lo que deja el vendedor (o una pila), en lotes enteros
+local function PerCall(itemID, batch)
+  local i = FindIndex(itemID)
+  local most = math.max((i and GetMerchantItemMaxStack and GetMerchantItemMaxStack(i)) or 1, StackSize(itemID))
+  return math.max(math.floor(most / batch) * batch, batch)
+end
+
+-- Pone en la cola `qty` unidades en compras de como mucho `perCall`
+local function Enqueue(queue, itemID, qty, perCall, at)
+  local calls = {}
+  while qty > 0 do
+    local n = math.min(qty, perCall)
+    calls[#calls + 1] = { itemID = itemID, n = n }
+    qty = qty - n
+  end
+  for k = #calls, 1, -1 do table.insert(queue, at or (#queue + 1), calls[k]) end
+end
+
 function Vendor:Pump()
   local q = table.remove(self.queue, 1)
   if not q or not Ledger():MerchantOpen() then
@@ -97,10 +115,10 @@ function Vendor:Pump()
     -- Comprobación final: lo que no llegó se vuelve a pedir (hasta 2 veces)
     local short = q.check - ES:ItemCount(q.itemID)
     if short > 0 and q.tries < 2 then
-      local i = FindIndex(q.itemID)
-      if i then
-        table.insert(self.queue, 1, { itemID = q.itemID, check = q.check, tries = q.tries + 1 })
-        table.insert(self.queue, 1, { itemID = q.itemID, n = short })
+      if FindIndex(q.itemID) then
+        short = math.ceil(short / q.batch) * q.batch
+        table.insert(self.queue, 1, { itemID = q.itemID, check = q.check, tries = q.tries + 1, batch = q.batch })
+        Enqueue(self.queue, q.itemID, short, PerCall(q.itemID, q.batch), 1) -- en tandas, delante de la comprobación
       end
     elseif short > 0 then
       ES:Print(string.format(L["El vendedor no vendió %d de %s (sin existencias, sin oro o sin sitio en las bolsas)."],
@@ -115,15 +133,11 @@ end
 
 -- Compra `entry` (de Vendor:List): en tandas de como mucho una pila
 function Vendor:Buy(entry)
-  local perCall = math.max(math.floor(StackSize(entry.itemID) / entry.batch) * entry.batch, entry.batch)
-  local left = entry.qty
+  -- Ya se está comprando (p. ej. "Comprar todo" y luego un clic en su fila): no dos veces
+  for _, q in ipairs(self.queue) do if q.itemID == entry.itemID then return end end
   local target = ES:ItemCount(entry.itemID) + entry.qty
-  while left > 0 do
-    local n = math.min(left, perCall)
-    self.queue[#self.queue + 1] = { itemID = entry.itemID, n = n }
-    left = left - n
-  end
-  self.queue[#self.queue + 1] = { itemID = entry.itemID, check = target, tries = 0 }
+  Enqueue(self.queue, entry.itemID, entry.qty, PerCall(entry.itemID, entry.batch))
+  self.queue[#self.queue + 1] = { itemID = entry.itemID, check = target, tries = 0, batch = entry.batch }
   if not self.pumping then self:Pump() end
 end
 

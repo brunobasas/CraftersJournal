@@ -850,7 +850,16 @@ step("portada: tarjetas de profesiones", function()
   GetMerchantItemInfo = function() return "x", nil, 300, 3 end -- 3 por 300: 100 cada uno
   ES.Ledger:SetWhere("merchant")
   ES.Ledger.Snapshot()
+  -- Fabricar con el vendedor abierto (sin que cambie tu dinero) no cuenta como venta
+  counts[sellItem] = 9
+  ES.Ledger.Process()
+  assert(ES.Ledger:Summary("Leatherworking").sell == 0, "fabricar con el vendedor abierto contó como venta")
+  counts[sellItem] = 10
+  ES.Ledger.Process()
+  assert(ES.Ledger:Summary("Leatherworking").sell == 0, "fabricar con el vendedor abierto contó como recompra")
+  -- Compra y venta de verdad (baja y sube tu dinero)
   counts[buyItem], counts[sellItem] = 6, 7
+  ES.Ledger:SetMoney(600, 3 * (ES:VendorSellPrice(sellItem) or 0))
   ES.Ledger.Process()
   local real = ES.Ledger:Summary("Leatherworking")
   assert(real.buy == 600, "compra al vendedor: " .. tostring(real.buy))
@@ -892,6 +901,10 @@ step("portada: tarjetas de profesiones", function()
   vp.rows[1]._scripts.OnEnter(vp.rows[1])
   vp.buyAll._scripts.OnClick(vp.buyAll)
   assert(#bought > 0 and bought[1] > 0, "Comprar todo no compró nada")
+  -- Pulsar su fila mientras se compra no lo compra dos veces
+  local queued = #ES.VendorShop.queue
+  ES.VendorShop:Buy({ itemID = buyItem, qty = 3, batch = 3, price = 300, cost = 300 })
+  assert(#ES.VendorShop.queue == queued, "compró dos veces el mismo material")
   log[#log+1] = string.format("     vendedor: %s · primera compra de %d", tostring(vp.buyAll._text), bought[1])
   ES.VendorShop.queue, ES.VendorShop.pumping = {}, nil
   MerchantFrame, C_MerchantFrame, BuyMerchantItem, GetMoney = nil, nil, nil, nil

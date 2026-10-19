@@ -206,6 +206,7 @@ function ES:RefreshRoutePrices(profKey)
   lock.prices, lock.scanTime = RoutePrices(plan)
   plan.lockStarted, plan.lockPrices = lock.started, lock.scanTime
   self.lockedPlans[profKey] = plan
+  if self.Ledger then self.Ledger:Resync() end
 end
 
 function ES:StartRoute(page)
@@ -224,6 +225,7 @@ function ES:StartRoute(page)
   self.db.prof[page.profKey].lock = lock
   plan.lockStarted, plan.lockPrices = lock.started, lock.scanTime
   self.lockedPlans[page.profKey] = plan
+  if self.Ledger then self.Ledger:Resync() end -- con el vendedor o la AH ya abiertos
   self:RenderPlan(page)
 end
 

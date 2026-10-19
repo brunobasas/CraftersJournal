@@ -132,13 +132,19 @@ function Ledger:Record(kind, itemID, qty, money, when)
   return false
 end
 
--- Instructor o depósito de la AH: a la ruta de la profesión que estás mirando
--- (o a la única fijada)
-function Ledger:RecordFee(money)
-  local routes = Routes()
-  local r = routes[1]
-  if not r or (#routes > 1 and r.key ~= ES.db.lastProf) then return false end
+-- Instructor o depósito de la AH: a la ruta de esa profesión (`profKey`). Sin saber
+-- de qué profesión es, solo si hay una única ruta fijada (si no, no se apunta:
+-- mejor no apuntar que apuntarlo a la ruta equivocada)
+function Ledger:RecordFee(money, profKey)
+  local routes, r = Routes(), nil
+  for _, x in ipairs(routes) do if x.key == profKey then r = x end end
+  if not r and not profKey and #routes == 1 then r = routes[1] end
+  if not r then
+    Log(string.format("  gasto de %d sin ruta a la que apuntarlo (%s)", money, tostring(profKey)))
+    return false
+  end
   local b = Book(r.lock)
+  Log(string.format("  apuntado instructor/depósito %d en %s", money, r.key))
   b.fees = b.fees + money
   Changed()
   return true
@@ -152,12 +158,44 @@ function Ledger:Kind(itemID)
   end
 end
 
+-- Ruta fijada que fabrica (y vende) este objeto
+local function SellRoute(itemID)
+  for _, r in ipairs(Routes()) do
+    if r.set.sell[itemID] then return r.key end
+  end
+end
+
+-- Nombre en el idioma del juego (el de los correos), no en el del addon
+local function ClientItemName(itemID)
+  if C_Item and C_Item.GetItemNameByID then return C_Item.GetItemNameByID(itemID) end
+  return GetItemInfo and (GetItemInfo(itemID))
+end
+
 -- Objeto de una ruta fijada por su nombre (los correos solo traen el nombre)
 function Ledger:IDByName(name)
   for _, r in ipairs(Routes()) do
     for _, kind in ipairs({ "scroll", "buy" }) do
       for itemID in pairs(r.set[kind]) do
-        if ES:GetItemData(itemID) == name then return itemID end
+        if ClientItemName(itemID) == name then return itemID end
+      end
+    end
+  end
+end
+
+-- Profesión del instructor abierto (por la línea de habilidad de lo que enseña), o nil
+local PROF_SPELLS = { Alchemy = 2259, Blacksmithing = 2018, Enchanting = 7411, Engineering = 4036,
+  Leatherworking = 2108, Tailoring = 3908, Cooking = 2550, FirstAid = 3273 }
+local function SpellName(id)
+  if C_Spell and C_Spell.GetSpellName then return C_Spell.GetSpellName(id) end
+  return GetSpellInfo and (GetSpellInfo(id))
+end
+local function TrainerProfession()
+  if not (GetNumTrainerServices and GetTrainerServiceSkillLine) then return nil end
+  for i = 1, GetNumTrainerServices() or 0 do
+    local line = GetTrainerServiceSkillLine(i)
+    if line and line ~= "" then
+      for key, spell in pairs(PROF_SPELLS) do
+        if line == SpellName(spell) or line == ES:ProfLabel(key) then return key end
       end
     end
   end
@@ -190,10 +228,14 @@ end
 -- Lectura: qué cambia en tus bolsas y tu dinero con el vendedor, la AH o el instructor
 ---------------------------------------------------------------------------
 local where          -- "merchant" | "ah" | "trainer" | nil
+local trainerProf    -- profesión del instructor abierto
 local snapshot = {}  -- [itemID] = unidades al abrir (o en la última lectura)
 local lastMoney, spent, gained = 0, 0, 0
 local processStamp = 0
 local ahUp, ahUpQty, ahSpent = {}, 0, 0 -- AH: objetos y dinero aún sin emparejar
+local ahUpAt, ahSpentAt = 0, 0          -- cuándo llegó lo que aún no se ha emparejado
+local AH_PAIR_WINDOW = 3                -- s: lo que no se empareja en este tiempo no es de la ruta
+local function Now() return GetTime and GetTime() or 0 end
 
 local function Tracked()
   local items = {}
@@ -268,21 +310,30 @@ local function Process()
   if where == "merchant" then
     for itemID, q in pairs(up) do
       local unit = MerchantUnitPrice(itemID)
-      if not unit then Log("  sin precio en el vendedor para " .. itemID) end
       if unit then
         local kind = Ledger:Kind(itemID)
         if kind then Ledger:Record(kind, itemID, q, unit * q) end
-      elseif Ledger:Kind(itemID) == nil then
-        -- Recompra de algo que acabas de vender: se descuenta
+      elseif spent > 0 and Ledger:Kind(itemID) == nil then
+        -- Recompra de algo que acabas de vender (si ha bajado tu dinero; si no, lo has
+        -- fabricado con la ventana abierta): se descuenta
         Ledger:Record("sell", itemID, -q, -q * (ES:VendorSellPrice(itemID) or 0))
       end
     end
-    for itemID, q in pairs(down) do
-      Ledger:Record("sell", itemID, q, q * (ES:VendorSellPrice(itemID) or 0))
+    -- Ventas: solo si ha subido tu dinero (si no, lo has gastado fabricando)
+    if gained > 0 then
+      for itemID, q in pairs(down) do
+        Ledger:Record("sell", itemID, q, q * (ES:VendorSellPrice(itemID) or 0))
+      end
     end
   elseif where == "ah" then
     -- Compras: el dinero que bajó, repartido entre lo que ha llegado. El dinero y los
-    -- objetos pueden llegar por separado: lo que falta de emparejar se guarda un rato
+    -- objetos pueden llegar por separado: se emparejan si llegan con poco tiempo de
+    -- diferencia; lo que se queda solo (comprar algo que no es de la ruta) se descarta
+    local t = Now()
+    if next(ahUp) and t - ahUpAt > AH_PAIR_WINDOW then ahUp, ahUpQty = {}, 0 end
+    if ahSpent > 0 and t - ahSpentAt > AH_PAIR_WINDOW then ahSpent = 0 end
+    if upQty > 0 then ahUpAt = t end
+    if spent > 0 then ahSpentAt = t end
     for itemID, q in pairs(up) do ahUp[itemID] = (ahUp[itemID] or 0) + q end
     ahUpQty, ahSpent = ahUpQty + upQty, ahSpent + spent
     if ahUpQty > 0 and ahSpent > 0 then
@@ -292,7 +343,10 @@ local function Process()
       end
       ahUp, ahUpQty, ahSpent = {}, 0, 0
     elseif next(down) and ahSpent > 0 then
-      Ledger:RecordFee(ahSpent) -- depósito al anunciar
+      -- Depósito al anunciar: a la ruta que fabrica lo anunciado
+      local posted = next(down)
+      local prof = SellRoute(posted)
+      if prof then Ledger:RecordFee(ahSpent, prof) end
       ahSpent = 0
     end
   end
@@ -315,10 +369,12 @@ do
     if not ES.db then return end
     if event == "MERCHANT_SHOW" or event == "AUCTION_HOUSE_SHOW" or event == "TRAINER_SHOW" then
       where = event == "MERCHANT_SHOW" and "merchant" or event == "TRAINER_SHOW" and "trainer" or "ah"
+      trainerProf = where == "trainer" and TrainerProfession() or nil
       Snapshot()
       local n = 0
       for _ in pairs(snapshot) do n = n + 1 end
-      Log(string.format("abierto %s · %d objetos de rutas fijadas vigilados", where, n))
+      Log(string.format("abierto %s%s · %d objetos de rutas fijadas vigilados", where,
+        trainerProf and (" de " .. trainerProf) or "", n))
       if ES.RefreshAfterBags then ES:RefreshAfterBags() end -- la vista Profit cambia sus clics
     elseif event == "MERCHANT_CLOSED" or event == "AUCTION_HOUSE_CLOSED" or event == "TRAINER_CLOSED" then
       Process()
@@ -331,7 +387,7 @@ do
       if not where then return end
       if delta < 0 then spent = spent - delta else gained = gained + delta end
       if where == "trainer" and spent > 0 then
-        Ledger:RecordFee(spent)
+        Ledger:RecordFee(spent, trainerProf)
         spent = 0
       elseif where == "ah" and delta < 0 then
         QueueProcess() -- el dinero de una compra puede llegar después que el objeto
@@ -343,6 +399,13 @@ do
 end
 Ledger.Process, Ledger.Snapshot = Process, Snapshot -- para pruebas
 function Ledger:SetWhere(w) where = w end           -- para pruebas
+function Ledger:SetMoney(s, g) spent, gained = s or 0, g or 0 end -- para pruebas: dinero gastado/ganado
+
+-- Empiezas o cambias una ruta con el vendedor, la AH o el instructor abiertos: se
+-- vuelve a mirar qué llevas, para que cuente lo que compres en esta misma visita
+function Ledger:Resync()
+  if where then Snapshot() end
+end
 
 ---------------------------------------------------------------------------
 -- Vender y anunciar (vista Profit): siempre desde un clic del jugador
