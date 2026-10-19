@@ -840,6 +840,23 @@ step("portada: tarjetas de profesiones", function()
   log[#log+1] = "     paso actual: " .. tostring(cur.level) .. " · " .. tostring(cur.sub)
   ES.DetectSkill = savedDetect
   ES:DetectSkill(page)
+  -- Solo "Recalcular ruta" la libera: ni las opciones, ni el objetivo, ni la ✕, ni llegar al final
+  local lp = ES.db.prof.Leatherworking
+  local bagsBefore = lp.useBags
+  page.bagsButton._scripts.OnClick(page.bagsButton)
+  assert(lp.lock and lp.useBags == bagsBefore, "un icono de opción liberó o cambió la ruta empezada")
+  page.toBox._text = "150"
+  ES:CalculatePlan(page)
+  assert(lp.lock and page.toBox._text == "225", "cambiar el objetivo liberó la ruta empezada")
+  for _, l in ipairs(page.lines) do assert(not l.onSkip, "con la ruta empezada no debería haber ✕") end
+  ES.DetectSkill = function(_, p) p.from = 225 end
+  ES:RefreshAfterSkill()
+  assert(lp.lock and lp.lock.completed, "al llegar al objetivo la ruta debería quedar completada, no liberarse")
+  assert(tostring(page.status._text):find("completada"), "falta el aviso de ruta completada: " .. tostring(page.status._text))
+  ES.DetectSkill = savedDetect
+  lp.lock.completed = nil
+  ES:DetectSkill(page)
+  ES:CalculatePlan(page)
   -- Gasto real: comprar un material de la ruta al vendedor y vender algo fabricado
   local buyItem, sellItem = rebuilt.shopping[1].itemID, nil
   for _, st in ipairs(rebuilt.steps) do if st.sale then sellItem = st.sale.itemID break end end

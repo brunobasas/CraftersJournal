@@ -413,7 +413,8 @@ function ES:RenderHome()
     local lock = ES:RouteLock(e.key)
     if lock and plan then
       -- Ruta empezada: se ve de un vistazo (borde verde y aviso)
-      note = GREEN .. string.format(L["Ruta en curso · de %d a %d"], lock.from, lock.to) .. "|r"
+      note = GREEN .. string.format(lock.completed and L["Ruta completada · de %d a %d"] or L["Ruta en curso · de %d a %d"],
+        lock.from, lock.to) .. "|r"
     elseif e.guide then
       note = GREY .. string.format(L["Tramo %d-%d de la guía"], e.guide.from, e.guide.to) .. "|r"
     elseif e.pending then

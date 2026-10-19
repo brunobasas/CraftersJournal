@@ -798,9 +798,13 @@ function ES:CreateProfessionPage(page, profKey)
       self:SetBackdropBorderColor(on and 1 or 0.4, on and 0.82 or 0.4, on and 0.25 or 0.4, 1)
     end
     b:SetScript("OnClick", function(self)
+      -- Ruta empezada: las opciones no se tocan (solo "Recalcular ruta" la libera)
+      if ES:RouteLock(profKey) then
+        ES:Print(L["Ruta empezada: pulsa Recalcular ruta para cambiar esto."])
+        return
+      end
       toggle()
       self:Refresh()
-      ES:StopRoute(profKey) -- otra opción: otra ruta
       ES:CalculatePlan(page)
       if self:IsMouseOver() then self:GetScript("OnEnter")(self) end
     end)
@@ -808,7 +812,11 @@ function ES:CreateProfessionPage(page, profKey)
       GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
       GameTooltip:AddLine(title)
       for i, l in ipairs(lines()) do GameTooltip:AddLine(l, i == 1 and 1 or 0.7, i == 1 and 1 or 0.7, i == 1 and 1 or 0.7, true) end
-      GameTooltip:AddLine(L["Pulsa para cambiarlo."], 0.5, 0.8, 1)
+      if ES:RouteLock(profKey) then
+        GameTooltip:AddLine(L["Ruta empezada: pulsa Recalcular ruta para cambiar esto."], 1, 0.6, 0.2, true)
+      else
+        GameTooltip:AddLine(L["Pulsa para cambiarlo."], 0.5, 0.8, 1)
+      end
       GameTooltip:Show()
     end)
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1012,19 +1020,21 @@ function ES:CalculatePlan(page)
   local from = page.from or 1
   local to = tonumber(page.toBox:GetText()) or MAX_SKILL
   to = math.max(1, math.min(MAX_SKILL, to))
+  -- Ruta empezada: solo "Recalcular ruta" la libera. El objetivo es el suyo (no se
+  -- cambia) y al llegar a él se queda como completada hasta que la recalcules
+  local lock = self:RouteLock(page.profKey)
+  if lock and to ~= lock.to then
+    to = lock.to
+    self:Print(L["Ruta empezada: pulsa Recalcular ruta para cambiar el objetivo."])
+  end
+  if lock and from >= lock.to and not lock.completed then
+    lock.completed = true
+    self:Print(string.format(L["¡Ruta completada! %s de %d a %d."], page.profName, lock.from, lock.to))
+  end
   page.toBox:SetText(to)
   page.lastTarget = to
   self.db.prof[page.profKey].target = to
   page.calculating = nil
-  -- Ruta fijada: se enseña tal cual (otro objetivo o llegar a él la liberan)
-  local lock = self:RouteLock(page.profKey)
-  if lock and (to ~= lock.to or from >= lock.to) then
-    if from >= lock.to then
-      self:Print(string.format(L["¡Ruta completada! %s de %d a %d."], page.profName, lock.from, lock.to))
-    end
-    self:StopRoute(page.profKey)
-    lock = nil
-  end
   if lock then
     page.plan, page.planKey = self:LockedPlan(page.profKey), nil
   elseif from >= to then
@@ -1184,12 +1194,13 @@ local function RouteLines(plan, page)
   local profIcon, profName = page.profIcon or ES.ICON, page.profName
   local settings = ES.db.prof[page.profKey]
   local locked = settings.lock ~= nil
-  -- ✕ de cada paso: quita la receta y se recalcula la ruta con otra en su lugar
+  -- ✕ de cada paso: quita la receta y se recalcula la ruta con otra en su lugar.
+  -- Con la ruta empezada no hay ✕ (solo "Recalcular ruta" la libera)
   local function Skip(id)
+    if locked then return nil end
     return function()
       settings.excluded = settings.excluded or {}
       settings.excluded[id] = true
-      ES:StopRoute(page.profKey)
       ES:CalculatePlan(page)
     end
   end
@@ -1358,7 +1369,7 @@ local function RouteLines(plan, page)
     local r = page.data.recipes[id]
     if r then excluded[#excluded + 1] = r.name end
   end
-  if #excluded > 0 then
+  if #excluded > 0 and not locked then -- con la ruta empezada no se cambian
     table.sort(excluded)
     lines[#lines + 1] = {
       icon = "Interface\\Buttons\\UI-RefreshButton",
@@ -1366,7 +1377,6 @@ local function RouteLines(plan, page)
       sub = L["Clic para volver a tenerlas en cuenta"],
       onClick = function()
         settings.excluded = nil
-        ES:StopRoute(page.profKey)
         ES:CalculatePlan(page)
       end,
       tooltip = function(row)
@@ -1657,7 +1667,9 @@ function ES:RenderPlan(page)
   local newPrices = false
   if lock and plan then
     local scan = self.db.scans and self.db.scans[self:RealmKey()]
-    status = GREEN .. string.format(L["Ruta en curso (de %d a %d): lo que compras no cambia la ruta ni su coste"], lock.from, lock.to) .. "|r"
+    status = GREEN .. (lock.completed
+      and string.format(L["¡Ruta completada! (de %d a %d) · pulsa Recalcular ruta para empezar otra"], lock.from, lock.to)
+      or string.format(L["Ruta en curso (de %d a %d): lo que compras no cambia la ruta ni su coste"], lock.from, lock.to)) .. "|r"
     if scan and scan.time ~= lock.scanTime then
       newPrices = true
       status = status .. ORANGE .. L[" · hay precios nuevos de la AH|r"]
@@ -1666,6 +1678,8 @@ function ES:RenderPlan(page)
     status = status .. GREY .. L[" · pulsa Empezar ruta antes de comprar|r"]
   end
   page.routeButton:SetText(lock and L["Recalcular ruta"] or L["Empezar ruta"])
+  -- Ruta empezada: el objetivo es el suyo (se cambia con "Recalcular ruta")
+  if lock then page.toBox:Disable() else page.toBox:Enable() end
   page.pricesButton:SetText(L["Actualizar precios"])
   page.pricesButton:SetShown(newPrices)
   page.status:SetPoint("RIGHT", newPrices and page.pricesButton or page.routeButton, "LEFT", -10, 0)
