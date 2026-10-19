@@ -688,6 +688,23 @@ step("portada: tarjetas de profesiones", function()
   assert(math.abs(cardPlan.net - detailCost) < 1, "tarjeta y detalle no coinciden con objetivo 150")
   page.toBox._text = "225"
   ES:CalculatePlan(page)
+  -- ✕ en un paso: la receta sale de la ruta y una fila permite recuperarla
+  local firstStep = page.plan.steps[1].id
+  local skipRow
+  for _, row in ipairs(page.rows) do if row.onSkip and row._shown ~= false then skipRow = row break end end
+  assert(skipRow, "los pasos de la ruta deberían tener la ✕")
+  skipRow.skip._scripts.OnEnter(skipRow.skip)
+  skipRow.skip._scripts.OnClick(skipRow.skip)
+  assert(ES.db.prof.Leatherworking.excluded and next(ES.db.prof.Leatherworking.excluded), "no se quitó la receta")
+  for _, st in ipairs(page.plan.steps) do
+    assert(not ES.db.prof.Leatherworking.excluded[st.id], "la receta quitada sigue en la ruta: " .. st.recipe.name)
+  end
+  local restore
+  for _, l in ipairs(page.lines) do if l.title and l.title:find("Recetas quitadas") then restore = l end end
+  assert(restore, "falta la fila para recuperar las recetas quitadas")
+  log[#log+1] = "     quitar receta: " .. restore.title .. " · primer paso ahora " .. page.plan.steps[1].recipe.name
+  restore.onClick()
+  assert(not ES.db.prof.Leatherworking.excluded and page.plan.steps[1].id == firstStep, "no se recuperó la ruta")
   ES:SelectPage("home")
   -- Pulsar la tarjeta abre la profesión; Volver regresa
   first._scripts.OnClick(first)

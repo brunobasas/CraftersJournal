@@ -34,6 +34,9 @@ local BASIC_MAX_YELLOW = 50 -- recetas sin instructor ni pergamino por debajo de
 local CRAFT_COST = 5          -- cobre por fabricación, solo para elegir
 local MAX_EXTRA_PCT = 0.03    -- hasta un 3% de los materiales más
 local MAX_EXTRA_MIN = 100     -- o 1 plata, lo que sea mayor
+-- Recetas de pago usadas menos puntos de los supuestos al elegirlas (ver Planner:Plan)
+local FEE_PASSES = 4          -- pasadas como mucho
+local FEE_SLACK = 0.75        -- se repite si se usó menos del 75% de lo supuesto
 
 -- Fabricaciones totales de un plan
 function Planner.TotalCrafts(plan)
@@ -507,6 +510,34 @@ function Planner:Plan(data, opts)
     return cheap
   end
 
+  -- Recetas de pago (pergamino, instructor): al elegirlas, su precio se reparte
+  -- entre los puntos que quedan hasta que se ponen grises. Si luego la ruta solo
+  -- la usa unos pocos (otra receta pasa a ser mejor), el reparto era demasiado
+  -- optimista (Deviate Scale Cloak: pergamino de 70s para 3 fabricaciones). Se
+  -- repite el plan repartiendo el precio solo entre los puntos que de verdad la
+  -- usa; se queda el plan que llega más lejos y, a igualdad, el más barato.
+  if not opts.forced and not opts.feeSpan then
+    local o = {}
+    for k, v in pairs(opts) do o[k] = v end
+    o.feeSpan = {}
+    local best
+    for _ = 1, FEE_PASSES do
+      local plan = Planner:Plan(data, o)
+      if not best or plan.reached > best.reached or (plan.reached == best.reached and plan.net < best.net - EPS) then
+        best = plan
+      end
+      local changed = false
+      for id, use in pairs(plan.feeUse or {}) do
+        if use.points < use.assumed * FEE_SLACK and (not o.feeSpan[id] or use.points < o.feeSpan[id]) then
+          o.feeSpan[id] = use.points
+          changed = true
+        end
+      end
+      if not changed then break end
+    end
+    return best
+  end
+
   local ctx = NewContext(data, opts)
   local plan = {
     choice = {}, -- [nivel] = receta elegida para ese punto
@@ -523,7 +554,8 @@ function Planner:Plan(data, opts)
   local info = {}
   for id, r in pairs(data.recipes) do
     local learn = Planner.LearnSkill(r, opts)
-    if learn and learn < opts.to and r.t[4] > opts.from then
+    -- opts.excluded: recetas que el jugador ha quitado de la ruta (p. ej. el pergamino está lejos)
+    if learn and learn < opts.to and r.t[4] > opts.from and not (opts.excluded and opts.excluded[id]) then
       local learnCost, learnSource = Planner.LearnCost(ctx, r)
       info[id] = { learn = learn, sale = Planner.SaleInfo(ctx, r), learnCost = learnCost, learnSource = learnSource }
     end
@@ -574,15 +606,18 @@ function Planner:Plan(data, opts)
             -- Coste simbólico de cada fabricación (solo al elegir; ver Plan)
             local score = cost - value + (opts.craftCost or 0) * crafts
             local span = math.max(1, math.min(r.t[4], opts.to) - s)
+            local feeSpan
             if inf.learnCost > 0 and not learned[id] then
-              score = score + inf.learnCost / span
+              -- Entre los puntos que la usó la pasada anterior, si fueron menos (ver arriba)
+              feeSpan = math.max(1, math.min(span, opts.feeSpan and opts.feeSpan[id] or span))
+              score = score + inf.learnCost / feeSpan
             end
             if toolCost then score = score + toolCost / span end
             if not best or score < best.score then
               best = {
                 id = id, score = score, crafts = crafts, chance = chance, cost = cost, value = value,
                 reagents = reagents, extra = extra, actions = actions,
-                tool = tool, toolCost = toolCost or 0,
+                tool = tool, toolCost = toolCost or 0, feeSpan = feeSpan,
               }
             end
           end
@@ -653,6 +688,17 @@ function Planner:Plan(data, opts)
     perPoint[#perPoint + 1] = best
     best.skill = s
     plan.choice[s] = best.id
+  end
+
+  -- Recetas de pago: entre cuántos puntos se repartió su precio y cuántos se usaron
+  plan.feeUse = {}
+  for _, p in ipairs(perPoint) do
+    local use = plan.feeUse[p.id]
+    if use then
+      use.points = use.points + 1
+    elseif p.feeSpan then
+      plan.feeUse[p.id] = { assumed = p.feeSpan, points = 1 }
+    end
   end
 
   -- Por qué se paró: materiales sin precio o sin existencias suficientes

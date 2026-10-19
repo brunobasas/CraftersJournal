@@ -2,6 +2,8 @@
 
 ## 0.34.4
 
+- **Remove a recipe from the route.** Every step of the route now has a small ✕: click it if you don't want to use that recipe (for example, because its pattern is sold far away) and the route is recalculated with the next best option. A row at the end of the route brings removed recipes back.
+- **No more expensive patterns for a handful of crafts.** The route could tell you to buy a pricey pattern (e.g. Deviate Scale Cloak for 70s on the Auction House) and then use it for only 3 crafts. Recipes you have to buy now only make it into the route when they pay off for the points they're actually used for.
 - **Fixed recipe skill requirements.** 362 recipes learned from patterns, plans and formulas asked for less skill than they really need in Forever (e.g. Pattern: Dark Leather Tunic was shown at 50 but needs Leatherworking 75), so the route could tell you to learn a recipe you couldn't learn yet. They now use the exact skill each pattern requires.
 
 ## 0.34.3 (beta)

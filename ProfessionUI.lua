@@ -127,7 +127,16 @@ function ES:PlanOptions(profKey, from, to, cap)
     -- Prueba piloto: recetas de pergamino por sus fuentes reales (misión, vendedor, AH)
     sourcedScrolls = ES.Waypoints.SOURCED_PROFESSIONS[profKey] or nil,
     noQuests = settings.useQuests == false or nil, -- icono de misión desactivado
+    excluded = settings.excluded and next(settings.excluded) and settings.excluded or nil, -- quitadas con la ✕
   }
+end
+
+-- Recetas quitadas de la ruta, en orden fijo (para la clave de la caché)
+local function ExcludedKey(settings)
+  local ids = {}
+  for id in pairs(settings.excluded or {}) do ids[#ids + 1] = id end
+  table.sort(ids)
+  return table.concat(ids, ",")
 end
 
 -- Plan de una profesión con su nivel actual y su objetivo, sin necesidad de abrir
@@ -154,7 +163,7 @@ function ES:PlanKey(profKey, from, to, cap)
   local settings = self.db.prof and self.db.prof[profKey] or {}
   local scan = self.db.scans and self.db.scans[self:RealmKey()]
   return table.concat({ profKey, self.planGen, scan and scan.time or 0, from, to, tostring(cap), tostring(settings.useBags),
-    tostring(settings.useQuests), self:RealmKey() }, ":")
+    tostring(settings.useQuests), self:RealmKey(), ExcludedKey(settings) }, ":")
 end
 
 -- Ruta de una profesión: la de la caché si vale; si no, se calcula repartida entre
@@ -413,6 +422,24 @@ local function CreateRow(parent)
   row.section = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   row.section:SetPoint("LEFT", 4, 0)
 
+  -- ✕ para quitar la receta de la ruta (solo en los pasos de la ruta: line.onSkip)
+  local skip = CreateFrame("Button", nil, row)
+  row.skip = skip
+  skip:SetSize(16, 16)
+  skip:SetPoint("RIGHT", -8, 0)
+  skip:SetNormalTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
+  skip:SetHighlightTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Highlight", "ADD")
+  skip:SetPushedTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Down")
+  skip:SetScript("OnClick", function() if row.onSkip then row.onSkip() end end)
+  skip:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(L["Quitar de la ruta"])
+    GameTooltip:AddLine(L["La ruta busca otra receta en su lugar (por ejemplo, si no quieres ir a por este pergamino)."], 0.8, 0.8, 0.8, true)
+    GameTooltip:Show()
+  end)
+  skip:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  skip:Hide()
+
   row:SetScript("OnEnter", function(self) if self.tooltip then self.tooltip(self) end end)
   row:SetScript("OnLeave", function() GameTooltip:Hide() end)
   -- Filas de instructor o vendedor: clic para marcar el camino al más cercano
@@ -469,6 +496,10 @@ local function StyleRow(row, line)
   row.tooltip = line.tooltip
   row.go = line.go
   row.onClick = line.onClick
+  row.onSkip = line.onSkip
+  row.skip:SetShown(line.onSkip ~= nil)
+  row.value:ClearAllPoints()
+  row.value:SetPoint("RIGHT", line.onSkip and -30 or -12, 0)
 end
 
 -- Filas de dos líneas compartidas con otras páginas (Ganar dinero, Colección)
@@ -859,6 +890,15 @@ end
 local function RouteLines(plan, page)
   local lines = {}
   local profIcon, profName = page.profIcon or ES.ICON, page.profName
+  local settings = ES.db.prof[page.profKey]
+  -- ✕ de cada paso: quita la receta y se recalcula la ruta con otra en su lugar
+  local function Skip(id)
+    return function()
+      settings.excluded = settings.excluded or {}
+      settings.excluded[id] = true
+      ES:CalculatePlan(page)
+    end
+  end
   -- Lo que se fabrica antes va justo delante del primer paso que lo usa
   local craftBefore = {}
   for _, c in ipairs(plan.crafted) do
@@ -937,6 +977,7 @@ local function RouteLines(plan, page)
     local sourcedLine = learnSource and r.scroll and not r.fee and WP.SOURCED_PROFESSIONS[page.profKey]
       and SourcedLearnLine(r, st, profName, plan)
     if sourcedLine then
+      sourcedLine.onSkip = Skip(st.id)
       lines[#lines + 1] = sourcedLine
     elseif learnSource then
       local trainer = st.learnSource == "trainer"
@@ -954,7 +995,7 @@ local function RouteLines(plan, page)
         title = title,
         sub = string.format(L["%s · requiere %s (%d)"], LEARN_WHERE[st.learnSource] or "?", profName, learnAt),
         value = st.learnSource == "unknown" and (GREY .. "?|r") or Signed(st.fee),
-        go = pick,
+        go = pick, onSkip = Skip(st.id),
         tooltip = pick and TravelTooltip(title, string.format(L["%s · requiere %s (%d) · cuesta %s"], LEARN_WHERE[st.learnSource] or "?",
           profName, learnAt, ES.Money(st.fee)), label, pick) or nil,
       }
@@ -966,12 +1007,37 @@ local function RouteLines(plan, page)
       sub = string.format(L["%s%d fabricaciones|r · de %d a %d · %s/u"], perPoint > LOW_CHANCE_CRAFTS and ORANGE or "",
         st.crafts, st.from, st.to, ES.Money(st.unitCost)),
       value = Signed(st.total - st.fee), item = r.out and r.out[1], -- lo de aprender va en su fila
-      tooltip = RecipeTooltip(st, plan),
+      tooltip = RecipeTooltip(st, plan), onSkip = Skip(st.id),
     }
   end
   while events[ev] do AddEvent(events[ev]) ev = ev + 1 end
   if plan.stoppedAt then
     lines[#lines + 1] = { title = ORANGE .. L["El plan se queda en "] .. plan.stoppedAt .. "|r", sub = StopReason(plan) }
+  end
+  -- Recetas quitadas con la ✕: clic para volver a ponerlas todas
+  local excluded = {}
+  for id in pairs(settings.excluded or {}) do
+    local r = page.data.recipes[id]
+    if r then excluded[#excluded + 1] = r.name end
+  end
+  if #excluded > 0 then
+    table.sort(excluded)
+    lines[#lines + 1] = {
+      icon = "Interface\\Buttons\\UI-RefreshButton",
+      title = string.format(L["Recetas quitadas de la ruta: %d"], #excluded),
+      sub = L["Clic para volver a tenerlas en cuenta"],
+      onClick = function()
+        settings.excluded = nil
+        ES:CalculatePlan(page)
+      end,
+      tooltip = function(row)
+        GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(L["Quitadas de la ruta"])
+        for _, name in ipairs(excluded) do GameTooltip:AddLine(name, 0.8, 0.8, 0.8) end
+        GameTooltip:AddLine(L["Clic para volver a tenerlas en cuenta"], 0.5, 0.8, 1)
+        GameTooltip:Show()
+      end,
+    }
   end
   lines[#lines + 1] = { total = true, title = L["Total"], sub = string.format(L["Subir de %d a %d"], plan.from, plan.reached), value = Signed(plan.net) }
   return lines
