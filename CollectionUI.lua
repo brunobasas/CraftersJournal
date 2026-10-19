@@ -278,7 +278,8 @@ function ES.UI.StyleCollectionRow(row)
     row:SetBackdropColor(0.12, 0.30, 0.10, 0.55)
     row:SetBackdropBorderColor(0.30, 0.65, 0.25, 0.8)
   else
-    row:SetBackdropColor(0.10, 0.07, 0.04, 0.85)
+    local c = ES.UI.BROWN.row
+    row:SetBackdropColor(c[1], c[2], c[3], c[4])
     row:SetBackdropBorderColor(0.45, 0.34, 0.16, 0.8)
   end
   if row.selected then row:SetBackdropBorderColor(1, 0.82, 0.25, 1) end
@@ -428,8 +429,9 @@ end
 
 local function CreateDetail(frame)
   local Panel, Label = ES.UI.Panel, ES.UI.Label
-  local d = Panel(frame, 0.09, 0.07, 0.05, 0.94)
-  d:SetPoint("TOPLEFT", frame.listPanel, "TOPRIGHT", 8, 0)
+  local B = ES.UI.BROWN -- como el panel de la lista (el diario de mazmorras usa el mismo)
+  local d = Panel(frame, B.list[1], B.list[2], B.list[3], B.list[4])
+  d:SetPoint("TOPLEFT", frame.listPanel, "TOPRIGHT", 12, 0)
   d:SetPoint("BOTTOMRIGHT", 0, 0)
   d.icon = CreateFrame("Button", nil, d)
   d.icon:SetSize(40, 40)
@@ -585,13 +587,20 @@ function ES:CreateCollectionView(frame, profKey)
   -- Cabecera: barra de progreso y Filtros; debajo, cuántas puedes aprender ya
   frame.filterButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
   frame.filterButton:SetSize(100, 24)
-  frame.filterButton:SetPoint("TOPRIGHT", -4, -4)
+  frame.filterButton:SetPoint("TOPRIGHT", -10, -10)
+  -- Tarjeta de la cabecera (barra, filtros y buscador), como la de una profesión
+  local B = ES.UI.BROWN
+  frame.headCard = Panel(frame, B.card[1], B.card[2], B.card[3], B.card[4])
+  frame.headCard:SetPoint("TOPLEFT", 0, 0)
+  frame.headCard:SetPoint("TOPRIGHT", 0, 0)
+  frame.headCard:SetHeight(82)
+  frame.headCard:SetFrameLevel(frame:GetFrameLevel())
   frame.filterButton:SetScript("OnClick", function()
     local p = frame.filterPopup
     if p:IsShown() then p:Hide() else p:Sync() p:Show() end
   end)
   frame.bar = CreateProgressBar(frame)
-  frame.bar:SetPoint("TOPLEFT", 8, -5)
+  frame.bar:SetPoint("TOPLEFT", 14, -11)
   frame.bar:SetPoint("RIGHT", frame.filterButton, "LEFT", -14, 0)
   frame.counter = frame.bar.text
   frame.counterSub = Label(frame, "", "GameFontHighlightSmall")
@@ -599,7 +608,7 @@ function ES:CreateCollectionView(frame, profKey)
 
   frame.search = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
   frame.search:SetHeight(20)
-  frame.search:SetPoint("TOPLEFT", 10, -50)
+  frame.search:SetPoint("TOPLEFT", 18, -54)
   frame.search:SetWidth(LIST_W - 14)
   frame.search:SetAutoFocus(false)
   frame.search:SetScript("OnTextChanged", function() ES:RenderCollection(frame) end)
@@ -609,8 +618,8 @@ function ES:CreateCollectionView(frame, profKey)
   frame.searchHint:SetPoint("LEFT", 4, 0)
 
   -- Lista
-  frame.listPanel = Panel(frame, 0.07, 0.05, 0.03, 0.9)
-  frame.listPanel:SetPoint("TOPLEFT", 0, -76)
+  frame.listPanel = Panel(frame, B.list[1], B.list[2], B.list[3], B.list[4])
+  frame.listPanel:SetPoint("TOPLEFT", 0, -92)
   frame.listPanel:SetPoint("BOTTOMLEFT", 0, 0)
   frame.listPanel:SetWidth(LIST_W)
   local scroll = WheelScroll(frame.listPanel, ROW_STEP * 2)

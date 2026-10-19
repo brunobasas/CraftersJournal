@@ -24,6 +24,7 @@ local BROWN = {
   list  = { 0.18, 0.14, 0.10, 0.95 },
   row   = { 0.13, 0.10, 0.07, 0.95 },
 }
+local PAD = 14 -- margen interior: del fondo de la página a sus paneles
 
 local SOURCE_LABEL = ES.Localize({
   vendor = "Vendedor", ah = "AH", craft = "Fabricar", stock = "Tuyo",
@@ -113,7 +114,17 @@ local function WheelScroll(parent, step)
 end
 
 -- Utilidades compartidas con otras pestañas
-ES.UI = { Label = Label, CheckBox = CheckBox, ItemLabel = ItemLabel, Panel = Panel, WheelScroll = WheelScroll }
+-- Fondo que agrupa toda una página (como el del diario de mazmorras), detrás de lo demás
+local function GroupPanel(page)
+  local g = Panel(page, BROWN.group[1], BROWN.group[2], BROWN.group[3], BROWN.group[4])
+  g:SetPoint("TOPLEFT", 2, 0)
+  g:SetPoint("BOTTOMRIGHT", -2, 2)
+  g:SetFrameLevel(page:GetFrameLevel())
+  return g
+end
+
+ES.UI = { Label = Label, CheckBox = CheckBox, ItemLabel = ItemLabel, Panel = Panel, WheelScroll = WheelScroll,
+  BROWN = BROWN, GroupPanel = GroupPanel, PAD = PAD }
 
 -- Objetivo de una profesión (editable en su detalle; por defecto, el máximo).
 -- Lo usan la tarjeta de la portada y el detalle, para que el coste coincida.
@@ -688,16 +699,12 @@ function ES:CreateProfessionPage(page, profKey)
 
   -- Fondo que agrupa toda la página (como el del diario de mazmorras): un marrón más
   -- claro, de la tarjeta de la profesión hasta debajo del total
-  local group = Panel(page, BROWN.group[1], BROWN.group[2], BROWN.group[3], BROWN.group[4])
-  group:SetPoint("TOPLEFT", 2, 0)
-  group:SetPoint("BOTTOMRIGHT", -2, 2)
-  group:SetFrameLevel(page:GetFrameLevel())
-  page.group = group
+  page.group = GroupPanel(page)
 
   -- Cabecera de la profesión
   local head = Panel(page, BROWN.card[1], BROWN.card[2], BROWN.card[3], BROWN.card[4])
-  head:SetPoint("TOPLEFT", 10, -8)
-  head:SetPoint("TOPRIGHT", -10, -8)
+  head:SetPoint("TOPLEFT", PAD, -PAD + 2)
+  head:SetPoint("TOPRIGHT", -PAD, -PAD + 2)
   head:SetHeight(66)
   page.head = head
 
@@ -941,7 +948,7 @@ function ES:CreateProfessionPage(page, profKey)
   -- Lista
   local list = Panel(page, BROWN.list[1], BROWN.list[2], BROWN.list[3], BROWN.list[4])
   list:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -LIST_TOP)
-  list:SetPoint("BOTTOMRIGHT", -10, 10)
+  list:SetPoint("BOTTOMRIGHT", -PAD, PAD)
   page.listPanel = list
   local scroll = WheelScroll(list)
   scroll:SetPoint("TOPLEFT", 8, -8)

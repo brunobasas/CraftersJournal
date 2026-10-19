@@ -237,7 +237,7 @@ local function OthersHeader(page)
   h:SetHeight(OTHERS_H)
   h:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12,
     insets = { left = 3, right = 3, top = 3, bottom = 3 } })
-  h:SetBackdropColor(0.08, 0.06, 0.04, 0.9)
+  h:SetBackdropColor(unpack(ES.UI.BROWN.row))
   h:SetBackdropBorderColor(unpack(BORDER))
   h.arrow = h:CreateTexture(nil, "ARTWORK")
   h.arrow:SetSize(14, 14)
@@ -305,21 +305,29 @@ function ES.UI.LayoutCards(page)
   page.content:SetHeight(math.max(1, y))
 end
 
-function ES:CreateHomePage(page)
+-- Cabecera de las portadas (profesiones y colección): fondo agrupado, texto y línea
+function ES.UI.CoverPage(page, text)
+  page.group = ES.UI.GroupPanel(page)
   local subtitle = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  subtitle:SetPoint("TOPLEFT", 18, -2)
+  subtitle:SetPoint("TOPLEFT", 18, -12)
   subtitle:SetTextColor(0.75, 0.75, 0.75)
-  subtitle:SetText(string.format(L["Elige una profesión para ver cómo subirla y qué fabricar. Coste de subir desde tu nivel hasta %d."], ES.MAX_SKILL))
+  subtitle:SetText(text)
 
   local line = page:CreateTexture(nil, "ARTWORK")
-  line:SetPoint("TOPLEFT", 16, -20)
-  line:SetPoint("TOPRIGHT", -16, -20)
+  line:SetPoint("TOPLEFT", 16, -30)
+  line:SetPoint("TOPRIGHT", -16, -30)
   line:SetHeight(1)
   line:SetColorTexture(1, 0.82, 0, 0.25)
 
   local scroll = ES.UI.WheelScroll(page)
-  scroll:SetPoint("TOPLEFT", 16, -28)
-  scroll:SetPoint("BOTTOMRIGHT", -16, 12)
+  scroll:SetPoint("TOPLEFT", 16, -40)
+  scroll:SetPoint("BOTTOMRIGHT", -16, 16)
+  return scroll
+end
+
+function ES:CreateHomePage(page)
+  local scroll = ES.UI.CoverPage(page,
+    string.format(L["Elige una profesión para ver cómo subirla y qué fabricar. Coste de subir desde tu nivel hasta %d."], ES.MAX_SKILL))
   page.content = CreateFrame("Frame", nil, scroll)
   page.content:SetSize(MIN_CARD_W * 2 + GAP, 1)
   scroll:SetScrollChild(page.content)

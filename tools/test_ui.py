@@ -1183,6 +1183,25 @@ step("interruptor de desarrollo: vista de jugador", function()
   panel.devCheck._scripts.OnClick(panel.devCheck)
   assert(ES.DEV == true and not ES.db.userPreview and #ES:GetMainFrame().tabs == 4, "no volvió al modo desarrollo")
 end)
+step("cada personaje tiene sus rutas", function()
+  -- El hunter empieza una ruta y sale; el warrior no la ve; el hunter vuelve y la recupera
+  if not ES.charData then ES.LoadCharacterData() end
+  ES.db.prof.Leatherworking = ES.db.prof.Leatherworking or {}
+  ES.db.prof.Leatherworking.lock = { from = 1, to = 2, started = 1, choice = {} }
+  ES.db.prof.Leatherworking.target = 175
+  ES.SaveCharacterData()
+  assert(ES.db.prof == nil, "al salir no deberían quedar copias sueltas")
+  local savedName = UnitName
+  UnitName = function() return "Warrior" end
+  ES.LoadCharacterData()
+  assert(not (ES.db.prof.Leatherworking and ES.db.prof.Leatherworking.lock), "otro personaje ve la ruta del primero")
+  ES.SaveCharacterData()
+  UnitName = savedName
+  ES.LoadCharacterData()
+  assert(ES.db.prof.Leatherworking.lock and ES.db.prof.Leatherworking.target == 175, "al volver, el personaje no recupera su ruta")
+  ES.db.prof.Leatherworking.lock, ES.db.prof.Leatherworking.target = nil, nil
+  ES.lockedPlans = {}
+end)
 step("al volver a abrir, sigue donde estabas", function()
   local mf = ES:GetMainFrame()
   ES:SelectPage("Leatherworking")

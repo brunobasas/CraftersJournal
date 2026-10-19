@@ -8,20 +8,8 @@ local L = ES.L
 local GREEN, GREY, GOLD = "|cff40ff40", "|cff9d9d9d", "|cffffd100"
 
 function ES:CreatePatternsPage(page)
-  local subtitle = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  subtitle:SetPoint("TOPLEFT", 18, -2)
-  subtitle:SetTextColor(0.75, 0.75, 0.75)
-  subtitle:SetText(L["Todas las recetas que ofrece el juego en cada profesión: cuántas tienes y dónde conseguir las que faltan."])
-
-  local line = page:CreateTexture(nil, "ARTWORK")
-  line:SetPoint("TOPLEFT", 16, -20)
-  line:SetPoint("TOPRIGHT", -16, -20)
-  line:SetHeight(1)
-  line:SetColorTexture(1, 0.82, 0, 0.25)
-
-  local scroll = ES.UI.WheelScroll(page)
-  scroll:SetPoint("TOPLEFT", 16, -28)
-  scroll:SetPoint("BOTTOMRIGHT", -16, 12)
+  local scroll = ES.UI.CoverPage(page,
+    L["Todas las recetas que ofrece el juego en cada profesión: cuántas tienes y dónde conseguir las que faltan."])
   page.content = CreateFrame("Frame", nil, scroll)
   page.content:SetSize(ES.UI.CARD_MIN_W * 2 + ES.UI.CARD_GAP, 1)
   scroll:SetScrollChild(page.content)
@@ -33,9 +21,10 @@ end
 
 -- Página de la colección de una profesión
 function ES:CreatePatternPage(page, profKey)
+  page.group = ES.UI.GroupPanel(page) -- fondo agrupado, como en la página de una profesión
   local frame = CreateFrame("Frame", nil, page)
-  frame:SetPoint("TOPLEFT", 10, -2)
-  frame:SetPoint("BOTTOMRIGHT", -10, 4)
+  frame:SetPoint("TOPLEFT", ES.UI.PAD, -ES.UI.PAD + 2)
+  frame:SetPoint("BOTTOMRIGHT", -ES.UI.PAD, ES.UI.PAD)
   ES:CreateCollectionView(frame, profKey)
   frame:Show() -- se refresca al mostrarse la página (OnShow de la vista)
   page.collectionFrame = frame

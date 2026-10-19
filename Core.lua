@@ -132,7 +132,7 @@ function ES.Num(x)
 end
 
 function ES:Print(msg)
-  print("|cff33ccffEasySkills|r: " .. tostring(msg))
+  print("|cff33ccffCrafter's Journal|r: " .. tostring(msg))
 end
 
 -- Clave por reino + casa de subastas: la de tu facción y la neutral (goblins de
@@ -410,8 +410,41 @@ function ES.SafeRegister(frame, event)
   local ok = pcall(frame.RegisterEvent, frame, event)
   return ok
 end
+-- Lo de cada personaje: las rutas empezadas, los ajustes de cada profesión (objetivo,
+-- opciones, recetas quitadas) y la última profesión vista. Se guarda en
+-- ES.db.chars[personaje]; mientras juegas, ES.db.prof y ES.db.lastProf son los suyos.
+-- Así otro personaje no ve tu ruta, y al volver con este la recuperas.
+local function LoadCharacterData()
+  local db = ES.db
+  local key = ES:CharKey()
+  db.chars = db.chars or {}
+  local c = db.chars[key]
+  if not c then
+    c = {}
+    if not db.charsMigrated then
+      -- Antes había unos para todos los personajes: se los queda el primero que entra
+      c.prof, c.lastProf = db.prof, db.lastProf
+      db.charsMigrated = true
+    end
+    db.chars[key] = c
+  end
+  c.prof = c.prof or {}
+  db.prof, db.lastProf = c.prof, c.lastProf
+  ES.charData = c
+end
+
+-- Al salir: lo del personaje queda solo en ES.db.chars (sin copias sueltas en ES.db)
+local function SaveCharacterData()
+  if not (ES.db and ES.charData) then return end
+  ES.charData.lastProf = ES.db.lastProf
+  ES.db.prof, ES.db.lastProf = nil, nil
+end
+
+ES.LoadCharacterData, ES.SaveCharacterData = LoadCharacterData, SaveCharacterData -- para pruebas
+
 ES.SafeRegister(events, "ADDON_LOADED")
 ES.SafeRegister(events, "PLAYER_LOGIN")
+ES.SafeRegister(events, "PLAYER_LOGOUT")
 ES.SafeRegister(events, "AUCTION_HOUSE_SHOW")
 ES.SafeRegister(events, "AUCTION_HOUSE_CLOSED")
 ES.SafeRegister(events, "UPDATE_FACTION")
@@ -421,11 +454,14 @@ events:SetScript("OnEvent", function(_, event, arg1)
     CraftersJournalDB = CraftersJournalDB or {}
     ApplyDefaults(CraftersJournalDB, DEFAULTS)
     ES.db = CraftersJournalDB
+    LoadCharacterData()
     ES.lang = ES.db.lang or ES.DefaultLanguage()
     ES.DEV = ES.DEV_BUILD and not ES.db.userPreview -- vista de jugador guardada (copia de desarrollo)
     ES.db.lastGetAll, ES.db.serverLimit = nil, nil -- claves de versiones anteriores (ver Scanner.lua)
     ES.ApplyLocalization()
     ES:LocalizeRecipeNames()
+  elseif event == "PLAYER_LOGOUT" then
+    SaveCharacterData()
   elseif event == "PLAYER_LOGIN" then
     ES:DropOtherFactionRecipes()
     CreateMinimapButton()
