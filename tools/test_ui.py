@@ -1189,7 +1189,10 @@ step("al volver a abrir, sigue donde estabas", function()
   mf.openPage = nil
   mf._scripts.OnShow(mf) -- cerrar y volver a abrir la ventana
   assert(ES.db.lastPage == "Leatherworking", "al abrir debería seguir en la profesión: " .. tostring(ES.db.lastPage))
-  ES:SelectPage("home")
+  -- Otra sesión (otro personaje): se empieza en la portada, no en lo del otro
+  ES.sessionPage = nil
+  mf._scripts.OnShow(mf)
+  assert(ES.db.lastPage == "home", "con otro personaje debería abrir en la portada: " .. tostring(ES.db.lastPage))
 end)
 step("merchant's favor: solo con su icono", function()
   -- Por defecto la ruta no usa recetas de Merchant's Favor; con el icono, sí (0 oro)

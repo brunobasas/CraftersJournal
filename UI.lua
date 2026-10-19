@@ -380,11 +380,12 @@ local function CreateMainFrame()
     end
   end)
 
-  -- Al abrir el panel se vuelve a donde estabas (la última página; en una profesión,
-  -- también su vista: Ruta, Profit o Lista de la compra), salvo que se pida otra
+  -- Al abrir el panel se vuelve a donde estabas en esta sesión (la última página; en
+  -- una profesión, también su vista), salvo que se pida otra. Solo en la sesión: con
+  -- otro personaje (o al volver a entrar) se empieza en la portada
   f:SetScript("OnShow", function(self)
     ES:RefreshScanButtons()
-    ES:SelectPage(self.openPage or ES.db.lastPage or "home")
+    ES:SelectPage(self.openPage or ES.sessionPage or "home")
     self.openPage = nil
   end)
 
@@ -513,6 +514,7 @@ function ES:SelectPage(key)
     end
   end
   self.db.lastPage = key
+  self.sessionPage = key -- lo que recuerda la ventana al volver a abrirla (solo esta sesión)
   for k, page in pairs(main.pages) do page:SetShown(k == key) end
   local tab, back = TabOf(key)
   for _, t in ipairs(main.tabs or {}) do t:SetChecked(t.key == tab) end
@@ -549,7 +551,7 @@ function ES:RebuildMainFrame()
   if wasShown then self:ShowMainFrame(page) end
 end
 
--- Abre el panel; `page` elige la página (por defecto, la última que viste)
+-- Abre el panel; `page` elige la página (por defecto, la última que viste en esta sesión)
 function ES:ShowMainFrame(page)
   local f = self:GetMainFrame()
   if f:IsShown() then
