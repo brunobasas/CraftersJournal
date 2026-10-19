@@ -139,6 +139,8 @@ La 1.0 son **Subir profesiones** y **Colección de recetas** (8 profesiones). Lo
 - [ ] `CHANGELOG.md` para la 1.0 (el empaquetador lo usa como notas de la versión).
 
 ### Después de la 1.0
+- **Gasto real de la ruta (decidido el 2026-10-19):** con la ruta fijada ("Empezar ruta", 0.34.4), registrar lo que el jugador gasta en los materiales de la ruta: compras al vendedor (objeto, cantidad y precio, exacto), compras en la AH (lo pagado al comprar; las pujas, por la factura del correo, que Mail.lua ya lee). Mostrar "Gastado en la ruta: X de Y previstos", solo con los objetos de la lista de la compra.
+- Revisar la ruta de Peletería 169-225: con los datos reales pide ~1474 cueros pesados de 120 a 225 (Guardian Gloves, Nightscape, Wild Leather); comprobar si es real o si sobran intermedios.
 - Fuentes de los pergaminos nuevos de Forever cuando las publiquen (F1), regenerar con QuestieDB nuevo.
 - Pesca (ya hecha en modo DEV) y buscador de la cabecera: publicarlos en una 1.1.
 - Ganar dinero 2.0 (G) y Subastas.

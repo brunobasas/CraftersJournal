@@ -139,6 +139,62 @@ local function ExcludedKey(settings)
   return table.concat(ids, ",")
 end
 
+---------------------------------------------------------------------------
+-- Ruta fijada ("Empezar ruta"): una vez decidida, comprar (AH, vendedor, correo)
+-- no la cambia ni cambia sus totales. Se guardan las recetas de cada nivel y lo
+-- que llevabas en las bolsas al empezar (solo eso cuenta como gratis: lo que
+-- compras para la ruta ya está contado como gasto). La lista de la compra dice
+-- cuánto tienes de lo que falta desde tu nivel. Se libera con "Recalcular ruta",
+-- al cambiar el objetivo u otra opción, con la ✕, o al llegar al objetivo.
+--   settings.lock = { from, to, cap, choice = { [nivel] = receta }, owned, started, scanTime }
+---------------------------------------------------------------------------
+ES.lockedPlans = {} -- ruta fijada ya calculada, por profesión (en memoria)
+
+function ES:RouteLock(profKey)
+  local settings = self.db.prof and self.db.prof[profKey]
+  return settings and settings.lock
+end
+
+-- La ruta fijada: la de esta sesión tal cual; tras recargar se rehace con las
+-- mismas recetas y las bolsas del principio (es una sola pasada: rápido)
+function ES:LockedPlan(profKey)
+  local lock = self:RouteLock(profKey)
+  if not lock then return nil end
+  local plan = self.lockedPlans[profKey]
+  if plan and plan.lockStarted == lock.started then return plan end
+  local opts = self:PlanOptions(profKey, lock.from, lock.to, lock.cap)
+  opts.owned, opts.forced, opts.excluded = lock.owned, lock.choice, nil
+  plan = self.Planner:Plan(ES.Data[profKey], opts)
+  plan.lockStarted = lock.started
+  self.lockedPlans[profKey] = plan
+  return plan
+end
+
+function ES:StartRoute(page)
+  local plan = page.plan
+  if not plan or #plan.steps == 0 then return end
+  local owned
+  if plan.ctx and plan.ctx.opts.owned then
+    owned = {}
+    for itemID, q in pairs(plan.ctx.opts.owned) do owned[itemID] = q end
+  end
+  local scan = self.db.scans and self.db.scans[self:RealmKey()]
+  local choice = {}
+  for s, id in pairs(plan.choice) do choice[s] = id end
+  local lock = { from = plan.from, to = plan.to, cap = page.detected and page.detected.cap or nil, choice = choice,
+    owned = owned, started = time(), scanTime = scan and scan.time }
+  self.db.prof[page.profKey].lock = lock
+  plan.lockStarted = lock.started
+  self.lockedPlans[page.profKey] = plan
+  self:RenderPlan(page)
+end
+
+function ES:StopRoute(profKey)
+  local settings = self.db.prof and self.db.prof[profKey]
+  if settings then settings.lock = nil end
+  self.lockedPlans[profKey] = nil
+end
+
 -- Plan de una profesión con su nivel actual y su objetivo, sin necesidad de abrir
 -- su página (lo usan la lista de compra de la AH). nil si ya estás en el objetivo.
 function ES:ProfessionPlan(profKey)
@@ -146,6 +202,8 @@ function ES:ProfessionPlan(profKey)
   local rank, maxRank = self:GetProfessionSkill(data.skillLine)
   local from, to = rank or 1, self:ProfessionTarget(profKey)
   if from >= to then return nil, from, to end
+  local locked = self:LockedPlan(profKey)
+  if locked then return locked, from, to end
   local cap = rank and maxRank or nil
   local key = self:PlanKey(profKey, from, to, cap)
   local cached = self.homePlanCache[profKey]
@@ -171,6 +229,8 @@ end
 -- está (en caché, o calculada de golpe fuera del juego). `owner` identifica a quien
 -- la pide (la portada, una página) para no avisarle dos veces.
 function ES:RequestPlan(profKey, from, to, cap, onDone, owner)
+  local locked = self:LockedPlan(profKey) -- ruta fijada: la portada enseña la misma
+  if locked then return locked end
   local key = self:PlanKey(profKey, from, to, cap)
   local cached = self.homePlanCache[profKey]
   if cached and cached.key == key then return cached.plan end
@@ -587,6 +647,35 @@ function ES:CreateProfessionPage(page, profKey)
   local toHint = Label(head, L["(máx. "] .. MAX_SKILL .. ")", "GameFontDisableSmall")
   toHint:SetPoint("LEFT", page.toBox, "RIGHT", 6, 0)
 
+  -- Empezar ruta (la fija) / Recalcular ruta (la libera y la rehace con lo que llevas)
+  local routeButton = CreateFrame("Button", nil, head, "UIPanelButtonTemplate")
+  page.routeButton = routeButton
+  routeButton:SetSize(120, 22)
+  routeButton:SetPoint("LEFT", toHint, "RIGHT", 12, 0)
+  routeButton:SetMotionScriptsWhileDisabled(true)
+  routeButton:SetScript("OnClick", function()
+    if ES:RouteLock(profKey) then
+      ES:StopRoute(profKey)
+      ES:ClearHomeCache() -- con lo que llevas ahora
+      ES:CalculatePlan(page)
+    else
+      ES:StartRoute(page)
+    end
+  end)
+  routeButton:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    if ES:RouteLock(profKey) then
+      GameTooltip:AddLine(L["Recalcular ruta"])
+      GameTooltip:AddLine(L["Vuelve a calcular la ruta con los precios y lo que llevas ahora. Lo que ya has comprado contará como tuyo (gratis)."], 0.8, 0.8, 0.8, true)
+    else
+      GameTooltip:AddLine(L["Empezar ruta"])
+      GameTooltip:AddLine(L["Fija esta ruta: mientras compras en la AH, al vendedor o sacas del correo, ni la ruta ni su coste cambian. La lista de la compra va marcando lo que te falta."], 0.8, 0.8, 0.8, true)
+      GameTooltip:AddLine(L["Púlsalo antes de empezar a comprar."], 0.5, 0.8, 1, true)
+    end
+    GameTooltip:Show()
+  end)
+  routeButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
   -- Botones de vista, de derecha a izquierda
   page.viewButtons = {}
   local prev
@@ -631,6 +720,7 @@ function ES:CreateProfessionPage(page, profKey)
     b:SetScript("OnClick", function(self)
       toggle()
       self:Refresh()
+      ES:StopRoute(profKey) -- otra opción: otra ruta
       ES:CalculatePlan(page)
       if self:IsMouseOver() then self:GetScript("OnEnter")(self) end
     end)
@@ -653,7 +743,7 @@ function ES:CreateProfessionPage(page, profKey)
     function()
       return { settings.useBags and L["Activado: en la misma ruta, usa tus materiales (gratis) antes de comprar."]
         or L["Desactivado: el plan compra todo, aunque lo tengas."],
-        L["La ruta no cambia por lo que lleves: solo baja el coste."] }
+        L["Si con lo que llevas otra ruta sale más barata, la propone. Pulsa Empezar ruta antes de comprar: lo que compres para la ruta no contará como gratis."] }
     end)
 
   -- Contar misiones para conseguir recetas (prueba piloto: solo en las profesiones con fuentes reales)
@@ -759,13 +849,14 @@ end
 
 -- Solo la que está a la vista: las demás se recalculan al mostrarse (OnShow),
 -- así un escaneo no congela el juego recalculando las 8 profesiones
--- Cambian tus bolsas: con "usar bolsas y banco" la ruta cambia (se recalcula); si
--- no, basta con volver a pintar para que la lista de la compra cuente lo que llevas
+-- Cambian tus bolsas (compras, correo, fabricar): con la ruta fijada o sin "usar
+-- bolsas y banco" la ruta no cambia y basta con repintar (la lista de la compra
+-- cuenta lo que llevas); sin fijar y con bolsas, se recalcula
 function ES:RefreshAfterBags()
   for _, page in ipairs(self.professionPages or {}) do
     if page.initialized and page:IsVisible() and page.data and not page.data.guide then
       local settings = self.db.prof and self.db.prof[page.profKey] or {}
-      if settings.useBags then self:CalculatePlan(page) else self:RenderPlan(page) end
+      if settings.useBags and not settings.lock then self:CalculatePlan(page) else self:RenderPlan(page) end
     end
   end
 end
@@ -787,7 +878,15 @@ function ES:CalculatePlan(page)
   page.lastTarget = to
   self.db.prof[page.profKey].target = to
   page.calculating = nil
-  if from >= to then
+  -- Ruta fijada: se enseña tal cual (otro objetivo o llegar a él la liberan)
+  local lock = self:RouteLock(page.profKey)
+  if lock and (to ~= lock.to or from >= lock.to) then
+    self:StopRoute(page.profKey)
+    lock = nil
+  end
+  if lock then
+    page.plan, page.planKey = self:LockedPlan(page.profKey), nil
+  elseif from >= to then
     page.plan, page.planKey = nil, nil -- y si llega una ruta pedida antes, se descarta
   else
     -- Con el nivel detectado se usa el tope real para saber qué rangos faltan.
@@ -902,11 +1001,13 @@ local function RouteLines(plan, page)
   local lines = {}
   local profIcon, profName = page.profIcon or ES.ICON, page.profName
   local settings = ES.db.prof[page.profKey]
+  local locked = settings.lock ~= nil
   -- ✕ de cada paso: quita la receta y se recalcula la ruta con otra en su lugar
   local function Skip(id)
     return function()
       settings.excluded = settings.excluded or {}
       settings.excluded[id] = true
+      ES:StopRoute(page.profKey)
       ES:CalculatePlan(page)
     end
   end
@@ -982,9 +1083,11 @@ local function RouteLines(plan, page)
     end
     local r = st.recipe
     local name, texture = ItemLabel(r.out and r.out[1] or 0, r.name)
+    -- Ruta fijada: los pasos que ya has pasado se marcan hechos (sin fila de aprender)
+    local done = locked and st.to <= (page.from or 0)
     -- Aprender la receta: fila propia (como en el instructor), con su coste
     -- Ya la sabes ("known"): sin fila de aprender
-    local learnSource = st.learnSource ~= "known" and st.learnSource or nil
+    local learnSource = not done and st.learnSource ~= "known" and st.learnSource or nil
     local sourcedLine = learnSource and r.scroll and not r.fee and WP.SOURCED_PROFESSIONS[page.profKey]
       and SourcedLearnLine(r, st, profName, plan)
     if sourcedLine then
@@ -1014,11 +1117,12 @@ local function RouteLines(plan, page)
     local perPoint = st.expected / (st.to - st.from)
     lines[#lines + 1] = {
       icon = texture or 134400,
-      title = name,
-      sub = string.format(L["%s%d fabricaciones|r · de %d a %d · %s/u"], perPoint > LOW_CHANCE_CRAFTS and ORANGE or "",
+      title = done and (GREY .. "✓ " .. name .. "|r") or name,
+      sub = done and (GREY .. string.format(L["Hecho · de %d a %d"], st.from, st.to) .. "|r")
+        or string.format(L["%s%d fabricaciones|r · de %d a %d · %s/u"], perPoint > LOW_CHANCE_CRAFTS and ORANGE or "",
         st.crafts, st.from, st.to, ES.Money(st.unitCost)),
       value = Signed(st.total - st.fee), item = r.out and r.out[1], -- lo de aprender va en su fila
-      tooltip = RecipeTooltip(st, plan), onSkip = Skip(st.id),
+      tooltip = RecipeTooltip(st, plan), onSkip = not done and Skip(st.id) or nil,
     }
   end
   while events[ev] do AddEvent(events[ev]) ev = ev + 1 end
@@ -1039,6 +1143,7 @@ local function RouteLines(plan, page)
       sub = L["Clic para volver a tenerlas en cuenta"],
       onClick = function()
         settings.excluded = nil
+        ES:StopRoute(page.profKey)
         ES:CalculatePlan(page)
       end,
       tooltip = function(row)
@@ -1096,7 +1201,7 @@ local function ProfitLines(plan)
 end
 
 -- Líneas de la vista Lista de compra
-local function ShopLines(plan)
+local function ShopLines(plan, page)
   local lines = {}
   local total = 0
   local function Section(title, items, build)
@@ -1105,19 +1210,18 @@ local function ShopLines(plan)
     for _, it in ipairs(items) do lines[#lines + 1] = build(it) end
   end
   local ah, vendor = {}, {}
-  -- Lo que la ruta gasta de cada material (compras + lo que usa de tus bolsas): con
-  -- lo que llevas ahora se ve cuántos tienes ya y cuántos faltan (se actualiza al
-  -- comprar al vendedor o sacar del correo; ver BAG_UPDATE_DELAYED en HomeUI.lua)
-  local need = {}
+  -- Lo que la ruta gasta de cada material desde tu nivel actual (compras + lo que
+  -- usa de tus bolsas) frente a lo que llevas: cuántos tienes y cuántos faltan. Se
+  -- actualiza al comprar, sacar del correo o fabricar (BAG_UPDATE_DELAYED, HomeUI.lua)
   for _, it in ipairs(plan.shopping) do
     if it.source == "ah" then ah[#ah + 1] = it else vendor[#vendor + 1] = it end
     total = total + it.total
-    need[it.itemID] = (need[it.itemID] or 0) + it.quantity
   end
-  for _, it in ipairs(plan.owned) do need[it.itemID] = (need[it.itemID] or 0) + it.quantity end
+  local need = ES.Planner.NeedFrom(plan, math.max(plan.from, page.from or plan.from))
   local function Progress(itemID)
     local have = GetItemCount and (GetItemCount(itemID, true) or 0) or 0
-    local n = need[itemID]
+    local n = math.ceil((need[itemID] or 0) - 0.001)
+    if n <= 0 then return GREEN .. L["Ya no hace falta"] .. "|r" end
     if have >= n then return GREEN .. string.format(L["Tienes %d/%d"], have, n) .. "|r" end
     return string.format(L["Tienes %d/%d · faltan %s%d|r"], have, n, ORANGE, n - have)
   end
@@ -1135,7 +1239,7 @@ local function ShopLines(plan)
   Section(L["Comprar al vendedor"], vendor, Buy)
   Section(L["Usar de tus bolsas y banco"], plan.owned, function(it)
     local name, texture = ItemLabel(it.itemID, L["Objeto "] .. it.itemID)
-    return { icon = texture or 134400, title = it.quantity .. "× " .. name, sub = L["Ya lo tienes: se usa antes de comprar"],
+    return { icon = texture or 134400, title = it.quantity .. "× " .. name, sub = Progress(it.itemID) .. " · " .. L["Ya lo tienes: se usa antes de comprar"],
       item = it.itemID, tooltip = SimpleTooltip(it.itemID, L["Ya lo tienes: el plan lo usa antes de comprar nada."]) }
   end)
   if #plan.shopping > 0 then
@@ -1188,6 +1292,19 @@ function ES:RenderPlan(page)
     status = status .. GREY .. string.format(L[" · %d fabricaciones menos que la ruta más barata%s|r"], saved,
       extra >= 0.5 and (L[", por "] .. ES.Money(extra) .. L[" más"]) or "")
   end
+  -- Ruta fijada: lo que compras no la cambia; un escaneo nuevo solo avisa
+  local lock = self:RouteLock(page.profKey)
+  if lock and plan then
+    local scan = self.db.scans and self.db.scans[self:RealmKey()]
+    status = GREEN .. string.format(L["Ruta en curso (de %d a %d): lo que compras no cambia la ruta ni su coste"], lock.from, lock.to) .. "|r"
+    if scan and scan.time ~= lock.scanTime then
+      status = status .. ORANGE .. L[" · hay precios nuevos de la AH: Recalcular ruta para usarlos|r"]
+    end
+  elseif plan and #plan.steps > 0 and not page.calculating and self.db.prof[page.profKey].useBags then
+    status = status .. GREY .. L[" · pulsa Empezar ruta antes de comprar|r"]
+  end
+  page.routeButton:SetText(lock and L["Recalcular ruta"] or L["Empezar ruta"])
+  page.routeButton:SetEnabled(lock ~= nil or (plan ~= nil and #plan.steps > 0 and not page.calculating))
   -- Recalculando: se ve la ruta anterior hasta que esté la nueva
   if page.calculating then status = GREY .. L["Calculando la ruta…"] .. "|r" end
   page.status:SetText(status)
@@ -1195,7 +1312,7 @@ function ES:RenderPlan(page)
   local lines = {}
   if plan and #plan.steps > 0 then
     if page.view == "profit" then lines = ProfitLines(plan)
-    elseif page.view == "shop" then lines = ShopLines(plan)
+    elseif page.view == "shop" then lines = ShopLines(plan, page)
     else lines = RouteLines(plan, page) end
   end
   page.lines = lines

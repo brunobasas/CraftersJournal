@@ -42,6 +42,17 @@ local MAX_SEARCH = 3
 local SEARCH_MIN_SAVING = 10  -- cobre: por debajo no merece cambiar la ruta
 local SEARCH_SOURCES = { vendor = true, ah = true, scroll = true, quest = true }
 
+-- Unidades de cada material que pide la ruta desde el nivel `level` hasta el final
+function Planner.NeedFrom(plan, level)
+  local need = {}
+  for s, items in pairs(plan.pointNeed or {}) do
+    if s >= level then
+      for itemID, q in pairs(items) do need[itemID] = (need[itemID] or 0) + q end
+    end
+  end
+  return need
+end
+
 -- Fabricaciones totales de un plan
 function Planner.TotalCrafts(plan)
   local n = 0
@@ -718,6 +729,14 @@ function Planner:Plan(data, opts)
         end
       end
     end
+    -- Materiales que pide este punto (comprados o de tus bolsas): con la ruta
+    -- fijada, la lista de la compra cuenta lo que falta desde tu nivel actual
+    best.need = {}
+    for _, a in ipairs(best.actions) do
+      if a.kind == "ah" or a.kind == "vendor" or a.kind == "owned" then
+        best.need[a.item] = (best.need[a.item] or 0) + a.qty
+      end
+    end
     -- Lo fabricado entra al inventario del plan, valorado como se ha contado su venta
     local sale = info[best.id].sale
     if sale then
@@ -728,6 +747,10 @@ function Planner:Plan(data, opts)
     best.skill = s
     plan.choice[s] = best.id
   end
+
+  -- [nivel] = { [itemID] = unidades } que pide ese punto (ver arriba)
+  plan.pointNeed = {}
+  for _, p in ipairs(perPoint) do plan.pointNeed[p.skill] = p.need end
 
   -- Recetas de pago: entre cuántos puntos se repartió su precio y cuántos se usaron
   plan.feeUse = {}

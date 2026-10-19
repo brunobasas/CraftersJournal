@@ -722,9 +722,37 @@ step("portada: tarjetas de profesiones", function()
     end
   end
   log[#log+1] = "     lista de la compra: " .. buyLine.title
-  GetItemCount = nil
+  -- Empezar ruta: comprar (cambian las bolsas) no cambia la ruta ni su coste
   page.view = "route"
-  ES:RenderPlan(page)
+  bags = 0
+  ES:CalculatePlan(page)
+  local before = page.plan
+  page.routeButton._scripts.OnEnter(page.routeButton)
+  page.routeButton._scripts.OnClick(page.routeButton)
+  local lock = ES.db.prof.Leatherworking.lock
+  assert(lock and lock.choice and lock.to == 225, "no se fijó la ruta")
+  local net = page.plan.net
+  local savedBags = ES.db.prof.Leatherworking.useBags
+  ES.db.prof.Leatherworking.useBags = true
+  bags = 500
+  ES:ClearHomeCache()
+  ES:RefreshAfterBags()
+  ES:CalculatePlan(page)
+  assert(page.plan == before and page.plan.net == net, "la ruta fijada cambió al comprar")
+  assert(tostring(page.status._text):find("Ruta en curso"), "falta el aviso de ruta en curso: " .. tostring(page.status._text))
+  -- Tras recargar se rehace igual: mismas recetas y mismo coste
+  ES.lockedPlans = {}
+  local rebuilt = ES:LockedPlan("Leatherworking")
+  assert(#rebuilt.steps == #before.steps and rebuilt.steps[1].id == before.steps[1].id, "la ruta fijada cambió al recargar")
+  assert(math.abs(rebuilt.net - net) < 1, "el coste de la ruta fijada cambió al recargar")
+  log[#log+1] = string.format("     ruta fijada: %d pasos, %s", #rebuilt.steps, tostring(page.routeButton._text))
+  -- Recalcular ruta la libera
+  page.routeButton._scripts.OnClick(page.routeButton)
+  assert(not ES.db.prof.Leatherworking.lock, "Recalcular ruta no la liberó")
+  ES.db.prof.Leatherworking.useBags = savedBags
+  GetItemCount = nil
+  ES:ClearHomeCache()
+  ES:CalculatePlan(page)
   ES:SelectPage("home")
   -- Pulsar la tarjeta abre la profesión; Volver regresa
   first._scripts.OnClick(first)

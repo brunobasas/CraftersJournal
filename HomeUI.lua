@@ -12,16 +12,25 @@ function ES:ClearHomeCache()
   self.planGen = (self.planGen or 0) + 1 -- descarta las rutas que se estén calculando
 end
 -- Cambian tus bolsas o aprendes una receta: las rutas pueden cambiar
+local BAG_REFRESH_DELAY = 0.8 -- s sin cambios en las bolsas antes de repintar
 do
   local f = CreateFrame("Frame")
   for _, event in ipairs({ "BAG_UPDATE_DELAYED", "NEW_RECIPE_LEARNED", "LEARNED_SPELL_IN_TAB", "SKILL_LINES_CHANGED" }) do
     ES.SafeRegister(f, event)
   end
+  local bagStamp = 0
   f:SetScript("OnEvent", function(_, event)
     ES:ClearHomeCache()
-    -- Compras al vendedor, cosas sacadas del correo...: la profesión abierta se
-    -- actualiza al momento (la lista de la compra dice cuántos tienes y cuántos faltan)
-    if event == "BAG_UPDATE_DELAYED" and ES.RefreshAfterBags then ES:RefreshAfterBags() end
+    -- Compras al vendedor, cosas sacadas del correo, fabricar...: la profesión
+    -- abierta se actualiza (la lista de la compra dice cuántos tienes y cuántos
+    -- faltan). Llegan en ráfagas (una por objeto): se espera a que paren
+    if event == "BAG_UPDATE_DELAYED" and ES.RefreshAfterBags then
+      bagStamp = bagStamp + 1
+      local stamp = bagStamp
+      C_Timer.After(BAG_REFRESH_DELAY, function()
+        if stamp == bagStamp then ES:RefreshAfterBags() end
+      end)
+    end
   end)
 end
 
