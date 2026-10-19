@@ -428,8 +428,11 @@ def main():
             scroll = scrolls[sid]
             # Nivel que pide el pergamino; si no lo dice, amarilla - 10 (el umbral
             # "naranja" de Forever es 1 en todas: no sirve como nivel de aprender)
-            req = c["item_skill"].get(scroll) or max(1, t[1] - 10 + shift.get(sid, 0))
-            parts.append(f"scroll = {scroll}, train = {forever_train(req)}")
+            # El nivel del pergamino ya es el de Forever (ItemSparse de Forever): no se
+            # le resta el ajuste de Classic (Dark Leather Tunic salía a 50 y pide 75)
+            req = c["item_skill"].get(scroll)
+            train = req if req else forever_train(max(1, t[1] - 10 + shift.get(sid, 0)))
+            parts.append(f"scroll = {scroll}, train = {train}")
             # Todo objeto trae precio de compra en el cliente, lo venda alguien o no: solo
             # vale si algún vendedor lo vende (QuestieDB) y no es de Merchant's Favor (fichas)
             scroll_buy = item_info.get(scroll, (None, 0, 0))[1]

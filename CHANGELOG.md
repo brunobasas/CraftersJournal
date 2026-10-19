@@ -1,5 +1,9 @@
 # Crafter's Journal
 
+## 0.34.4
+
+- **Fixed recipe skill requirements.** 362 recipes learned from patterns, plans and formulas asked for less skill than they really need in Forever (e.g. Pattern: Dark Leather Tunic was shown at 50 but needs Leatherworking 75), so the route could tell you to learn a recipe you couldn't learn yet. They now use the exact skill each pattern requires.
+
 ## 0.34.3 (beta)
 
 - **Report a bug.** New "Report" button in the top-left corner of the window: it shows our Discord link, ready to copy, so you can send us bugs, wrong data or new discoveries (with a screenshot).

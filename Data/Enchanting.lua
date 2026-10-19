@@ -165,7 +165,7 @@ ES.Data.Enchanting = {
     [25083] = { name = "Enchant Cloak - Stealth", t = { 1, 320, 340, 360 }, scroll = 20734, train = 300, sq = 3, r = { { 20725, 3 }, { 14344, 8 }, { 13468, 2 } }, tool = 377 },
     [25084] = { name = "Enchant Cloak - Subtlety", t = { 1, 320, 340, 360 }, scroll = 20735, train = 300, sq = 3, r = { { 20725, 4 }, { 14344, 6 }, { 11754, 2 } }, tool = 377 },
     [25086] = { name = "Enchant Cloak - Dodge", t = { 1, 320, 340, 360 }, scroll = 20736, train = 300, sq = 3, r = { { 20725, 3 }, { 14344, 8 }, { 12809, 8 } }, tool = 377 },
-    [25124] = { name = "Minor Wizard Oil", t = { 1, 30, 47, 65 }, scroll = 20758, train = 1, scrollPrice = 500, sq = 1, r = { { 10940, 1 }, { 17034, 1 }, { 3371, 1 } }, tool = 373, out = { 20744, 1 }, oq = 1 },
+    [25124] = { name = "Minor Wizard Oil", t = { 1, 30, 47, 65 }, scroll = 20758, train = 5, scrollPrice = 500, sq = 1, r = { { 10940, 1 }, { 17034, 1 }, { 3371, 1 } }, tool = 373, out = { 20744, 1 }, oq = 1 },
     [25125] = { name = "Minor Mana Oil", t = { 1, 160, 170, 180 }, scroll = 20752, train = 150, scrollPrice = 3000, sq = 1, r = { { 11083, 1 }, { 17034, 2 }, { 3372, 1 } }, tool = 374, out = { 20745, 1 }, oq = 1 },
     [25126] = { name = "Lesser Wizard Oil", t = { 1, 210, 220, 230 }, scroll = 20753, train = 200, scrollPrice = 4000, sq = 1, r = { { 11137, 1 }, { 17035, 2 }, { 3372, 1 } }, tool = 375, out = { 20746, 1 }, oq = 1 },
     [25127] = { name = "Lesser Mana Oil", t = { 1, 260, 270, 280 }, scroll = 20754, train = 250, scrollPrice = 10000, sq = 1, r = { { 11176, 1 }, { 8831, 1 }, { 8925, 1 } }, tool = 376, out = { 20747, 1 }, oq = 1 },
