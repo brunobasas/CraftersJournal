@@ -37,6 +37,10 @@ local MAX_EXTRA_MIN = 100     -- o 1 plata, lo que sea mayor
 -- Recetas de pago usadas menos puntos de los supuestos al elegirlas (ver Planner:Plan)
 local FEE_PASSES = 4          -- pasadas como mucho
 local FEE_SLACK = 0.75        -- se repite si se usó menos del 75% de lo supuesto
+-- Recetas de pergamino que se prueba a quitar al acabar la ruta (ver Planner:Plan)
+local MAX_SEARCH = 3
+local SEARCH_MIN_SAVING = 10  -- cobre: por debajo no merece cambiar la ruta
+local SEARCH_SOURCES = { vendor = true, ah = true, scroll = true, quest = true }
 
 -- Fabricaciones totales de un plan
 function Planner.TotalCrafts(plan)
@@ -475,6 +479,39 @@ end
 -- opts = { from, to, includeScrolls, hours (duración subasta), neutral, reuseCrafted, ignoreSupply, cap,
 --          owned = { [itemID] = cantidad en bolsas/banco } }
 function Planner:Plan(data, opts)
+  -- Con "usar bolsas y banco": la ruta se elige sin contar lo tuyo (ver abajo), así
+  -- que una receta de pergamino puede ganar aunque la alternativa use materiales que
+  -- ya llevas y salga más barata de verdad (Deviate Scale Cloak frente a Embossed
+  -- Leather Gloves con cuero en las bolsas). Al acabar se prueba a quitar las
+  -- recetas que hay que ir a buscar o comprar, de la más cara a la más barata, y se
+  -- queda la ruta si sale más barata con su coste real (bolsas incluidas) y llega
+  -- igual de lejos: se comparan rutas enteras, sin el zigzag de elegir punto a punto.
+  -- Sin bolsas no se hace: la ruta ya es la del mercado y calcularla cuesta el doble.
+  if not opts.forced and not opts.searched and opts.owned and next(opts.owned) then
+    local o = {}
+    for k, v in pairs(opts) do o[k] = v end
+    o.searched = true
+    local best = Planner:Plan(data, o)
+    local candidates = {}
+    for _, st in ipairs(best.steps) do
+      if st.fee > 0 and SEARCH_SOURCES[st.learnSource] then candidates[#candidates + 1] = st end
+    end
+    table.sort(candidates, function(a, b) return a.fee > b.fee end)
+    for i = 1, math.min(#candidates, MAX_SEARCH) do
+      local t = {}
+      for k, v in pairs(o) do t[k] = v end
+      t.excluded = {}
+      for id in pairs(o.excluded or {}) do t.excluded[id] = true end
+      t.excluded[candidates[i].id] = true
+      t.craftCost = best.craftCostUsed -- sin repetir la doble ruta (más barata / menos fabricaciones)
+      local plan = Planner:Plan(data, t)
+      if plan.reached >= best.reached and plan.net < best.net - SEARCH_MIN_SAVING then
+        best, o = plan, t
+      end
+    end
+    return best
+  end
+
   -- Con lo de tus bolsas: la ruta se elige como si no lo tuvieras y luego se
   -- recorre usándolo. Si no, como lo tuyo sale gratis, el plan se desvía para
   -- gastarlo cuanto antes (2 fabricaciones de una receta y vuelta a la otra), y
@@ -486,7 +523,7 @@ function Planner:Plan(data, opts)
     local route = Planner:Plan(data, base)
     withBags.forced = route.choice
     local plan = Planner:Plan(data, withBags)
-    plan.cheapest = route.cheapest
+    plan.cheapest, plan.craftCostUsed = route.cheapest, route.craftCostUsed
     return plan
   end
 
@@ -505,8 +542,10 @@ function Planner:Plan(data, opts)
     local cheapCrafts, balancedCrafts = Planner.TotalCrafts(cheap), Planner.TotalCrafts(balanced)
     if balanced.reached >= cheap.reached and balanced.net <= cheap.net + allowed and balancedCrafts < cheapCrafts then
       balanced.cheapest = { net = cheap.net, crafts = cheapCrafts }
+      balanced.craftCostUsed = CRAFT_COST
       return balanced
     end
+    cheap.craftCostUsed = 0
     return cheap
   end
 

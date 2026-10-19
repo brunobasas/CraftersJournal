@@ -759,6 +759,17 @@ end
 
 -- Solo la que está a la vista: las demás se recalculan al mostrarse (OnShow),
 -- así un escaneo no congela el juego recalculando las 8 profesiones
+-- Cambian tus bolsas: con "usar bolsas y banco" la ruta cambia (se recalcula); si
+-- no, basta con volver a pintar para que la lista de la compra cuente lo que llevas
+function ES:RefreshAfterBags()
+  for _, page in ipairs(self.professionPages or {}) do
+    if page.initialized and page:IsVisible() and page.data and not page.data.guide then
+      local settings = self.db.prof and self.db.prof[page.profKey] or {}
+      if settings.useBags then self:CalculatePlan(page) else self:RenderPlan(page) end
+    end
+  end
+end
+
 function ES:RefreshProfessionPages()
   for _, page in ipairs(self.professionPages or {}) do
     if page.initialized and page:IsVisible() then self:CalculatePlan(page) end
@@ -1094,15 +1105,28 @@ local function ShopLines(plan)
     for _, it in ipairs(items) do lines[#lines + 1] = build(it) end
   end
   local ah, vendor = {}, {}
+  -- Lo que la ruta gasta de cada material (compras + lo que usa de tus bolsas): con
+  -- lo que llevas ahora se ve cuántos tienes ya y cuántos faltan (se actualiza al
+  -- comprar al vendedor o sacar del correo; ver BAG_UPDATE_DELAYED en HomeUI.lua)
+  local need = {}
   for _, it in ipairs(plan.shopping) do
     if it.source == "ah" then ah[#ah + 1] = it else vendor[#vendor + 1] = it end
     total = total + it.total
+    need[it.itemID] = (need[it.itemID] or 0) + it.quantity
+  end
+  for _, it in ipairs(plan.owned) do need[it.itemID] = (need[it.itemID] or 0) + it.quantity end
+  local function Progress(itemID)
+    local have = GetItemCount and (GetItemCount(itemID, true) or 0) or 0
+    local n = need[itemID]
+    if have >= n then return GREEN .. string.format(L["Tienes %d/%d"], have, n) .. "|r" end
+    return string.format(L["Tienes %d/%d · faltan %s%d|r"], have, n, ORANGE, n - have)
   end
   local function Buy(it)
     local name, texture = ItemLabel(it.itemID, L["Objeto "] .. it.itemID)
     local sub = it.source == "ah"
       and string.format("AH · %s/u%s", ES.Money(it.unit), it.supply and string.format(L[" · hay %d a la venta"], it.supply) or "")
       or string.format(L["Vendedor · %s/u"], ES.Money(it.unit))
+    sub = Progress(it.itemID) .. " · " .. sub
     return { icon = texture or 134400, title = it.quantity .. "× " .. name, sub = sub, value = Signed(it.total),
       item = it.itemID, tooltip = ShopTooltip(it, plan),
       go = it.source == "vendor" and WP.Target("vendor", it.itemID) or nil }

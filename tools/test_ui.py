@@ -705,6 +705,26 @@ step("portada: tarjetas de profesiones", function()
   log[#log+1] = "     quitar receta: " .. restore.title .. " · primer paso ahora " .. page.plan.steps[1].recipe.name
   restore.onClick()
   assert(not ES.db.prof.Leatherworking.excluded and page.plan.steps[1].id == firstStep, "no se recuperó la ruta")
+  -- Lista de la compra: cuántos tienes y cuántos faltan; se actualiza al cambiar las bolsas
+  local bags = 0
+  GetItemCount = function() return bags end
+  page.view = "shop"
+  ES:RenderPlan(page)
+  local buyLine
+  for _, l in ipairs(page.lines) do if l.sub and l.sub:find("Tienes") then buyLine = l break end end
+  assert(buyLine, "la lista de la compra debería decir cuántos tienes")
+  assert(buyLine.sub:find("faltan"), "sin nada en las bolsas deberían faltar: " .. buyLine.sub)
+  bags = 100000
+  ES:RefreshAfterBags()
+  for _, l in ipairs(page.lines) do
+    if l.item == buyLine.item and l.sub then
+      assert(not l.sub:find("faltan"), "con todo en las bolsas no debería faltar nada: " .. l.sub)
+    end
+  end
+  log[#log+1] = "     lista de la compra: " .. buyLine.title
+  GetItemCount = nil
+  page.view = "route"
+  ES:RenderPlan(page)
   ES:SelectPage("home")
   -- Pulsar la tarjeta abre la profesión; Volver regresa
   first._scripts.OnClick(first)

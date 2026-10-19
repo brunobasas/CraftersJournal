@@ -17,7 +17,12 @@ do
   for _, event in ipairs({ "BAG_UPDATE_DELAYED", "NEW_RECIPE_LEARNED", "LEARNED_SPELL_IN_TAB", "SKILL_LINES_CHANGED" }) do
     ES.SafeRegister(f, event)
   end
-  f:SetScript("OnEvent", function() ES:ClearHomeCache() end)
+  f:SetScript("OnEvent", function(_, event)
+    ES:ClearHomeCache()
+    -- Compras al vendedor, cosas sacadas del correo...: la profesión abierta se
+    -- actualiza al momento (la lista de la compra dice cuántos tienes y cuántos faltan)
+    if event == "BAG_UPDATE_DELAYED" and ES.RefreshAfterBags then ES:RefreshAfterBags() end
+  end)
 end
 
 local MIN_CARD_W, CARD_H, GAP = 383, 112, 12
