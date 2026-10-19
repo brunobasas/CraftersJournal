@@ -466,9 +466,10 @@ do
       local money = GetMoney and GetMoney() or 0
       local delta = money - lastMoney
       lastMoney = money
+      -- Cobro de una compra enviada a la AH (llega por correo): se apunta ya, aunque
+      -- acabes de cerrar la AH (el cobro puede llegar justo después)
+      if delta < 0 and ChargeAHPurchase(-delta) then return end
       if not where then return end
-      -- Cobro de una compra enviada a la AH (llega por correo): se apunta ya
-      if where == "ah" and delta < 0 and ChargeAHPurchase(-delta) then return end
       if delta < 0 then spent = spent - delta else gained = gained + delta end
       if where == "trainer" and spent > 0 then
         Ledger:RecordFee(spent, trainerProf)

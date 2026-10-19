@@ -430,7 +430,19 @@ local function LoadCharacterData()
   end
   c.prof = c.prof or {}
   db.prof, db.lastProf = c.prof, c.lastProf
-  ES.charData = c
+  ES.charData, ES.charDataKey = c, key
+end
+
+-- Al entrar al mundo el nombre del personaje ya es seguro: si al cargar el addon el
+-- juego aún no lo daba, lo cargado (con otro nombre) pasa a ser de este personaje
+local function CheckCharacterData()
+  local key = ES:CharKey()
+  if not ES.charDataKey or ES.charDataKey == key then return end
+  local db = ES.db
+  local old = db.chars[ES.charDataKey]
+  db.chars[ES.charDataKey] = nil
+  if not db.chars[key] then db.chars[key] = old end
+  LoadCharacterData()
 end
 
 -- Al salir: lo del personaje queda solo en ES.db.chars (sin copias sueltas en ES.db)
@@ -463,6 +475,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
   elseif event == "PLAYER_LOGOUT" then
     SaveCharacterData()
   elseif event == "PLAYER_LOGIN" then
+    CheckCharacterData()
     ES:DropOtherFactionRecipes()
     CreateMinimapButton()
     ES.repStamp = ES:RepStamp()

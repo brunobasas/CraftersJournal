@@ -59,6 +59,21 @@ local ART = {
 }
 local DETAIL_SIZE = { 225, 275 }
 
+-- Color de cada profesión (las ilustraciones de Forever son marrones y apagadas):
+-- tint = tono de la ilustración; glow = resplandor que se suma desde la izquierda
+local COLORS = {
+  Alchemy        = { tint = { 0.70, 1.00, 0.70 }, glow = { 0.15, 0.55, 0.20 } },
+  Blacksmithing  = { tint = { 1.00, 0.75, 0.55 }, glow = { 0.75, 0.30, 0.08 } },
+  Enchanting     = { tint = { 0.88, 0.70, 1.00 }, glow = { 0.45, 0.20, 0.75 } },
+  Engineering    = { tint = { 0.70, 0.88, 1.00 }, glow = { 0.12, 0.40, 0.70 } },
+  Leatherworking = { tint = { 1.00, 0.88, 0.65 }, glow = { 0.60, 0.38, 0.12 } },
+  Tailoring      = { tint = { 0.78, 0.80, 1.00 }, glow = { 0.28, 0.28, 0.72 } },
+  Cooking        = { tint = { 1.00, 0.90, 0.60 }, glow = { 0.70, 0.45, 0.08 } },
+  FirstAid       = { tint = { 1.00, 0.72, 0.72 }, glow = { 0.70, 0.12, 0.12 } },
+  Fishing        = { tint = { 0.70, 0.95, 1.00 }, glow = { 0.08, 0.48, 0.65 } },
+}
+local GLOW_ALPHA = 0.55 -- fuerza del resplandor a la izquierda (a la derecha, casi nada)
+
 local function Atlas(name)
   local info = name and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(name)
   if info and (info.file or info.filename) then return info end
@@ -101,6 +116,21 @@ local function SetCardArt(card, key, icon, w, h)
     card.art:SetVertexColor(0.7, 0.7, 0.7)
   end
 
+  -- Color de la profesión: tono de la ilustración y resplandor desde la izquierda
+  local color = COLORS[key]
+  if color then
+    if wide then card.art:SetVertexColor(color.tint[1], color.tint[2], color.tint[3]) end
+    local g = color.glow
+    if CreateColor and card.glow.SetGradient then
+      card.glow:SetGradient("HORIZONTAL", CreateColor(g[1], g[2], g[3], GLOW_ALPHA), CreateColor(g[1], g[2], g[3], 0.05))
+    elseif card.glow.SetGradientAlpha then
+      card.glow:SetGradientAlpha("HORIZONTAL", g[1], g[2], g[3], GLOW_ALPHA, g[1], g[2], g[3], 0.05)
+    end
+    card.glow:Show()
+  else
+    card.glow:Hide()
+  end
+
   -- Dibujo de profesión secundaria a la derecha, a su tamaño (alto de la tarjeta)
   local detail = Atlas(art.detail)
   if detail then
@@ -141,18 +171,25 @@ local function CreateCard(parent)
   card.detail = card:CreateTexture(nil, "BACKGROUND", nil, 2)
   card.detail:SetPoint("RIGHT", -INSET, 0)
   card.detail:Hide()
+  -- Resplandor del color de la profesión, sumado encima de la ilustración (ver SetCardArt)
+  card.glow = card:CreateTexture(nil, "BACKGROUND", nil, 3)
+  card.glow:SetPoint("TOPLEFT", INSET, -INSET)
+  card.glow:SetPoint("BOTTOMRIGHT", -INSET, INSET)
+  card.glow:SetColorTexture(1, 1, 1, 1)
+  card.glow:SetBlendMode("ADD")
+  card.glow:Hide()
 
   -- Bandas oscuras suaves para que se lea el texto (arriba el nombre, abajo el nivel)
   card.top = card:CreateTexture(nil, "BORDER")
   card.top:SetPoint("TOPLEFT", 4, -4)
   card.top:SetPoint("TOPRIGHT", -4, -4)
   card.top:SetHeight(40)
-  card.top:SetColorTexture(0, 0, 0, 0.45)
+  card.top:SetColorTexture(0, 0, 0, 0.35)
   card.bottom = card:CreateTexture(nil, "BORDER")
   card.bottom:SetPoint("BOTTOMLEFT", 4, 4)
   card.bottom:SetPoint("BOTTOMRIGHT", -4, 4)
   card.bottom:SetHeight(26)
-  card.bottom:SetColorTexture(0, 0, 0, 0.55)
+  card.bottom:SetColorTexture(0, 0, 0, 0.45)
 
   card.icon = card:CreateTexture(nil, "ARTWORK")
   card.icon:SetSize(28, 28)
