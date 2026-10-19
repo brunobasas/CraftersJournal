@@ -78,6 +78,7 @@ end
 -- Panel principal
 ---------------------------------------------------------------------------
 local main
+local PAGE_MARGIN = 14 -- margen negro de las páginas a los lados y abajo
 
 local function CreateRow(parent, i)
   local row = CreateFrame("Button", nil, parent)
@@ -233,7 +234,7 @@ local function CreateMainFrame()
   -- página, el título y "Volver" a la portada
   f.back = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
   f.back:SetSize(130, 24)
-  f.back:SetPoint("TOPLEFT", 16, -52)
+  f.back:SetPoint("TOPLEFT", 16, -58) -- con aire encima (cabecera) y debajo (la página)
   f.back:SetText(L["Profesiones"])
   f.back:SetScript("OnClick", function() ES:SelectPage(f.backTarget or "home") end)
 
@@ -242,9 +243,10 @@ local function CreateMainFrame()
 
   f.pages, f.pageTitles = {}, {}
   local function AddPage(key, title)
+    -- Márgenes negros a los lados y abajo, como el diario de mazmorras
     local page = CreateFrame("Frame", nil, f)
-    page:SetPoint("TOPLEFT", 6, -82)
-    page:SetPoint("BOTTOMRIGHT", -6, 8)
+    page:SetPoint("TOPLEFT", PAGE_MARGIN, -94)
+    page:SetPoint("BOTTOMRIGHT", -PAGE_MARGIN, PAGE_MARGIN)
     page:Hide()
     f.pages[key], f.pageTitles[key] = page, title
     return page
@@ -523,7 +525,7 @@ function ES:SelectPage(key)
   if inner then
     main.navTitle:SetPoint("LEFT", main.back, "RIGHT", 12, 0)
   else
-    main.navTitle:SetPoint("TOPLEFT", 22, -56)
+    main.navTitle:SetPoint("TOPLEFT", 22, -62)
   end
   main.navTitle:SetText(main.pageTitles[key] or "")
   if key == "home" then self:RenderHome() elseif key == "ah" then self:RenderResults() end

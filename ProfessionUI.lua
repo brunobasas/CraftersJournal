@@ -14,6 +14,14 @@ local ROW_HEIGHT, ROW_GAP, SECTION_HEIGHT = 40, 4, 24
 local LIST_WIDTH = 762
 local LEVEL_W = 70 -- columna de nivel de la vista Ruta (cabe "225–300")
 local VIEW_BUTTON_H = 32 -- botones Ruta / Profit / Lista de compra (como los del diario de mazmorras)
+-- Marrones del diario de mazmorras: el fondo que agrupa la página, la tarjeta de la
+-- cabecera (la más clara), el panel de la lista y las filas (más oscuras que el panel)
+local BROWN = {
+  group = { 0.165, 0.125, 0.086, 0.97 },
+  card  = { 0.23, 0.18, 0.12, 0.97 },
+  list  = { 0.18, 0.14, 0.10, 0.95 },
+  row   = { 0.13, 0.10, 0.07, 0.95 },
+}
 
 local SOURCE_LABEL = ES.Localize({
   vendor = "Vendedor", ah = "AH", craft = "Fabricar", stock = "Tuyo",
@@ -26,8 +34,8 @@ local GOLD, GREEN, GREY, RED, ORANGE = "|cffffd100", "|cff40ff40", "|cff999999",
 
 local VIEWS = ES.Localize({
   { key = "route",  label = "Ruta",            width = 96,  icon = "Interface\\Icons\\INV_Misc_Map_01" },
-  { key = "profit", label = "Profit",          width = 96,  icon = "Interface\\Icons\\INV_Misc_Coin_02" },
   { key = "shop",   label = "Lista de compra", width = 136, icon = "Interface\\Icons\\INV_Misc_Note_01" },
+  { key = "profit", label = "Profit",          width = 96,  icon = "Interface\\Icons\\INV_Misc_Coin_02" },
 }, "label")
 local VIEW_KEYS = { route = true, profit = true, shop = true }
 
@@ -585,7 +593,7 @@ local function StyleRow(row, line)
     row:SetBackdropColor(0.17, 0.13, 0.06, 0.96)
     row:SetBackdropBorderColor(1, 0.82, 0.25, 1)
   else
-    row:SetBackdropColor(0.10, 0.075, 0.045, 0.92)
+    row:SetBackdropColor(BROWN.row[1], BROWN.row[2], BROWN.row[3], BROWN.row[4])
     row:SetBackdropBorderColor(0.40, 0.29, 0.13, 1)
   end
   row.section:SetText(isSection and (GOLD .. line.section .. "|r") or "")
@@ -667,14 +675,14 @@ function ES:CreateProfessionPage(page, profKey)
 
   -- Fondo que agrupa toda la página (como el del diario de mazmorras): un marrón más
   -- claro, de la tarjeta de la profesión hasta debajo del total
-  local group = Panel(page, 0.19, 0.14, 0.08, 0.92)
+  local group = Panel(page, BROWN.group[1], BROWN.group[2], BROWN.group[3], BROWN.group[4])
   group:SetPoint("TOPLEFT", 2, 0)
   group:SetPoint("BOTTOMRIGHT", -2, 2)
   group:SetFrameLevel(page:GetFrameLevel())
   page.group = group
 
   -- Cabecera de la profesión
-  local head = Panel(page)
+  local head = Panel(page, BROWN.card[1], BROWN.card[2], BROWN.card[3], BROWN.card[4])
   head:SetPoint("TOPLEFT", 10, -8)
   head:SetPoint("TOPRIGHT", -10, -8)
   head:SetHeight(66)
@@ -918,7 +926,7 @@ function ES:CreateProfessionPage(page, profKey)
   page.status:SetWordWrap(false)
 
   -- Lista
-  local list = Panel(page, 0.07, 0.05, 0.03, 0.9)
+  local list = Panel(page, BROWN.list[1], BROWN.list[2], BROWN.list[3], BROWN.list[4])
   list:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -74)
   list:SetPoint("BOTTOMRIGHT", -10, 10)
   page.listPanel = list
