@@ -12,6 +12,8 @@ ES.Data = ES.Data or {}
 -- bop = lo fabricado se liga al recogerlo: no se puede vender en la AH (sí al vendedor)
 -- favor / favorRep = se compra con Merchant's Favor en el campamento de tu bando, y la reputación que pide
 -- train ajustado a Forever: nivel de Classic menos lo que Forever bajó la amarilla de esa receta
+-- basic = se aprende sola al coger la profesión; trainer = de instructor sin precio conocido
+--   (receta nueva de Forever que no está en CMaNGOS: se aprende al ponerse amarilla)
 ES.Data.Blacksmithing = {
   skillLine = 164,
   ranks = { -- { tope, precio, habilidad requerida, nivel de personaje }
@@ -22,15 +24,15 @@ ES.Data.Blacksmithing = {
   -- { PNJ instructor, rangos que enseña: 1 aprendiz (75), 2 oficial (150), 4 experto (225), 8 artesano (300) }
   trainers = { { 514, 1 }, { 957, 1 }, { 1241, 1 }, { 1383, 2 }, { 2836, 8 }, { 2998, 2 }, { 3136, 2 }, { 3174, 1 }, { 3355, 4 }, { 3478, 2 }, { 3557, 1 }, { 4258, 4 }, { 4596, 2 }, { 4605, 1 }, { 5511, 2 }, { 6299, 1 }, { 10266, 1 }, { 10276, 2 }, { 10277, 1 }, { 10278, 1 }, { 251913, 3 }, { 252479, 3 }, { 256658, 1 }, { 259250, 1 }, { 276067, 3 } },
   recipes = {
-    [2660] = { name = "Rough Sharpening Stone", t = { 1, 15, 35, 55 }, r = { { 2835, 1 } }, out = { 2862, 1 }, oq = 1 },
+    [2660] = { name = "Rough Sharpening Stone", t = { 1, 15, 35, 55 }, basic = true, r = { { 2835, 1 } }, out = { 2862, 1 }, oq = 1 },
     [2661] = { name = "Copper Chain Belt", t = { 1, 70, 90, 110 }, fee = 90, train = 30, r = { { 2840, 6 } }, tool = 162, out = { 2851, 1 }, oq = 2 },
-    [2663] = { name = "Copper Bracers", t = { 1, 20, 40, 60 }, r = { { 2840, 2 } }, tool = 162, out = { 2853, 1 }, oq = 1 },
+    [2663] = { name = "Copper Bracers", t = { 1, 20, 40, 60 }, basic = true, r = { { 2840, 2 } }, tool = 162, out = { 2853, 1 }, oq = 1 },
     [2664] = { name = "Runed Copper Bracers", t = { 1, 90, 102, 115 }, fee = 450, train = 65, r = { { 2840, 10 }, { 3470, 3 } }, tool = 162, out = { 2854, 1 }, oq = 2 },
     [2671] = { name = "Rough Bronze Bracers", t = { 1, 115, 130, 145 }, scroll = 5577, train = 105, sq = 1, r = { { 2841, 4 } }, tool = 162, out = { 2867, 1 }, oq = 2 },
     [2673] = { name = "Silvered Bronze Breastplate", t = { 1, 135, 150, 165 }, scroll = 5578, train = 105, sq = 2, r = { { 2841, 10 }, { 2842, 2 }, { 3478, 2 }, { 1705, 1 } }, tool = 162, out = { 2869, 1 }, oq = 2 },
     [2737] = { name = "Copper Mace", t = { 1, 55, 75, 95 }, fee = 45, train = 15, r = { { 2840, 6 }, { 2880, 1 }, { 2589, 2 } }, tool = 162, out = { 2844, 1 }, oq = 1 },
     [2738] = { name = "Copper Axe", t = { 1, 60, 80, 100 }, fee = 45, train = 20, r = { { 2840, 6 }, { 2880, 1 }, { 2589, 2 } }, tool = 162, out = { 2845, 1 }, oq = 1 },
-    [3115] = { name = "Rough Weightstone", t = { 1, 15, 35, 55 }, r = { { 2835, 1 } }, out = { 3239, 1 }, oq = 1 },
+    [3115] = { name = "Rough Weightstone", t = { 1, 15, 35, 55 }, basic = true, r = { { 2835, 1 } }, out = { 3239, 1 }, oq = 1 },
     [3116] = { name = "Coarse Weightstone", t = { 1, 40, 47, 55 }, fee = 90, train = 40, r = { { 2836, 1 } }, out = { 3240, 1 }, oq = 1 },
     [3117] = { name = "Heavy Weightstone", t = { 1, 100, 107, 115 }, fee = 900, train = 100, r = { { 2838, 1 } }, out = { 3241, 1 }, oq = 1 },
     [3292] = { name = "Heavy Copper Broadsword", t = { 1, 110, 130, 150 }, fee = 450, train = 65, r = { { 2840, 14 }, { 2880, 2 }, { 818, 2 }, { 2319, 2 } }, tool = 162, out = { 3487, 1 }, oq = 2 },
@@ -137,7 +139,7 @@ ES.Data.Blacksmithing = {
     [11454] = { name = "Inlaid Mithril Cylinder", t = { 1, 200, 212, 225 }, scroll = 10713, train = 200, sq = 1, r = { { 3860, 5 }, { 3577, 1 }, { 6037, 1 } }, tool = 162, out = { 9060, 1 }, oq = 1 },
     [11643] = { name = "Golden Scale Gauntlets", t = { 1, 200, 210, 220 }, scroll = 9367, train = 180, sq = 2, r = { { 3859, 10 }, { 3577, 4 }, { 3486, 4 }, { 3864, 1 } }, tool = 162, out = { 9366, 1 }, oq = 2 },
     [12259] = { name = "Silvered Bronze Leggings", t = { 1, 155, 167, 180 }, scroll = 10424, train = 130, sq = 2, r = { { 2841, 12 }, { 2842, 4 }, { 3478, 2 } }, tool = 162, out = { 10423, 1 }, oq = 2 },
-    [12260] = { name = "Rough Copper Vest", t = { 1, 15, 35, 55 }, r = { { 2840, 4 } }, tool = 162, out = { 10421, 1 }, oq = 2 },
+    [12260] = { name = "Rough Copper Vest", t = { 1, 15, 35, 55 }, basic = true, r = { { 2840, 4 } }, tool = 162, out = { 10421, 1 }, oq = 2 },
     [14379] = { name = "Golden Rod", t = { 1, 130, 132, 135 }, fee = 225, train = 125, r = { { 3577, 1 }, { 3478, 2 } }, tool = 162, out = { 11128, 1 }, oq = 1 },
     [14380] = { name = "Truesilver Rod", t = { 1, 180, 182, 185 }, fee = 2250, train = 175, r = { { 6037, 1 }, { 3486, 1 } }, tool = 162, out = { 11144, 1 }, oq = 1 },
     [15292] = { name = "Dark Iron Pulverizer", t = { 1, 260, 270, 280 }, scroll = 11610, train = 240, sq = 3, r = { { 11371, 18 }, { 7077, 4 } }, tool = 162, out = { 11608, 1 }, oq = 3 },
@@ -284,8 +286,8 @@ ES.Data.Blacksmithing = {
     [1224637] = { name = "Scarlet Soldier's Waistguard", t = { 1, 260, 282, 305 }, scroll = 238327, train = 250, sq = 3, r = { { 12811, 1 }, { 12359, 20 } }, tool = 162, out = { 238293, 1 }, oq = 1 },
     [1224638] = { name = "Scarlet Soldier's Legplates", t = { 1, 280, 292, 305 }, scroll = 238328, train = 270, sq = 3, r = { { 12938, 1 }, { 12811, 1 }, { 12359, 20 } }, tool = 162, out = { 238294, 1 }, oq = 1 },
     [1224639] = { name = "Scarlet Soldier's Stompers", t = { 1, 270, 287, 305 }, scroll = 238329, train = 260, sq = 3, r = { { 12811, 1 }, { 12359, 20 } }, tool = 162, out = { 238295, 1 }, oq = 1 },
-    [1230171] = { name = "Sharpening Wheel", t = { 1, 20, 22, 25 }, r = { { 2835, 1 }, { 2840, 1 } }, out = { 279944, 1 }, oq = 1 },
-    [1245287] = { name = "Copper Rod", t = { 1, 10, 12, 15 }, r = { { 2840, 1 } }, tool = 162, out = { 6217, 1 }, oq = 1 },
+    [1230171] = { name = "Sharpening Wheel", t = { 1, 20, 22, 25 }, trainer = true, train = 20, r = { { 2835, 1 }, { 2840, 1 } }, out = { 279944, 1 }, oq = 1 },
+    [1245287] = { name = "Copper Rod", t = { 1, 10, 12, 15 }, basic = true, r = { { 2840, 1 } }, tool = 162, out = { 6217, 1 }, oq = 1 },
     [1252232] = { name = "Sterling Silver Boots", t = { 1, 130, 145, 160 }, scroll = 251335, train = 100, sq = 2, r = { { 2842, 6 }, { 2840, 2 }, { 3478, 2 }, { 2319, 2 } }, tool = 162, out = { 250483, 1 }, oq = 2 },
     [1252233] = { name = "Sterling Silver Leggings", t = { 1, 135, 150, 165 }, scroll = 251336, train = 105, sq = 2, r = { { 2842, 10 }, { 2840, 3 }, { 3478, 3 } }, tool = 162, out = { 250484, 1 }, oq = 2 },
     [1252234] = { name = "Sterling Silver Gauntlet", t = { 1, 135, 150, 165 }, scroll = 251337, train = 105, sq = 2, r = { { 2842, 6 }, { 2840, 2 }, { 3478, 2 } }, tool = 162, out = { 250485, 1 }, oq = 2 },

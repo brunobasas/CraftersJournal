@@ -66,9 +66,12 @@ local function Sources(r, e)
   local list, main = {}, nil
   local WP = ES.Waypoints
   local function Add(s) list[#list + 1] = s end
-  if r.fee then Add({ kind = "trainer", cost = r.fee }) end
-  if not r.fee and not r.scroll and not r.favor then
-    Add({ kind = r.t[2] <= 50 and "basic" or "unknown" })
+  -- Instructor (con precio, o nueva de Forever sin precio conocido: r.trainer)
+  if r.fee or r.trainer then Add({ kind = "trainer", cost = r.fee }) end
+  if r.basic then
+    Add({ kind = "basic" }) -- se aprende sola al coger la profesión (dato del cliente)
+  elseif not r.fee and not r.trainer and not r.scroll and not r.favor and r.basic == nil then
+    Add({ kind = r.t[2] <= 50 and "basic" or "unknown" }) -- datos antiguos, sin ese dato
   end
   -- Merchant's Favor: se compra en el campamento de tu bando con esa moneda (no con oro)
   if r.favor then

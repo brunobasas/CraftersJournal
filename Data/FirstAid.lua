@@ -12,6 +12,8 @@ ES.Data = ES.Data or {}
 -- bop = lo fabricado se liga al recogerlo: no se puede vender en la AH (sí al vendedor)
 -- favor / favorRep = se compra con Merchant's Favor en el campamento de tu bando, y la reputación que pide
 -- train ajustado a Forever: nivel de Classic menos lo que Forever bajó la amarilla de esa receta
+-- basic = se aprende sola al coger la profesión; trainer = de instructor sin precio conocido
+--   (receta nueva de Forever que no está en CMaNGOS: se aprende al ponerse amarilla)
 ES.Data.FirstAid = {
   skillLine = 129,
   ranks = { -- { tope, precio, habilidad requerida, nivel de personaje }
@@ -22,7 +24,7 @@ ES.Data.FirstAid = {
   -- { PNJ instructor, rangos que enseña: 1 aprendiz (75), 2 oficial (150), 4 experto (225), 8 artesano (300) }
   trainers = { { 2326, 3 }, { 2327, 3 }, { 2329, 3 }, { 2798, 3 }, { 3181, 3 }, { 3373, 3 }, { 4211, 3 }, { 4591, 3 }, { 5150, 3 }, { 5759, 3 }, { 5939, 3 }, { 5943, 3 }, { 6094, 3 }, { 251977, 3 } },
   recipes = {
-    [3275] = { name = "Linen Bandage", t = { 1, 30, 45, 60 }, r = { { 2589, 1 } }, out = { 1251, 1 }, oq = 1 },
+    [3275] = { name = "Linen Bandage", t = { 1, 30, 45, 60 }, basic = true, r = { { 2589, 1 } }, out = { 1251, 1 }, oq = 1 },
     [3276] = { name = "Heavy Linen Bandage", t = { 1, 50, 75, 100 }, fee = 100, train = 40, r = { { 2589, 2 } }, out = { 2581, 1 }, oq = 1 },
     [3277] = { name = "Wool Bandage", t = { 1, 80, 115, 150 }, fee = 250, train = 80, r = { { 2592, 1 } }, out = { 3530, 1 }, oq = 1 },
     [3278] = { name = "Heavy Wool Bandage", t = { 1, 115, 150, 185 }, fee = 1000, train = 115, r = { { 2592, 2 } }, out = { 3531, 1 }, oq = 1 },

@@ -12,6 +12,8 @@ ES.Data = ES.Data or {}
 -- bop = lo fabricado se liga al recogerlo: no se puede vender en la AH (sí al vendedor)
 -- favor / favorRep = se compra con Merchant's Favor en el campamento de tu bando, y la reputación que pide
 -- train ajustado a Forever: nivel de Classic menos lo que Forever bajó la amarilla de esa receta
+-- basic = se aprende sola al coger la profesión; trainer = de instructor sin precio conocido
+--   (receta nueva de Forever que no está en CMaNGOS: se aprende al ponerse amarilla)
 ES.Data.Alchemy = {
   skillLine = 171,
   ranks = { -- { tope, precio, habilidad requerida, nivel de personaje }
@@ -49,7 +51,7 @@ ES.Data.Alchemy = {
     [6618] = { name = "Great Rage Potion", t = { 1, 195, 215, 235 }, scroll = 5643, train = 175, scrollPrice = 2000, sq = 1, r = { { 5637, 1 }, { 3356, 1 }, { 3372, 1 } }, out = { 5633, 1 }, oq = 1 },
     [6624] = { name = "Free Action Potion", t = { 1, 175, 195, 215 }, scroll = 5642, train = 150, scrollPrice = 1800, sq = 1, r = { { 6370, 2 }, { 3820, 1 }, { 3372, 1 } }, out = { 5634, 1 }, oq = 1 },
     [7179] = { name = "Draught of Water Breathing", t = { 1, 120, 140, 160 }, fee = 405, train = 90, r = { { 3820, 1 }, { 6370, 2 }, { 3371, 1 } }, out = { 5996, 1 }, oq = 1 },
-    [7183] = { name = "Elixir of Minor Defense", t = { 1, 55, 75, 95 }, r = { { 765, 1 }, { 2447, 1 }, { 3371, 1 } }, out = { 5997, 1 }, oq = 1 },
+    [7183] = { name = "Elixir of Minor Defense", t = { 1, 55, 75, 95 }, basic = true, r = { { 765, 1 }, { 2447, 1 }, { 3371, 1 } }, out = { 5997, 1 }, oq = 1 },
     [7255] = { name = "Holy Protection Potion", t = { 1, 130, 150, 170 }, scroll = 6053, train = 100, scrollPrice = 800, sq = 1, r = { { 2453, 1 }, { 2452, 1 }, { 3371, 1 } }, out = { 6051, 1 }, oq = 1 },
     [7256] = { name = "Shadow Protection Potion", t = { 1, 160, 180, 200 }, scroll = 6054, train = 135, scrollPrice = 900, sq = 1, r = { { 3369, 1 }, { 3356, 1 }, { 3372, 1 } }, out = { 6048, 1 }, oq = 1 },
     [7257] = { name = "Fire Protection Potion", t = { 1, 210, 230, 250 }, scroll = 6055, train = 165, scrollPrice = 1500, sq = 1, r = { { 4402, 1 }, { 6371, 1 }, { 3372, 1 } }, out = { 6049, 1 }, oq = 1 },
@@ -133,19 +135,19 @@ ES.Data.Alchemy = {
     [435969] = { name = "Insulating Gniodine", t = { 1, 200, 210, 220 }, scroll = 215434, train = 200, sq = 4, r = { { 3372, 1 }, { 213371, 5 } }, out = { 213372, 1 }, oq = 1 },
     [435971] = { name = "Mildly Irradiated Rejuvenation Potion", t = { 1, 225, 230, 235 }, scroll = 215163, train = 225, sq = 4, r = { { 213371, 1 }, { 2456, 1 }, { 215430, 3 }, { 8925, 5 } }, out = { 215162, 5 }, oq = 1 },
     [1213544] = { name = "Flask of Unyielding Sorrow", t = { 1, 315, 322, 330 }, scroll = 234252, train = 305, sq = 1, r = { { 16203, 1 }, { 234012, 1 }, { 13511, 1 }, { 8925, 1 } }, tool = 12, out = { 233966, 1 }, oq = 1 },
-    [1230564] = { name = "Mana Well", t = { 1, 20, 22, 25 }, r = { { 2447, 1 }, { 3371, 1 } }, out = { 279956, 1 }, oq = 1 },
+    [1230564] = { name = "Mana Well", t = { 1, 20, 22, 25 }, trainer = true, train = 20, r = { { 2447, 1 }, { 3371, 1 } }, out = { 279956, 1 }, oq = 1 },
     [1231583] = { name = "Major Discolored Healing Potion", t = { 1, 290, 310, 330 }, scroll = 241651, train = 250, sq = 2, r = { { 8925, 1 }, { 13466, 1 }, { 730, 1 } }, out = { 241650, 1 }, oq = 1 },
     [1244421] = { name = "Distilled Firewater", t = { 1, 260, 265, 270 }, scroll = 236754, train = 250, sq = 2, r = { { 3819, 4 }, { 8846, 2 }, { 3372, 1 } }, out = { 246948, 1 }, oq = 1 },
     [1244645] = { name = "Lesser Discolored Healing Potion", t = { 1, 85, 105, 125 }, r = { { 3371, 1 }, { 2450, 1 }, { 730, 1 } }, out = { 247239, 1 }, oq = 1 },
     [1244646] = { name = "Discolored Healing Potion", t = { 1, 135, 155, 175 }, r = { { 3372, 1 }, { 2453, 1 }, { 730, 1 } }, out = { 247240, 1 }, oq = 1 },
     [1244647] = { name = "Greater Discolored Healing Potion", t = { 1, 175, 195, 215 }, r = { { 3372, 1 }, { 3356, 1 }, { 730, 1 } }, out = { 247241, 1 }, oq = 1 },
     [1244648] = { name = "Superior Discolored Healing Potion", t = { 1, 230, 250, 270 }, r = { { 8925, 1 }, { 8838, 1 }, { 730, 1 } }, out = { 247242, 1 }, oq = 1 },
-    [1245246] = { name = "Minor Arcane Elixir", t = { 1, 10, 12, 15 }, r = { { 2447, 1 }, { 3371, 1 } }, out = { 247754, 1 }, oq = 1 },
-    [1245250] = { name = "Elixir of Minor Force", t = { 1, 10, 12, 15 }, r = { { 765, 1 }, { 3371, 1 } }, out = { 247755, 1 }, oq = 1 },
-    [1249630] = { name = "Cerulean Dye", t = { 1, 50, 70, 90 }, r = { { 249399, 2 }, { 3371, 1 } }, out = { 249409, 1 }, oq = 2 },
+    [1245246] = { name = "Minor Arcane Elixir", t = { 1, 10, 12, 15 }, basic = true, r = { { 2447, 1 }, { 3371, 1 } }, out = { 247754, 1 }, oq = 1 },
+    [1245250] = { name = "Elixir of Minor Force", t = { 1, 10, 12, 15 }, basic = true, r = { { 765, 1 }, { 3371, 1 } }, out = { 247755, 1 }, oq = 1 },
+    [1249630] = { name = "Cerulean Dye", t = { 1, 50, 70, 90 }, trainer = true, train = 50, r = { { 249399, 2 }, { 3371, 1 } }, out = { 249409, 1 }, oq = 2 },
     [1249631] = { name = "Magenta Dye", t = { 1, 130, 142, 155 }, r = { { 249424, 2 }, { 3372, 1 } }, out = { 249430, 1 }, oq = 2 },
     [1249632] = { name = "Viridian Dye", t = { 1, 230, 250, 270 }, r = { { 249274, 2 }, { 8925, 1 } }, out = { 249431, 1 }, oq = 2 },
-    [1249633] = { name = "Sulfuric Acid", t = { 1, 50, 70, 90 }, r = { { 249391, 2 }, { 3371, 1 } }, out = { 249410, 1 }, oq = 2 },
+    [1249633] = { name = "Sulfuric Acid", t = { 1, 50, 70, 90 }, trainer = true, train = 50, r = { { 249391, 2 }, { 3371, 1 } }, out = { 249410, 1 }, oq = 2 },
     [1250775] = { name = "Revealing Draught", t = { 1, 205, 207, 210 }, scroll = 250362, train = 195, sq = 1, r = { { 3818, 3 }, { 3358, 1 }, { 3372, 1 } }, out = { 250326, 1 }, oq = 1 },
     [1250776] = { name = "Draught of Predatory Senses", t = { 1, 200, 202, 205 }, scroll = 250363, train = 195, sq = 1, r = { { 3818, 2 }, { 3821, 2 }, { 3372, 1 } }, out = { 250327, 1 }, oq = 1 },
     [1250777] = { name = "Elixir of Cunning", t = { 1, 280, 282, 285 }, scroll = 250364, train = 275, sq = 1, favor = 180, favorRep = 6, r = { { 13463, 3 }, { 8846, 2 }, { 8925, 1 } }, out = { 250328, 1 }, oq = 1 },

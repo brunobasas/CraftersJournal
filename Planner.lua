@@ -152,7 +152,11 @@ function Planner.LearnSkill(recipe, opts)
     return src and src.best and (recipe.train or 1) or nil
   end
   if recipe.fee or recipe.intermediate then return recipe.train end
-  if not recipe.scroll and recipe.t[2] <= BASIC_MAX_YELLOW then return 1 end -- básica
+  if recipe.basic then return 1 end -- se aprende sola al coger la profesión (dato del cliente)
+  -- De instructor sin precio conocido (nueva de Forever): al ponerse amarilla
+  if recipe.trainer then return recipe.train or recipe.t[2] end
+  -- Datos antiguos sin "basic": las de amarilla baja eran básicas
+  if not recipe.scroll and recipe.basic == nil and recipe.trainer == nil and recipe.t[2] <= BASIC_MAX_YELLOW then return 1 end
   if not opts.includeScrolls then return nil end
   if recipe.scroll then return recipe.train end
   -- Sin instructor ni pergamino conocido (misión, reputación...): estimación
@@ -166,6 +170,8 @@ function Planner.LearnCost(ctx, recipe)
   if Known(recipe) then return 0, "known" end
   if recipe.rep and not ES:RepMet(recipe.rep) then return 0, "rep" end -- solo para la vista Recetas
   if recipe.fee then return recipe.fee, "trainer" end
+  if recipe.trainer then return 0, "trainer" end -- de instructor, precio desconocido (se pinta "?")
+  if recipe.basic then return 0, nil end
   if recipe.favor then return 0, "favor" end
   if Sourced(recipe, ctx.opts) then
     local src = ES.Waypoints.RecipeSource(recipe, ctx.prices, ctx.opts.noQuests)

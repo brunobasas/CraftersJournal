@@ -225,6 +225,7 @@ ES.Locales.en = {
   ["Recalcular ruta, en cambio, busca una ruta nueva."] = "Recalculate route, on the other hand, looks for a new route.",
   [" · pulsa Empezar ruta antes de comprar|r"] = " · click Start route before buying|r",
   ["Hecho"] = "Done",
+  ["precio desconocido"] = "unknown price",
   ["buscarlo en la AH"] = "search for it on the AH",
   [" · %d en el correo"] = " · %d in the mail",
   ["abrir la compra de %d en la AH"] = "open the AH purchase of %d",

@@ -12,6 +12,8 @@ ES.Data = ES.Data or {}
 -- bop = lo fabricado se liga al recogerlo: no se puede vender en la AH (sí al vendedor)
 -- favor / favorRep = se compra con Merchant's Favor en el campamento de tu bando, y la reputación que pide
 -- train ajustado a Forever: nivel de Classic menos lo que Forever bajó la amarilla de esa receta
+-- basic = se aprende sola al coger la profesión; trainer = de instructor sin precio conocido
+--   (receta nueva de Forever que no está en CMaNGOS: se aprende al ponerse amarilla)
 ES.Data.Tailoring = {
   skillLine = 197,
   ranks = { -- { tope, precio, habilidad requerida, nivel de personaje }
@@ -24,7 +26,7 @@ ES.Data.Tailoring = {
   recipes = {
     [2385] = { name = "Brown Linen Vest", t = { 1, 45, 57, 70 }, fee = 45, train = 10, r = { { 2996, 1 }, { 2320, 1 } }, out = { 2568, 1 }, oq = 1 },
     [2386] = { name = "Linen Boots", t = { 1, 65, 82, 100 }, fee = 180, train = 40, r = { { 2996, 3 }, { 2320, 1 }, { 2318, 1 } }, out = { 2569, 1 }, oq = 2 },
-    [2387] = { name = "Linen Cloak", t = { 1, 35, 47, 60 }, r = { { 2996, 1 }, { 2320, 1 } }, out = { 2570, 1 }, oq = 1 },
+    [2387] = { name = "Linen Cloak", t = { 1, 35, 47, 60 }, basic = true, r = { { 2996, 1 }, { 2320, 1 } }, out = { 2570, 1 }, oq = 1 },
     [2389] = { name = "Red Linen Robe", t = { 1, 50, 67, 85 }, scroll = 2598, train = 25, sq = 2, r = { { 2996, 3 }, { 2320, 2 }, { 2604, 2 } }, out = { 2572, 1 }, oq = 2 },
     [2392] = { name = "Red Linen Shirt", t = { 1, 50, 67, 85 }, fee = 45, train = 25, r = { { 2996, 2 }, { 2320, 1 }, { 2604, 1 } }, out = { 2575, 1 }, oq = 1 },
     [2393] = { name = "White Linen Shirt", t = { 1, 35, 47, 60 }, fee = 22, train = 1, r = { { 2996, 1 }, { 2320, 1 }, { 2324, 1 } }, out = { 2576, 1 }, oq = 1 },
@@ -37,9 +39,9 @@ ES.Data.Tailoring = {
     [2402] = { name = "Woolen Cape", t = { 1, 80, 97, 115 }, fee = 225, train = 55, r = { { 2997, 1 }, { 2321, 1 } }, out = { 2584, 1 }, oq = 2 },
     [2403] = { name = "Gray Woolen Robe", t = { 1, 105, 122, 140 }, scroll = 2601, train = 80, sq = 2, r = { { 2997, 4 }, { 2321, 3 }, { 4340, 1 } }, out = { 2585, 1 }, oq = 2 },
     [2406] = { name = "Gray Woolen Shirt", t = { 1, 90, 100, 110 }, fee = 180, train = 80, r = { { 2997, 2 }, { 2321, 1 }, { 4340, 1 } }, out = { 2587, 1 }, oq = 1 },
-    [2963] = { name = "Bolt of Linen Cloth", t = { 1, 25, 37, 50 }, r = { { 2589, 2 } }, out = { 2996, 1 }, oq = 1 },
+    [2963] = { name = "Bolt of Linen Cloth", t = { 1, 25, 37, 50 }, basic = true, r = { { 2589, 2 } }, out = { 2996, 1 }, oq = 1 },
     [2964] = { name = "Bolt of Woolen Cloth", t = { 1, 70, 77, 85 }, fee = 90, train = 55, r = { { 2592, 3 } }, out = { 2997, 1 }, oq = 1 },
-    [3755] = { name = "Linen Bag", t = { 1, 30, 47, 65 }, fee = 90, train = 5, r = { { 2996, 3 }, { 2320, 3 } }, out = { 4238, 1 }, oq = 1 },
+    [3755] = { name = "Linen Bag", t = { 1, 30, 47, 65 }, basic = true, r = { { 2996, 3 }, { 2320, 3 } }, out = { 4238, 1 }, oq = 1 },
     [3757] = { name = "Woolen Bag", t = { 1, 75, 92, 110 }, fee = 180, train = 50, r = { { 2997, 3 }, { 2321, 1 } }, out = { 4240, 1 }, oq = 1 },
     [3758] = { name = "Green Woolen Bag", t = { 1, 100, 117, 135 }, scroll = 4292, train = 75, sq = 2, r = { { 2997, 4 }, { 2605, 1 }, { 2321, 1 } }, out = { 4241, 1 }, oq = 1 },
     [3813] = { name = "Small Silk Pack", t = { 1, 145, 160, 175 }, fee = 720, train = 125, r = { { 4305, 3 }, { 4234, 2 }, { 2321, 3 } }, out = { 4245, 1 }, oq = 1 },
@@ -76,7 +78,7 @@ ES.Data.Tailoring = {
     [3872] = { name = "Rich Purple Silk Shirt", t = { 1, 160, 165, 170 }, scroll = 4354, train = 150, sq = 3, r = { { 4305, 4 }, { 4342, 1 }, { 4291, 1 } }, out = { 4335, 1 }, oq = 1 },
     [3873] = { name = "Black Swashbuckler's Shirt", t = { 1, 175, 180, 185 }, scroll = 10728, train = 165, scrollPrice = 1500, sq = 1, r = { { 4305, 5 }, { 2325, 1 }, { 4291, 1 } }, out = { 4336, 1 }, oq = 1 },
     [3914] = { name = "Brown Linen Pants", t = { 1, 50, 67, 85 }, fee = 45, train = 25, r = { { 2996, 2 }, { 2320, 1 } }, out = { 4343, 1 }, oq = 2 },
-    [3915] = { name = "Brown Linen Shirt", t = { 1, 35, 47, 60 }, fee = 25, train = 1, r = { { 2996, 1 }, { 2320, 1 } }, out = { 4344, 1 }, oq = 1 },
+    [3915] = { name = "Brown Linen Shirt", t = { 1, 35, 47, 60 }, basic = true, r = { { 2996, 1 }, { 2320, 1 } }, out = { 4344, 1 }, oq = 1 },
     [6521] = { name = "Pearl-clasped Cloak", t = { 1, 95, 112, 130 }, fee = 360, train = 70, r = { { 2997, 3 }, { 2321, 2 }, { 5498, 1 } }, out = { 5542, 1 }, oq = 2 },
     [6686] = { name = "Red Linen Bag", t = { 1, 75, 92, 110 }, scroll = 5771, train = 50, scrollPrice = 200, sq = 1, r = { { 2996, 4 }, { 2321, 1 }, { 2604, 1 } }, out = { 5762, 1 }, oq = 1 },
     [6688] = { name = "Red Woolen Bag", t = { 1, 115, 132, 150 }, scroll = 5772, train = 90, scrollPrice = 500, sq = 1, r = { { 2997, 4 }, { 2604, 1 }, { 2321, 1 } }, out = { 5763, 1 }, oq = 1 },
@@ -120,7 +122,7 @@ ES.Data.Tailoring = {
     [8799] = { name = "Crimson Silk Pantaloons", t = { 1, 180, 190, 200 }, fee = 2700, train = 160, r = { { 4305, 4 }, { 2604, 2 }, { 4291, 2 } }, out = { 7062, 1 }, oq = 2 },
     [8802] = { name = "Crimson Silk Robe", t = { 1, 185, 200, 215 }, scroll = 7088, train = 170, scrollPrice = 5000, sq = 1, r = { { 4305, 8 }, { 7068, 4 }, { 3827, 2 }, { 2604, 4 }, { 4291, 1 } }, out = { 7063, 1 }, oq = 2 },
     [8804] = { name = "Crimson Silk Gloves", t = { 1, 190, 205, 220 }, fee = 4500, train = 175, r = { { 4305, 6 }, { 7068, 2 }, { 6371, 2 }, { 4304, 2 }, { 2604, 4 }, { 4291, 2 } }, out = { 7064, 1 }, oq = 2 },
-    [12044] = { name = "Simple Linen Pants", t = { 1, 40, 50, 60 }, fee = 30, train = 1, r = { { 2996, 1 }, { 2320, 1 } }, out = { 10045, 1 }, oq = 1 },
+    [12044] = { name = "Simple Linen Pants", t = { 1, 40, 50, 60 }, basic = true, r = { { 2996, 1 }, { 2320, 1 } }, out = { 10045, 1 }, oq = 1 },
     [12045] = { name = "Simple Linen Boots", t = { 1, 50, 67, 85 }, fee = 45, train = 20, r = { { 2996, 2 }, { 2318, 1 }, { 2320, 1 } }, out = { 10046, 1 }, oq = 1 },
     [12046] = { name = "Simple Kilt", t = { 1, 75, 92, 110 }, fee = 270, train = 50, r = { { 2996, 4 }, { 2321, 1 } }, out = { 10047, 1 }, oq = 2 },
     [12047] = { name = "Colorful Kilt", t = { 1, 95, 112, 130 }, scroll = 10316, train = 70, sq = 2, r = { { 2997, 5 }, { 2604, 3 }, { 2321, 1 } }, out = { 10048, 1 }, oq = 2 },
@@ -281,7 +283,7 @@ ES.Data.Tailoring = {
     [1224614] = { name = "Scarlet Augur's Soles", t = { 1, 270, 287, 305 }, scroll = 238305, train = 260, sq = 3, r = { { 12811, 1 }, { 14048, 10 } }, out = { 238271, 1 }, oq = 1 },
     [1227723] = { name = "Crusader's Knapsack", t = { 1, 260, 262, 265 }, scroll = 239149, train = 250, sq = 3, r = { { 12811, 1 }, { 14048, 14 }, { 2604, 8 }, { 14227, 3 } }, out = { 239147, 1 }, oq = 3 },
     [1227724] = { name = "Crimson Dawnwoven Bag", t = { 1, 300, 302, 305 }, scroll = 239150, train = 290, sq = 4, r = { { 12938, 1 }, { 14048, 24 }, { 2604, 4 }, { 12808, 2 }, { 12811, 2 } }, out = { 239148, 1 }, oq = 4 },
-    [1229504] = { name = "Faction Banner", t = { 1, 20, 22, 25 }, faction = "Horde", r = { { 2996, 1 }, { 2320, 1 } }, out = { 279972, 1 }, oq = 1 },
+    [1229504] = { name = "Faction Banner", t = { 1, 20, 22, 25 }, trainer = true, train = 20, faction = "Horde", r = { { 2996, 1 }, { 2320, 1 } }, out = { 279972, 1 }, oq = 1 },
     [1257013] = { name = "Linen Reagent Bag", t = { 1, 30, 47, 65 }, scroll = 253665, train = 5, scrollPrice = 150, sq = 2, r = { { 2996, 6 }, { 2320, 6 } }, out = { 253664, 1 }, oq = 1 },
     [1257017] = { name = "Woolen Reagent Bag", t = { 1, 75, 92, 110 }, scroll = 253668, train = 70, scrollPrice = 250, sq = 2, r = { { 2997, 3 }, { 2321, 1 }, { 249409, 1 } }, out = { 253667, 1 }, oq = 1 },
     [1257370] = { name = "Pristine Boots", t = { 1, 85, 102, 120 }, scroll = 253890, train = 60, sq = 3, favor = 30, r = { { 2997, 8 }, { 2321, 2 }, { 249409, 2 }, { 249427, 1 } }, out = { 253889, 1 }, oq = 3, bop = true },
@@ -375,7 +377,7 @@ ES.Data.Tailoring = {
     [1257494] = { name = "Earthenweave Crown", t = { 1, 275, 290, 305 }, scroll = 254138, train = 260, sq = 2, r = { { 14048, 6 }, { 7076, 3 }, { 14341, 1 } }, out = { 254137, 1 }, oq = 2 },
     [1257495] = { name = "Bottomless Reagent Bag", t = { 1, 315, 330, 345 }, scroll = 254140, train = 300, sq = 2, r = { { 14048, 8 }, { 14342, 12 }, { 14344, 2 }, { 249427, 5 }, { 14341, 2 }, { 249428, 5 }, { 249429, 5 } }, out = { 254139, 1 }, oq = 1 },
     [1263032] = { name = "Spinning Wheel", t = { 1, 140, 142, 145 }, scroll = 273099, train = 140, sq = 2, r = { { 4470, 2 }, { 4305, 5 }, { 2321, 3 } }, out = { 279943, 1 }, oq = 1 },
-    [1263425] = { name = "Faction Banner", t = { 1, 20, 22, 25 }, faction = "Alliance", r = { { 2996, 1 }, { 2320, 1 } }, out = { 279973, 1 }, oq = 1 },
+    [1263425] = { name = "Faction Banner", t = { 1, 20, 22, 25 }, trainer = true, train = 20, faction = "Alliance", r = { { 2996, 1 }, { 2320, 1 } }, out = { 279973, 1 }, oq = 1 },
     [1292941] = { name = "Manaflare Pants", t = { 1, 320, 325, 330 }, scroll = 273972, train = 300, sq = 4, r = { { 274030, 5 }, { 14342, 3 }, { 14048, 22 }, { 14341, 8 } }, out = { 273904, 1 }, oq = 1 },
     [1292942] = { name = "Manaflare Gloves", t = { 1, 320, 325, 330 }, scroll = 273973, train = 300, sq = 4, r = { { 274030, 3 }, { 14342, 2 }, { 14048, 16 }, { 14341, 8 } }, out = { 273905, 1 }, oq = 1 },
     [1292943] = { name = "Manaflare Mantle", t = { 1, 320, 325, 330 }, scroll = 273974, train = 300, sq = 4, r = { { 274030, 3 }, { 14342, 2 }, { 14048, 16 }, { 14341, 8 } }, out = { 273906, 1 }, oq = 1 },

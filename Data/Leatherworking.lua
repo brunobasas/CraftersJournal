@@ -12,6 +12,8 @@ ES.Data = ES.Data or {}
 -- bop = lo fabricado se liga al recogerlo: no se puede vender en la AH (sí al vendedor)
 -- favor / favorRep = se compra con Merchant's Favor en el campamento de tu bando, y la reputación que pide
 -- train ajustado a Forever: nivel de Classic menos lo que Forever bajó la amarilla de esa receta
+-- basic = se aprende sola al coger la profesión; trainer = de instructor sin precio conocido
+--   (receta nueva de Forever que no está en CMaNGOS: se aprende al ponerse amarilla)
 ES.Data.Leatherworking = {
   skillLine = 165,
   ranks = { -- { tope, precio, habilidad requerida, nivel de personaje }
@@ -22,8 +24,8 @@ ES.Data.Leatherworking = {
   -- { PNJ instructor, rangos que enseña: 1 aprendiz (75), 2 oficial (150), 4 experto (225), 8 artesano (300) }
   trainers = { { 223, 1 }, { 1385, 2 }, { 1466, 1 }, { 1632, 1 }, { 3007, 4 }, { 3008, 1 }, { 3069, 1 }, { 3365, 2 }, { 3549, 1 }, { 3605, 1 }, { 3703, 2 }, { 3967, 2 }, { 4212, 4 }, { 4588, 2 }, { 5127, 2 }, { 5564, 2 }, { 5784, 1 }, { 5811, 1 }, { 11081, 2 }, { 11083, 1 }, { 11084, 2 }, { 11096, 1 }, { 11098, 8 }, { 251993, 3 }, { 252376, 3 } },
   recipes = {
-    [2149] = { name = "Handstitched Leather Boots", t = { 1, 40, 55, 70 }, r = { { 2318, 2 }, { 2320, 1 } }, out = { 2302, 1 }, oq = 1 },
-    [2152] = { name = "Light Armor Kit", t = { 1, 30, 45, 60 }, r = { { 2318, 1 } }, out = { 2304, 1 }, oq = 1 },
+    [2149] = { name = "Handstitched Leather Boots", t = { 1, 40, 55, 70 }, basic = true, r = { { 2318, 2 }, { 2320, 1 } }, out = { 2302, 1 }, oq = 1 },
+    [2152] = { name = "Light Armor Kit", t = { 1, 30, 45, 60 }, basic = true, r = { { 2318, 1 } }, out = { 2304, 1 }, oq = 1 },
     [2153] = { name = "Handstitched Leather Pants", t = { 1, 45, 60, 75 }, fee = 50, train = 15, r = { { 2318, 4 }, { 2320, 1 } }, out = { 2303, 1 }, oq = 2 },
     [2158] = { name = "Fine Leather Boots", t = { 1, 95, 110, 125 }, scroll = 2406, train = 65, sq = 2, r = { { 2318, 7 }, { 2320, 2 } }, out = { 2307, 1 }, oq = 2 },
     [2159] = { name = "Fine Leather Cloak", t = { 1, 70, 85, 100 }, fee = 550, train = 50, r = { { 2318, 10 }, { 2321, 2 } }, out = { 2308, 1 }, oq = 2 },
@@ -37,7 +39,7 @@ ES.Data.Leatherworking = {
     [2167] = { name = "Dark Leather Boots", t = { 1, 100, 112, 125 }, fee = 650, train = 75, r = { { 2319, 4 }, { 2321, 2 }, { 4340, 1 } }, out = { 2315, 1 }, oq = 2 },
     [2168] = { name = "Dark Leather Cloak", t = { 1, 110, 122, 135 }, fee = 1000, train = 85, r = { { 2319, 8 }, { 2321, 1 }, { 4340, 1 } }, out = { 2316, 1 }, oq = 2 },
     [2169] = { name = "Dark Leather Tunic", t = { 1, 100, 112, 125 }, scroll = 2409, train = 75, sq = 2, r = { { 2319, 6 }, { 2321, 1 }, { 4340, 1 } }, out = { 2317, 1 }, oq = 2 },
-    [2881] = { name = "Light Leather", t = { 1, 20, 30, 40 }, r = { { 2934, 3 } }, out = { 2318, 1 }, oq = 1 },
+    [2881] = { name = "Light Leather", t = { 1, 20, 30, 40 }, basic = true, r = { { 2934, 3 } }, out = { 2318, 1 }, oq = 1 },
     [3753] = { name = "Handstitched Leather Belt", t = { 1, 55, 70, 85 }, fee = 75, train = 25, r = { { 2318, 6 }, { 2320, 1 } }, out = { 4237, 1 }, oq = 2 },
     [3756] = { name = "Embossed Leather Gloves", t = { 1, 70, 85, 100 }, fee = 150, train = 40, r = { { 2318, 3 }, { 2320, 2 } }, out = { 4239, 1 }, oq = 2 },
     [3759] = { name = "Embossed Leather Pants", t = { 1, 80, 95, 110 }, fee = 500, train = 50, r = { { 4231, 1 }, { 2318, 6 }, { 2320, 2 } }, out = { 4242, 1 }, oq = 2 },
@@ -73,7 +75,7 @@ ES.Data.Leatherworking = {
     [6703] = { name = "Murloc Scale Breastplate", t = { 1, 100, 115, 130 }, scroll = 5787, train = 70, scrollPrice = 600, sq = 1, r = { { 5784, 12 }, { 4231, 1 }, { 2318, 8 }, { 2321, 1 } }, out = { 5781, 1 }, oq = 2 },
     [6704] = { name = "Thick Murloc Armor", t = { 1, 165, 175, 185 }, scroll = 5788, train = 145, scrollPrice = 650, sq = 2, r = { { 5785, 12 }, { 4236, 1 }, { 4234, 10 }, { 2321, 3 } }, out = { 5782, 1 }, oq = 2 },
     [6705] = { name = "Murloc Scale Bracers", t = { 1, 185, 195, 205 }, scroll = 5789, train = 165, scrollPrice = 2800, sq = 2, r = { { 5785, 16 }, { 4236, 1 }, { 4234, 14 }, { 4291, 1 } }, out = { 5783, 1 }, oq = 2 },
-    [7126] = { name = "Handstitched Leather Vest", t = { 1, 40, 55, 70 }, r = { { 2318, 3 }, { 2320, 1 } }, out = { 5957, 1 }, oq = 2 },
+    [7126] = { name = "Handstitched Leather Vest", t = { 1, 40, 55, 70 }, basic = true, r = { { 2318, 3 }, { 2320, 1 } }, out = { 5957, 1 }, oq = 2 },
     [7133] = { name = "Fine Leather Pants", t = { 1, 105, 117, 130 }, scroll = 5972, train = 80, sq = 2, r = { { 2319, 8 }, { 2997, 1 }, { 2321, 1 } }, out = { 5958, 1 }, oq = 2 },
     [7135] = { name = "Dark Leather Pants", t = { 1, 115, 127, 140 }, fee = 1000, train = 90, r = { { 2319, 12 }, { 4340, 1 }, { 2321, 1 } }, out = { 5961, 1 }, oq = 2 },
     [7147] = { name = "Guardian Pants", t = { 1, 155, 165, 175 }, fee = 2500, train = 135, r = { { 4234, 12 }, { 4305, 2 }, { 2321, 2 } }, out = { 5962, 1 }, oq = 2 },
@@ -85,8 +87,8 @@ ES.Data.Leatherworking = {
     [7954] = { name = "Deviate Scale Gloves", t = { 1, 105, 117, 130 }, scroll = 6475, train = 80, scrollPrice = 1500, sq = 1, r = { { 6471, 2 }, { 6470, 6 }, { 2321, 2 } }, out = { 6467, 1 }, oq = 2 },
     [7955] = { name = "Deviate Scale Belt", t = { 1, 115, 127, 140 }, scroll = 6476, train = 90, sq = 2, r = { { 6471, 10 }, { 6470, 10 }, { 2321, 2 } }, out = { 6468, 1 }, oq = 3 },
     [8322] = { name = "Moonglow Vest", t = { 1, 90, 105, 120 }, scroll = 6710, train = 65, sq = 2, r = { { 2318, 6 }, { 4231, 1 }, { 2320, 4 }, { 5498, 1 } }, out = { 6709, 1 }, oq = 2 },
-    [9058] = { name = "Handstitched Leather Cloak", t = { 1, 40, 55, 70 }, r = { { 2318, 2 }, { 2320, 1 } }, out = { 7276, 1 }, oq = 1 },
-    [9059] = { name = "Handstitched Leather Bracers", t = { 1, 40, 55, 70 }, r = { { 2318, 2 }, { 2320, 3 } }, out = { 7277, 1 }, oq = 1 },
+    [9058] = { name = "Handstitched Leather Cloak", t = { 1, 40, 55, 70 }, basic = true, r = { { 2318, 2 }, { 2320, 1 } }, out = { 7276, 1 }, oq = 1 },
+    [9059] = { name = "Handstitched Leather Bracers", t = { 1, 40, 55, 70 }, basic = true, r = { { 2318, 2 }, { 2320, 3 } }, out = { 7277, 1 }, oq = 1 },
     [9060] = { name = "Light Leather Quiver", t = { 1, 55, 70, 85 }, fee = 100, train = 25, r = { { 2318, 4 }, { 2320, 2 } }, out = { 7278, 1 }, oq = 1 },
     [9062] = { name = "Small Leather Ammo Pouch", t = { 1, 55, 70, 85 }, fee = 100, train = 25, r = { { 2318, 3 }, { 2320, 4 } }, out = { 7279, 1 }, oq = 1 },
     [9064] = { name = "Rugged Leather Pants", t = { 1, 60, 75, 90 }, scroll = 7288, train = 30, sq = 2, r = { { 2318, 5 }, { 2320, 5 } }, out = { 7280, 1 }, oq = 2 },
@@ -301,7 +303,7 @@ ES.Data.Leatherworking = {
     [1224630] = { name = "Scarlet Huntsman's Boots", t = { 1, 270, 287, 305 }, scroll = 238321, train = 260, sq = 3, r = { { 12811, 1 }, { 15408, 10 } }, out = { 238287, 1 }, oq = 1 },
     [1226689] = { name = "Scarlet Quiver", t = { 1, 280, 285, 290 }, scroll = 238927, train = 275, sq = 2, r = { { 12811, 1 }, { 8170, 24 }, { 15407, 2 } }, out = { 238925, 1 }, oq = 1 },
     [1226690] = { name = "Scarlet Ammo Pouch", t = { 1, 280, 285, 290 }, scroll = 238928, train = 275, sq = 2, r = { { 12811, 1 }, { 15408, 24 }, { 15407, 2 } }, out = { 238926, 1 }, oq = 1 },
-    [1229432] = { name = "Camp Tent", t = { 1, 20, 22, 25 }, r = { { 2318, 5 } }, out = { 279978, 1 }, oq = 1 },
+    [1229432] = { name = "Camp Tent", t = { 1, 20, 22, 25 }, trainer = true, train = 20, r = { { 2318, 5 } }, out = { 279978, 1 }, oq = 1 },
     [1254965] = { name = "Forceful Rugged Armor Kit", t = { 1, 235, 245, 255 }, scroll = 252942, train = 235, scrollPrice = 5500, sq = 2, r = { { 15564, 1 }, { 11176, 2 }, { 9206, 2 }, { 249429, 1 }, { 248824, 1 } }, out = { 252488, 1 }, oq = 2 },
     [1254966] = { name = "Mystic Rugged Armor Kit", t = { 1, 235, 245, 255 }, scroll = 252941, train = 235, sq = 2, favor = 90, favorRep = 6, r = { { 15564, 1 }, { 11176, 2 }, { 13444, 2 }, { 249429, 1 }, { 248824, 1 } }, out = { 252487, 1 }, oq = 2 },
     [1254967] = { name = "Pristine Scorpid Leggings", t = { 1, 320, 330, 340 }, scroll = 252940, train = 300, sq = 4, r = { { 8170, 20 }, { 15408, 40 }, { 12810, 12 }, { 15407, 4 }, { 249429, 10 }, { 14341, 2 }, { 248825, 20 } }, out = { 252606, 1 }, oq = 4 },

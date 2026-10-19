@@ -12,6 +12,8 @@ ES.Data = ES.Data or {}
 -- bop = lo fabricado se liga al recogerlo: no se puede vender en la AH (sí al vendedor)
 -- favor / favorRep = se compra con Merchant's Favor en el campamento de tu bando, y la reputación que pide
 -- train ajustado a Forever: nivel de Classic menos lo que Forever bajó la amarilla de esa receta
+-- basic = se aprende sola al coger la profesión; trainer = de instructor sin precio conocido
+--   (receta nueva de Forever que no está en CMaNGOS: se aprende al ponerse amarilla)
 ES.Data.Cooking = {
   skillLine = 185,
   ranks = { -- { tope, precio, habilidad requerida, nivel de personaje }
@@ -22,10 +24,10 @@ ES.Data.Cooking = {
   -- { PNJ instructor, rangos que enseña: 1 aprendiz (75), 2 oficial (150), 4 experto (225), 8 artesano (300) }
   trainers = { { 1355, 3 }, { 1382, 3 }, { 1430, 3 }, { 1699, 3 }, { 3026, 3 }, { 3067, 3 }, { 3087, 3 }, { 3399, 3 }, { 4210, 3 }, { 4552, 3 }, { 5159, 3 }, { 5482, 3 }, { 6286, 3 }, { 8306, 3 }, { 251905, 3 }, { 252084, 3 }, { 256655, 3 }, { 257006, 3 }, { 265944, 3 } },
   recipes = {
-    [818] = { name = "Basic Campfire", t = { 1, 25, 50, 75 }, r = { { 4470, 1 } } },
-    [2538] = { name = "Charred Wolf Meat", t = { 1, 45, 65, 85 }, r = { { 2672, 1 } }, out = { 2679, 1 }, oq = 1 },
+    [818] = { name = "Basic Campfire", t = { 1, 25, 50, 75 }, basic = true, r = { { 4470, 1 } } },
+    [2538] = { name = "Charred Wolf Meat", t = { 1, 45, 65, 85 }, basic = true, r = { { 2672, 1 } }, out = { 2679, 1 }, oq = 1 },
     [2539] = { name = "Spiced Wolf Meat", t = { 1, 50, 70, 90 }, fee = 50, train = 10, r = { { 2672, 1 }, { 2678, 1 } }, out = { 2680, 1 }, oq = 1 },
-    [2540] = { name = "Roasted Boar Meat", t = { 1, 45, 65, 85 }, r = { { 769, 1 } }, out = { 2681, 1 }, oq = 1 },
+    [2540] = { name = "Roasted Boar Meat", t = { 1, 45, 65, 85 }, basic = true, r = { { 769, 1 } }, out = { 2681, 1 }, oq = 1 },
     [2541] = { name = "Coyote Steak", t = { 1, 90, 110, 130 }, fee = 100, train = 50, r = { { 2673, 1 } }, out = { 2684, 1 }, oq = 1 },
     [2542] = { name = "Goretusk Liver Pie", t = { 1, 90, 110, 130 }, scroll = 2697, train = 50, scrollPrice = 400, sq = 1, r = { { 723, 1 }, { 2678, 1 } }, out = { 724, 1 }, oq = 1 },
     [2543] = { name = "Westfall Stew", t = { 1, 115, 135, 155 }, scroll = 728, train = 75, scrollPrice = 200, sq = 1, r = { { 729, 1 }, { 730, 1 }, { 731, 1 } }, out = { 733, 1 }, oq = 1 },
@@ -67,7 +69,7 @@ ES.Data.Cooking = {
     [7827] = { name = "Rainbow Fin Albacore", t = { 1, 90, 110, 130 }, scroll = 6368, train = 50, scrollPrice = 400, sq = 1, r = { { 6361, 1 } }, out = { 5095, 1 }, oq = 1 },
     [7828] = { name = "Rockscale Cod", t = { 1, 190, 210, 230 }, scroll = 6369, train = 175, scrollPrice = 2200, sq = 1, r = { { 6362, 1 } }, out = { 4594, 1 }, oq = 1 },
     [8238] = { name = "Savory Deviate Delight", t = { 1, 125, 145, 165 }, scroll = 6661, train = 85, sq = 2, r = { { 6522, 1 }, { 2678, 1 } }, out = { 6657, 1 }, oq = 1 },
-    [8604] = { name = "Herb Baked Egg", t = { 1, 45, 65, 85 }, scroll = 6891, train = 35, sq = 1, r = { { 6889, 1 }, { 2678, 1 } }, out = { 6888, 1 }, oq = 1 },
+    [8604] = { name = "Herb Baked Egg", t = { 1, 45, 65, 85 }, basic = true, r = { { 6889, 1 }, { 2678, 1 } }, out = { 6888, 1 }, oq = 1 },
     [8607] = { name = "Smoked Bear Meat", t = { 1, 80, 100, 120 }, scroll = 6892, train = 40, scrollPrice = 250, sq = 1, r = { { 3173, 1 } }, out = { 6890, 1 }, oq = 1 },
     [9513] = { name = "Thistle Tea", t = { 1, 100, 120, 140 }, scroll = 18160, train = 60, scrollPrice = 200, sq = 2, r = { { 2452, 1 }, { 159, 1 } }, out = { 7676, 1 }, oq = 1 },
     [13028] = { name = "Goldthorn Tea", t = { 1, 215, 235, 255 }, fee = 0, train = 175, r = { { 3821, 1 }, { 159, 1 } }, out = { 10841, 4 }, oq = 1 },
@@ -110,7 +112,7 @@ ES.Data.Cooking = {
     [1225760] = { name = "Sunrise Omelette", t = { 1, 260, 270, 280 }, scroll = 238647, train = 250, sq = 1, r = { { 12207, 2 }, { 239016, 1 } }, out = { 238639, 2 }, oq = 1 },
     [1225762] = { name = "Specklefin Feast", t = { 1, 290, 300, 310 }, scroll = 238649, train = 280, sq = 1, r = { { 4603, 12 }, { 12184, 4 }, { 6362, 3 }, { 239017, 1 } }, out = { 238641, 1 }, oq = 2 },
     [1225763] = { name = "Grand Lobster Banquet", t = { 1, 290, 300, 310 }, scroll = 239021, train = 280, sq = 1, r = { { 13888, 12 }, { 3712, 4 }, { 3404, 3 }, { 239017, 1 } }, out = { 238642, 1 }, oq = 2 },
-    [1229737] = { name = "Basic Campfire", t = { 1, 1, 3, 5 }, r = { { 4470, 1 } }, out = { 279981, 1 }, oq = 1 },
+    [1229737] = { name = "Basic Campfire", t = { 1, 1, 3, 5 }, basic = true, r = { { 4470, 1 } }, out = { 279981, 1 }, oq = 1 },
     [1247741] = { name = "Spinefin Halibut", t = { 1, 210, 215, 220 }, r = { { 8959, 1 } }, out = { 8957, 1 }, oq = 1 },
     [1249957] = { name = "Peace Tea", t = { 1, 30, 37, 45 }, scroll = 249879, train = 25, sq = 1, r = { { 159, 1 }, { 2447, 2 } }, out = { 249865, 1 }, oq = 1 },
     [1249958] = { name = "Royal Tea", t = { 1, 105, 115, 125 }, scroll = 249880, train = 100, sq = 1, r = { { 1179, 1 }, { 785, 2 } }, out = { 249866, 1 }, oq = 1 },

@@ -1370,10 +1370,11 @@ local function RouteLines(plan, page)
         icon = trainer and TRAIN_ICON or RECIPE_ICON,
         title = title,
         sub = LEARN_WHERE[st.learnSource] or "?",
-        value = st.learnSource == "unknown" and (GREY .. "?|r") or Signed(st.fee),
+        -- "?": fuente desconocida, o instructor de una receta nueva de Forever (precio sin datos)
+        value = (st.learnSource == "unknown" or (r.trainer and not r.fee)) and (GREY .. "?|r") or Signed(st.fee),
         go = pick, onSkip = Skip(st.id),
         tooltip = pick and TravelTooltip(title, string.format(L["%s · requiere %s (%d) · cuesta %s"], LEARN_WHERE[st.learnSource] or "?",
-          profName, learnAt, ES.Money(st.fee)), label, pick) or nil,
+          profName, learnAt, (r.trainer and not r.fee) and L["precio desconocido"] or ES.Money(st.fee)), label, pick) or nil,
       }
     end
     local perPoint = st.expected / (st.to - st.from)

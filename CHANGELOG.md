@@ -1,5 +1,10 @@
 # Crafter's Journal
 
+## 0.35.1
+
+- **Fixed recipes learned at the trainer shown as known from the start.** Some recipes new to Forever (Mana Well, Camp Tent, Enchanted Lute, Sharpening Wheel, Reagent Bot, Faction Banner, Cerulean Dye, Sulfuric Acid) were treated as basic recipes you know from level 1, so the route could tell you to craft Mana Well at 15 when the trainer only teaches it at 20. They're now learned at the trainer at the right level (the trainer cost shows as "?" since it isn't known yet).
+- **Fixed recipes you learn automatically.** Linen Bag and a few other recipes are learned automatically in Forever; the route no longer sends you to pay the trainer for them.
+
 ## 0.35.0
 
 - **Start route.** New "Start route" button under the summary: it locks the route you've chosen. While you buy on the Auction House, from vendors or take items from your mailbox, neither the route nor its cost change, and what you buy for it no longer shows up as free materials. Steps you've already passed are marked as done. Prices are frozen too: a new Auction House scan doesn't change the route's totals (not even after a reload) until you choose — "Update prices" keeps the same route with the new prices, "Recalculate route" looks for a new route. Playing never unlocks it (leveling up, buying, crafting), and when you reach your target it stays as "Route completed!" until you recalculate. Changing it on purpose does: "Recalculate route", the target, an option icon or removing a recipe.

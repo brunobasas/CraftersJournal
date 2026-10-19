@@ -12,6 +12,8 @@ ES.Data = ES.Data or {}
 -- bop = lo fabricado se liga al recogerlo: no se puede vender en la AH (sí al vendedor)
 -- favor / favorRep = se compra con Merchant's Favor en el campamento de tu bando, y la reputación que pide
 -- train ajustado a Forever: nivel de Classic menos lo que Forever bajó la amarilla de esa receta
+-- basic = se aprende sola al coger la profesión; trainer = de instructor sin precio conocido
+--   (receta nueva de Forever que no está en CMaNGOS: se aprende al ponerse amarilla)
 ES.Data.Enchanting = {
   skillLine = 333,
   ranks = { -- { tope, precio, habilidad requerida, nivel de personaje }
@@ -22,11 +24,11 @@ ES.Data.Enchanting = {
   -- { PNJ instructor, rangos que enseña: 1 aprendiz (75), 2 oficial (150), 4 experto (225), 8 artesano (300) }
   trainers = { { 1317, 2 }, { 3011, 2 }, { 3345, 2 }, { 3606, 1 }, { 4213, 2 }, { 4616, 2 }, { 5157, 2 }, { 5695, 1 }, { 7949, 2 }, { 11065, 1 }, { 11066, 1 }, { 11067, 1 }, { 11068, 1 }, { 11070, 1 }, { 11071, 1 }, { 11072, 4 }, { 11073, 8 }, { 11074, 4 }, { 251978, 3 }, { 257004, 3 }, { 257020, 3 }, { 266881, 1 } },
   recipes = {
-    [7418] = { name = "Enchant Bracer - Inferior Stamina", t = { 1, 20, 22, 25 }, r = { { 247786, 1 } }, tool = 373 },
+    [7418] = { name = "Enchant Bracer - Inferior Stamina", t = { 1, 20, 22, 25 }, basic = true, r = { { 247786, 1 } }, tool = 373 },
     [7420] = { name = "Enchant Chest - Inferior Stamina", t = { 1, 70, 90, 110 }, fee = 50, train = 15, r = { { 10940, 1 } }, tool = 373 },
-    [7421] = { name = "Runed Copper Rod", t = { 1, 5, 7, 10 }, r = { { 6217, 1 }, { 247786, 1 } }, out = { 6218, 1 }, oq = 1, bop = true },
+    [7421] = { name = "Runed Copper Rod", t = { 1, 5, 7, 10 }, basic = true, r = { { 6217, 1 }, { 247786, 1 } }, out = { 6218, 1 }, oq = 1, bop = true },
     [7426] = { name = "Enchant Chest - Minor Absorption", t = { 1, 90, 110, 130 }, fee = 100, train = 40, r = { { 10938, 1 } }, tool = 373 },
-    [7428] = { name = "Enchant Bracer - Minor Deflect", t = { 1, 80, 100, 120 }, fee = 100, train = 20, r = { { 10938, 1 } }, tool = 373 },
+    [7428] = { name = "Enchant Bracer - Minor Deflect", t = { 1, 80, 100, 120 }, basic = true, r = { { 10938, 1 } }, tool = 373 },
     [7443] = { name = "Enchant Chest - Minor Intellect", t = { 1, 80, 100, 120 }, scroll = 6342, train = 20, scrollPrice = 300, sq = 2, r = { { 10938, 1 } }, tool = 373 },
     [7454] = { name = "Enchant Cloak - Minor Resistance", t = { 1, 95, 115, 135 }, fee = 100, train = 45, r = { { 10940, 1 }, { 10938, 1 } }, tool = 373 },
     [7457] = { name = "Enchant Bracer - Minor Stamina", t = { 1, 100, 120, 140 }, fee = 250, train = 50, r = { { 10940, 2 } }, tool = 373 },
@@ -195,13 +197,13 @@ ES.Data.Enchanting = {
     [1219587] = { name = "Enchant Cloak - Agility", t = { 1, 320, 340, 360 }, scroll = 274399, train = 300, sq = 3, favor = 240, favorRep = 6, r = { { 16203, 3 }, { 16204, 9 }, { 7078, 1 } }, tool = 377 },
     [1220623] = { name = "Enchant Shield - Critical Strike", t = { 1, 320, 340, 360 }, scroll = 274400, train = 300, sq = 3, r = { { 14344, 5 }, { 16204, 15 }, { 12938, 1 } }, tool = 377 },
     [1220624] = { name = "Enchant Bracer - Greater Spellpower", t = { 1, 320, 340, 360 }, scroll = 274401, train = 300, sq = 3, favor = 240, favorRep = 6, r = { { 16203, 3 }, { 16204, 9 }, { 12808, 12 }, { 8831, 2 } }, tool = 377 },
-    [1230643] = { name = "Enchanted Lute", t = { 1, 20, 22, 25 }, r = { { 4470, 1 }, { 10940, 1 } }, out = { 279976, 1 }, oq = 1 },
+    [1230643] = { name = "Enchanted Lute", t = { 1, 20, 22, 25 }, trainer = true, train = 20, r = { { 4470, 1 }, { 10940, 1 } }, out = { 279976, 1 }, oq = 1 },
     [1231128] = { name = "Enchant Weapon - Grand Crusader", t = { 1, 305, 307, 310 }, scroll = 241191, train = 280, sq = 3, r = { { 14344, 5 }, { 12811, 2 }, { 20725, 2 }, { 12938, 1 } }, tool = 377 },
     [1231139] = { name = "Enchant 2H Weapon - Grand Arcanist", t = { 1, 305, 307, 310 }, scroll = 241195, train = 280, sq = 3, r = { { 14344, 10 }, { 12811, 4 }, { 20725, 4 }, { 12938, 1 } }, tool = 377 },
     [1231164] = { name = "Enchant Weapon - Grand Sorcerer", t = { 1, 305, 307, 310 }, scroll = 241201, train = 280, sq = 3, r = { { 14344, 6 }, { 12811, 3 }, { 20725, 2 }, { 12938, 1 } }, tool = 377 },
     [1232172] = { name = "Enchant 2H Weapon - Grand Inquisitor", t = { 1, 305, 307, 310 }, scroll = 242361, train = 280, sq = 3, r = { { 14344, 10 }, { 12811, 6 }, { 20725, 4 }, { 12938, 1 } }, tool = 377 },
-    [1245320] = { name = "Dust to Motes", t = { 1, 10, 12, 15 }, r = { { 10940, 1 } }, tool = 373, out = { 247786, 3 }, oq = 1 },
-    [1245321] = { name = "Novice's Practice Wand", t = { 1, 10, 12, 15 }, r = { { 4470, 1 }, { 247786, 1 } }, tool = 373, out = { 247789, 1 }, oq = 1 },
+    [1245320] = { name = "Dust to Motes", t = { 1, 10, 12, 15 }, basic = true, r = { { 10940, 1 } }, tool = 373, out = { 247786, 3 }, oq = 1 },
+    [1245321] = { name = "Novice's Practice Wand", t = { 1, 10, 12, 15 }, basic = true, r = { { 4470, 1 }, { 247786, 1 } }, tool = 373, out = { 247789, 1 }, oq = 1 },
     [1248458] = { name = "Enchant Bracer - Minor Intellect", t = { 1, 110, 130, 150 }, scroll = 249474, train = 70, sq = 2, r = { { 10938, 1 } }, tool = 373 },
     [1248459] = { name = "Enchant Bracer - Minor Healing Power", t = { 1, 120, 140, 160 }, scroll = 249475, train = 90, sq = 2, r = { { 10938, 2 } }, tool = 373 },
     [1248460] = { name = "Enchant Bracer - Lesser Agility", t = { 1, 165, 185, 205 }, scroll = 249486, train = 140, scrollPrice = 10000, sq = 2, r = { { 11134, 1 } }, tool = 374 },

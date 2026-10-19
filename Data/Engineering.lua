@@ -12,6 +12,8 @@ ES.Data = ES.Data or {}
 -- bop = lo fabricado se liga al recogerlo: no se puede vender en la AH (sí al vendedor)
 -- favor / favorRep = se compra con Merchant's Favor en el campamento de tu bando, y la reputación que pide
 -- train ajustado a Forever: nivel de Classic menos lo que Forever bajó la amarilla de esa receta
+-- basic = se aprende sola al coger la profesión; trainer = de instructor sin precio conocido
+--   (receta nueva de Forever que no está en CMaNGOS: se aprende al ponerse amarilla)
 ES.Data.Engineering = {
   skillLine = 202,
   ranks = { -- { tope, precio, habilidad requerida, nivel de personaje }
@@ -22,9 +24,9 @@ ES.Data.Engineering = {
   -- { PNJ instructor, rangos que enseña: 1 aprendiz (75), 2 oficial (150), 4 experto (225), 8 artesano (300) }
   trainers = { { 1676, 2 }, { 1702, 1 }, { 2857, 1 }, { 3290, 1 }, { 3412, 2 }, { 3494, 1 }, { 4586, 1 }, { 5174, 4 }, { 5518, 2 }, { 8736, 8 }, { 10993, 1 }, { 11017, 4 }, { 11025, 1 }, { 11026, 1 }, { 11028, 1 }, { 11029, 2 }, { 11031, 2 }, { 11037, 1 }, { 249235, 8 }, { 251684, 1 } },
   recipes = {
-    [3918] = { name = "Rough Blasting Powder", t = { 1, 20, 30, 40 }, r = { { 2835, 1 } }, out = { 4357, 1 }, oq = 1 },
-    [3919] = { name = "Rough Dynamite", t = { 1, 30, 45, 60 }, r = { { 4357, 1 }, { 2589, 1 } }, out = { 4358, 2 }, oq = 1 },
-    [3920] = { name = "Crafted Light Shot", t = { 1, 30, 45, 60 }, r = { { 4357, 1 }, { 2840, 1 } }, out = { 8067, 200 }, oq = 1 },
+    [3918] = { name = "Rough Blasting Powder", t = { 1, 20, 30, 40 }, basic = true, r = { { 2835, 1 } }, out = { 4357, 1 }, oq = 1 },
+    [3919] = { name = "Rough Dynamite", t = { 1, 30, 45, 60 }, basic = true, r = { { 4357, 1 }, { 2589, 1 } }, out = { 4358, 2 }, oq = 1 },
+    [3920] = { name = "Crafted Light Shot", t = { 1, 30, 45, 60 }, basic = true, r = { { 4357, 1 }, { 2840, 1 } }, out = { 8067, 200 }, oq = 1 },
     [3922] = { name = "Handful of Copper Bolts", t = { 1, 45, 52, 60 }, fee = 115, train = 30, r = { { 2840, 1 } }, tool = 162, out = { 4359, 1 }, oq = 1 },
     [3923] = { name = "Rough Copper Bomb", t = { 1, 60, 75, 90 }, fee = 130, train = 30, r = { { 2840, 1 }, { 4359, 1 }, { 4357, 2 }, { 2589, 1 } }, tool = 162, out = { 4360, 2 }, oq = 1 },
     [3924] = { name = "Copper Tube", t = { 1, 80, 95, 110 }, fee = 150, train = 50, r = { { 2840, 2 }, { 2880, 1 } }, tool = 162, out = { 4361, 1 }, oq = 1 },
@@ -206,7 +208,7 @@ ES.Data.Engineering = {
     [1226211] = { name = "Tinker: Nitro Boosts", t = { 1, 280, 282, 285 }, scroll = 238787, train = 280, sq = 3, r = { { 238737, 1 }, { 16006, 1 }, { 16000, 1 } }, tool = 14 },
     [1226212] = { name = "Tinker: Magnetic Displacement", t = { 1, 280, 282, 285 }, scroll = 238788, train = 280, sq = 3, r = { { 238737, 1 }, { 16006, 1 }, { 4387, 2 } }, tool = 14 },
     [1228088] = { name = "Pop-Up Shrub", t = { 1, 255, 257, 260 }, scroll = 239222, train = 250, sq = 3, r = { { 15994, 1 }, { 10560, 1 }, { 4382, 1 } }, tool = 14, out = { 237023, 1 }, oq = 1 },
-    [1230656] = { name = "Reagent Bot", t = { 1, 20, 22, 25 }, r = { { 4359, 1 }, { 4361, 1 } }, out = { 279950, 1 }, oq = 1 },
+    [1230656] = { name = "Reagent Bot", t = { 1, 20, 22, 25 }, trainer = true, train = 20, r = { { 4359, 1 }, { 4361, 1 } }, out = { 279950, 1 }, oq = 1 },
     [1249634] = { name = "Sandpaper", t = { 1, 130, 142, 155 }, r = { { 249425, 2 }, { 2996, 1 } }, out = { 249432, 1 }, oq = 2 },
     [1263034] = { name = "Repair Bot", t = { 1, 140, 142, 145 }, scroll = 273092, train = 140, sq = 2, r = { { 4375, 2 }, { 4371, 1 }, { 4234, 1 } }, out = { 279949, 1 }, oq = 1 },
     [1266893] = { name = "SAF-T Tabs", t = { 1, 25, 27, 30 }, scroll = 264201, train = 25, sq = 1, favor = 45, r = { { 2570, 1 }, { 249409, 1 } }, out = { 260784, 1 }, oq = 1 },

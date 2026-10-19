@@ -401,6 +401,8 @@ def main():
         "-- bop = lo fabricado se liga al recogerlo: no se puede vender en la AH (sí al vendedor)",
         "-- favor / favorRep = se compra con Merchant's Favor en el campamento de tu bando, y la reputación que pide",
         "-- train ajustado a Forever: nivel de Classic menos lo que Forever bajó la amarilla de esa receta",
+        "-- basic = se aprende sola al coger la profesión; trainer = de instructor sin precio conocido",
+        "--   (receta nueva de Forever que no está en CMaNGOS: se aprende al ponerse amarilla)",
         f"ES.Data.{prof} = {{",
         f"  skillLine = {skill_line},",
         "  ranks = { -- { tope, precio, habilidad requerida, nivel de personaje }",
@@ -422,7 +424,12 @@ def main():
 
         def forever_train(classic):
             return max(1, classic - shift.get(sid, 0))
-        if sid in fees:
+        acquire = sla[sid].get("AcquireMethod")
+        if acquire == "1":
+            # El cliente de Forever dice que se aprende sola al coger la profesión: manda
+            # sobre CMaNGOS (Linen Bag era de instructor en Classic y en Forever no)
+            parts.append("basic = true")
+        elif sid in fees:
             parts.append(f"fee = {fees[sid][0]}, train = {forever_train(fees[sid][1])}")
         elif sid in scrolls:
             scroll = scrolls[sid]
@@ -443,6 +450,15 @@ def main():
             if scroll in c["item_rep"]:
                 parts.append("rep = { %d, %d }" % c["item_rep"][scroll])
             parts.append(f"sq = {c['item_quality'].get(scroll, 1)}")
+        elif acquire == "3":
+            # Valor propio de Forever: sin instructor ni pergamino (Basic Campfire), básica
+            parts.append("basic = true")
+        elif t[1] <= 50:
+            # De instructor pero no está en CMaNGOS (receta nueva de Forever: Mana Well,
+            # Camp Tent...): se aprende al ponerse amarilla y su precio no se sabe.
+            # Solo las de nivel bajo: las altas sin instructor ni pergamino son de misión o
+            # reputación (Gordok Ogre Suit, Mooncloth Boots...) y no se pueden dar por instructor
+            parts.append(f"trainer = true, train = {t[1]}")
         mf = favor.get(c["names"].get(sid, "").lower())
         if mf:
             favor_found.add(c["names"][sid].lower())
