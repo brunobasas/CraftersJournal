@@ -1,9 +1,10 @@
 local _, ES = ...
 local L = ES.L
 
--- Con una ruta empezada ("Empezar ruta"), al abrir un vendedor sale al lado una
--- ventana con lo que te falta de la lista de la compra que vende ese vendedor, y
--- un botón "Comprar todo". Solo compra cuando pulsas (fila o botón).
+-- Al abrir un vendedor que tiene algo de tu lista de la compra (de las rutas
+-- empezadas o, si no hay, de la profesión que estabas mirando) sale al lado una
+-- ventana con esos materiales: lo que te falta, con un botón "Comprar todo", y lo
+-- que ya tienes, en gris. Solo compra cuando pulsas (fila o botón).
 --
 -- Comprar en Forever: cada compra pide un número de objetos (como mucho una pila);
 -- el servidor ignora las compras que llegan muy seguidas, así que van de una en
@@ -18,47 +19,71 @@ local WIDTH = 270
 
 local function Ledger() return ES.Ledger end
 
--- Lo que falta de cada material para lo que queda de las rutas empezadas:
--- { [itemID] = unidades } (necesario desde tu nivel menos lo que llevas)
-local function Missing()
-  local need = {}
+-- Rutas de las que sale la lista de la compra: las empezadas; si no hay ninguna,
+-- la de la profesión que estabas mirando (si ya está calculada)
+local function Plans()
+  local plans = {}
   for _, prof in ipairs(ES.PROFESSIONS) do
     local plan = ES:RouteLock(prof.key) and ES:LockedPlan(prof.key)
-    if plan then
-      local rank = ES:GetProfessionSkill(ES.Data[prof.key].skillLine)
-      for itemID, q in pairs(ES.Planner.NeedFrom(plan, math.max(plan.from, rank or plan.from))) do
-        need[itemID] = (need[itemID] or 0) + q
-      end
+    if plan then plans[#plans + 1] = { key = prof.key, plan = plan } end
+  end
+  if #plans == 0 and ES.db.lastProf then
+    local key, plan = ES.db.lastProf, nil
+    for _, page in ipairs(ES.professionPages or {}) do
+      if page.profKey == key then plan = page.plan end
     end
+    plan = plan or (ES.homePlanCache[key] and ES.homePlanCache[key].plan)
+    if plan and plan.pointNeed then plans[1] = { key = key, plan = plan } end
   end
-  local missing = {}
-  for itemID, q in pairs(need) do
-    local left = math.ceil(q - 0.001) - ES:ItemCount(itemID) - Vendor:Pending(itemID)
-    if left > 0 then missing[itemID] = left end
-  end
-  return missing
+  return plans
 end
 
--- Lo que este vendedor vende de lo que falta: { { index, itemID, qty, price, batch, cost } }
+-- Lo que pide la lista de la compra desde tu nivel, y lo que tienes (bolsas, banco y
+-- lo comprado que espera en el correo): { [itemID] = { need, have } }
+local function Needs()
+  local need = {}
+  for _, p in ipairs(Plans()) do
+    local rank = ES:GetProfessionSkill(ES.Data[p.key].skillLine)
+    for itemID, q in pairs(ES.Planner.NeedFrom(p.plan, math.max(p.plan.from, rank or p.plan.from))) do
+      need[itemID] = (need[itemID] or 0) + q
+    end
+  end
+  local out = {}
+  for itemID, q in pairs(need) do
+    local n = math.ceil(q - 0.001)
+    if n > 0 then
+      out[itemID] = { need = n, have = ES:ItemCount(itemID) + Ledger():InMail(itemID) + Vendor:Pending(itemID) }
+    end
+  end
+  return out
+end
+
+-- Lo de la lista de la compra que vende este vendedor:
+-- { { index, itemID, need, have, qty (lo que falta, en lotes; 0 si tienes bastante), price, batch, cost } }
 function Vendor:List()
   local list = {}
   if not (GetMerchantNumItems and Ledger()) then return list end
-  local missing = Missing()
+  local needs = Needs()
   for i = 1, GetMerchantNumItems() or 0 do
     local itemID = Ledger().MerchantItemID(i)
-    local left = itemID and missing[itemID]
-    if left then
+    local n = itemID and needs[itemID]
+    if n then
       local price, batch, avail, gold = Ledger().MerchantInfo(i)
       if price and price > 0 and gold and avail ~= 0 then
         batch = math.max(batch or 1, 1)
+        local left = math.max(0, n.need - n.have)
         local qty = math.ceil(left / batch) * batch -- el vendedor vende en sus lotes
-        list[#list + 1] = { index = i, itemID = itemID, qty = qty, price = price, batch = batch,
-          cost = qty / batch * price }
-        missing[itemID] = nil -- un objeto que el vendedor tiene dos veces, una sola fila
+        list[#list + 1] = { index = i, itemID = itemID, need = n.need, have = n.have, qty = qty, price = price,
+          batch = batch, cost = qty / batch * price }
+        needs[itemID] = nil -- un objeto que el vendedor tiene dos veces, una sola fila
       end
     end
   end
-  table.sort(list, function(a, b) return a.cost > b.cost end)
+  -- Lo que falta primero (lo más caro arriba); lo que ya tienes, al final
+  table.sort(list, function(a, b)
+    if (a.qty > 0) ~= (b.qty > 0) then return a.qty > 0 end
+    return a.cost > b.cost
+  end)
   return list
 end
 
@@ -142,7 +167,8 @@ function Vendor:Buy(entry)
 end
 
 function Vendor:BuyAll()
-  local list = self:List()
+  local list = {}
+  for _, e in ipairs(self:List()) do if e.qty > 0 then list[#list + 1] = e end end
   local total = 0
   for _, e in ipairs(list) do total = total + e.cost end
   if total > ((GetMoney and GetMoney()) or 0) then
@@ -192,13 +218,17 @@ local function CreatePanel()
     row.qty:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 6, 1)
     row.cost = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     row.cost:SetPoint("RIGHT", -4, 0)
-    row:SetScript("OnClick", function(self) if self.entry then Vendor:Buy(self.entry) end end)
+    row:SetScript("OnClick", function(self) if self.entry and self.entry.qty > 0 then Vendor:Buy(self.entry) end end)
     row:SetScript("OnEnter", function(self)
       if not self.entry then return end
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
       if GameTooltip.SetItemByID then GameTooltip:SetItemByID(self.entry.itemID) end
       GameTooltip:AddLine(" ")
-      GameTooltip:AddLine(string.format(L["Clic: comprar %d por %s."], self.entry.qty, ES.Money(self.entry.cost)), 0.5, 0.8, 1)
+      if self.entry.qty > 0 then
+        GameTooltip:AddLine(string.format(L["Clic: comprar %d por %s."], self.entry.qty, ES.Money(self.entry.cost)), 0.5, 0.8, 1)
+      else
+        GameTooltip:AddLine(L["Ya tienes lo que te hace falta para la ruta."], 0.4, 1, 0.4)
+      end
       GameTooltip:Show()
     end)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -226,18 +256,33 @@ function Vendor:Refresh()
   panel:ClearAllPoints()
   panel:SetPoint("TOPLEFT", MerchantFrame, "TOPRIGHT", 4, 0)
   panel.title:SetText("Crafter's Journal")
-  local total = 0
-  for _, e in ipairs(list) do total = total + e.cost end
-  panel.sub:SetText(#list > 0 and L["Te falta para tu ruta y lo vende este vendedor:"] or L["Comprando…"])
+  local total, missing = 0, 0
+  for _, e in ipairs(list) do
+    total = total + e.cost
+    if e.qty > 0 then missing = missing + 1 end
+  end
+  panel.sub:SetText(self.pumping and L["Comprando…"]
+    or missing > 0 and L["De tu lista de la compra, este vendedor tiene:"]
+    or L["Ya tienes todo lo que te hace falta de este vendedor."])
   for i, row in ipairs(panel.rows) do
     local e = list[i]
     row.entry = e
     if e then
       local name, _, texture = ES:GetItemData(e.itemID)
       row.icon:SetTexture(texture or (GetItemIcon and GetItemIcon(e.itemID)) or 134400)
-      row.name:SetText(name or ES:DataItemName(e.itemID) or ("#" .. e.itemID))
-      row.qty:SetText(string.format(L["%d × %s"], e.qty, ES.Money(e.price / e.batch)))
-      row.cost:SetText(ES.Money(e.cost))
+      row.icon:SetDesaturated(e.qty == 0)
+      local label = name or ES:DataItemName(e.itemID) or ("#" .. e.itemID)
+      if e.qty > 0 then
+        row.name:SetText(label)
+        row.qty:SetText(string.format(L["Tienes %d/%d · compras %d × %s"], math.min(e.have, e.need), e.need, e.qty,
+          ES.Money(e.price / e.batch)))
+        row.cost:SetText(ES.Money(e.cost))
+      else
+        -- Ya lo tienes: se ve, en gris, para que sepas que este vendedor también lo vende
+        row.name:SetText("|cff9d9d9d" .. label:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "") .. "|r")
+        row.qty:SetText("|cff40ff40" .. string.format(L["Tienes %d/%d"], e.have, e.need) .. "|r")
+        row.cost:SetText("")
+      end
       row:Show()
     else
       row:Hide()
@@ -245,8 +290,8 @@ function Vendor:Refresh()
   end
   local shown = math.min(#list, MAX_ROWS)
   panel:SetHeight(40 + shown * ROW_H + 44)
-  panel.buyAll:SetText(string.format(L["Comprar todo (%s)"], ES.Money(total)))
-  panel.buyAll:SetEnabled(#list > 0 and not self.pumping)
+  panel.buyAll:SetText(missing > 0 and string.format(L["Comprar todo (%s)"], ES.Money(total)) or L["Nada que comprar"])
+  panel.buyAll:SetEnabled(missing > 0 and not self.pumping)
   panel:Show()
 end
 

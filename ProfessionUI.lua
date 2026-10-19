@@ -1489,12 +1489,19 @@ local function ShopLines(plan, page)
     total = total + it.total
   end
   local need = ES.Planner.NeedFrom(plan, math.max(plan.from, page.from or plan.from))
+  -- Lo que tienes: bolsas y banco, más lo comprado en la AH que espera en el buzón
+  local function Have(itemID)
+    local n = GetItemCount and (GetItemCount(itemID, true) or 0) or 0
+    return n + (ES.Ledger and ES.Ledger:InMail(itemID) or 0)
+  end
   local function Progress(itemID)
-    local have = GetItemCount and (GetItemCount(itemID, true) or 0) or 0
+    local have = Have(itemID)
+    local mail = ES.Ledger and ES.Ledger:InMail(itemID) or 0
+    local inMail = mail > 0 and (GREY .. string.format(L[" · %d en el correo"], mail) .. "|r") or ""
     local n = math.ceil((need[itemID] or 0) - 0.001)
     if n <= 0 then return GREEN .. L["Ya no hace falta"] .. "|r" end
-    if have >= n then return GREEN .. string.format(L["Tienes %d/%d"], have, n) .. "|r" end
-    return string.format(L["Tienes %d/%d · faltan %s%d|r"], have, n, ORANGE, n - have)
+    if have >= n then return GREEN .. string.format(L["Tienes %d/%d"], have, n) .. "|r" .. inMail end
+    return string.format(L["Tienes %d/%d · faltan %s%d|r"], have, n, ORANGE, n - have) .. inMail
   end
   local function Buy(it)
     local name, texture = ItemLabel(it.itemID, L["Objeto "] .. it.itemID)
@@ -1511,8 +1518,7 @@ local function ShopLines(plan, page)
     end
     if it.source == "ah" and ES:IsAuctionHouseOpen() then
       -- Abre la compra con lo que falta ya puesto (solo queda "Comprar ahora" de Blizzard)
-      local have = GetItemCount and (GetItemCount(it.itemID, true) or 0) or 0
-      local missing = math.ceil((need[it.itemID] or it.quantity) - 0.001) - have
+      local missing = math.ceil((need[it.itemID] or it.quantity) - 0.001) - Have(it.itemID)
       if missing > 0 then
         action = string.format(L["abrir la compra de %d en la AH"], missing)
         onClick = function() ES:OpenAuctionBuy(it.itemID, missing) end
@@ -1539,6 +1545,47 @@ local function ShopLines(plan, page)
         GameTooltip:Show()
       end }
   end
+  -- Ruta empezada: las secciones salen de lo que llevas AHORA (lo que gastas o
+  -- compras mueve cada material de "comprar" a "ya lo tienes" y al revés), no de lo
+  -- que llevabas al empezarla; los totales de la ruta siguen congelados
+  if ES:RouteLock(page.profKey) then
+    local shopping = {}
+    for _, it in ipairs(plan.shopping) do shopping[it.itemID] = it end
+    local buyAH, buyVendor, haveAll, left = {}, {}, {}, 0
+    local ids = {}
+    for itemID in pairs(need) do ids[#ids + 1] = itemID end
+    table.sort(ids)
+    for _, itemID in ipairs(ids) do
+      local n = math.ceil(need[itemID] - 0.001)
+      if n > 0 then
+        local missing = n - Have(itemID)
+        if missing > 0 then
+          local planned = shopping[itemID]
+          local vendorPrice = ES.Data.VendorPrices and ES.Data.VendorPrices[itemID]
+          local source = planned and planned.source or (vendorPrice and "vendor" or "ah")
+          local ahEntry = plan.ctx and plan.ctx.prices[itemID]
+          local unit = planned and planned.unit or vendorPrice or (ahEntry and ahEntry.minUnit) or 0
+          local it = { itemID = itemID, quantity = missing, source = source, unit = unit, total = unit * missing,
+            supply = planned and planned.supply or (ahEntry and ahEntry.quantity) }
+          left = left + it.total
+          if source == "ah" then buyAH[#buyAH + 1] = it else buyVendor[#buyVendor + 1] = it end
+        else
+          haveAll[#haveAll + 1] = { itemID = itemID, quantity = n }
+        end
+      end
+    end
+    Section(L["Comprar en la Casa de Subastas"], buyAH, Buy)
+    Section(L["Comprar al vendedor"], buyVendor, Buy)
+    Section(L["Ya lo tienes"], haveAll, function(it)
+      local name, texture = ItemLabel(it.itemID, L["Objeto "] .. it.itemID)
+      return { level = "×" .. it.quantity, icon = texture or 134400, title = name, sub = Progress(it.itemID),
+        item = it.itemID, tooltip = SimpleTooltip(it.itemID, L["Ya tienes lo que te hace falta para lo que queda de ruta."]) }
+    end)
+    lines[#lines + 1] = { total = true, title = L["Te falta por comprar"],
+      sub = L["Lo que te falta para lo que queda de ruta, con lo que llevas ahora"], value = Signed(left) }
+    return lines
+  end
+
   Section(L["Comprar en la Casa de Subastas"], ah, Buy)
   Section(L["Comprar al vendedor"], vendor, Buy)
   Section(L["Usar de tus bolsas y banco"], plan.owned, function(it)

@@ -68,9 +68,10 @@ function Mail:Scan()
   local s, now, added = Store(), time(), 0
   for i = 1, GetInboxNumItems() do
     local _, _, _, subject, money, _, daysLeft = GetInboxHeaderInfo(i)
-    -- Subasta ganada (si la AH entrega por correo): lo pagado, al gasto real de la ruta fijada
+    -- Subasta ganada: lo pagado, al gasto real de la ruta fijada. Solo si la compra no
+    -- se apuntó ya al hacerla (Ledger.hooksAH: la AH de Forever), para no contarla dos veces
     local won = subject and daysLeft and wonPat and subject:match(wonPat)
-    if won and ES.Ledger then
+    if won and ES.Ledger and not ES.Ledger.hooksAH then
       local expires = math.floor((now + daysLeft * 86400) / 3600)
       local key = table.concat({ "won", won, expires }, "|")
       local itemID = not s.seen[key] and ES.Ledger:IDByName(won)

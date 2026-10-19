@@ -874,6 +874,26 @@ step("portada: tarjetas de profesiones", function()
   assert(soldLine, "la vista Profit debería decir cuántos llevas vendidos")
   assert(soldLine.go, "sin vendedor ni AH abiertos, el clic marca dónde venderlo")
   log[#log+1] = string.format("     gasto real: compras %d, ventas %d · %s", real.buy, real.sell, page.real.total._text)
+  -- Compra en la AH (llega por correo): se apunta al cobrarla y cuenta como tuya
+  local beforeBuy = ES.Ledger:Summary("Leatherworking").buy
+  ES.Ledger:SetWhere("ah")
+  ES.Ledger.NoteAHPurchase(buyItem, 2)
+  assert(ES.Ledger.ChargeAHPurchase(640), "no se cobró la compra enviada a la AH")
+  assert(ES.Ledger:Summary("Leatherworking").buy == beforeBuy + 640, "la compra en la AH no se apuntó")
+  assert(ES.Ledger:InMail(buyItem) == 2, "lo comprado en la AH debería contar como en el correo")
+  ES.Ledger:SetWhere(nil)
+  -- Lista de la compra con la ruta empezada: secciones según lo que llevas ahora
+  page.view = "shop"
+  ES:RenderPlan(page)
+  local sections, haveSection = {}, false
+  for _, l in ipairs(page.lines) do
+    if l.section then sections[#sections + 1] = l.section end
+    if l.section == "Ya lo tienes" then haveSection = true end
+  end
+  local lastLine = page.lines[#page.lines]
+  assert(lastLine.total and lastLine.title == "Te falta por comprar", "con la ruta empezada, el total es lo que falta: " .. tostring(lastLine.title))
+  log[#log+1] = "     lista con ruta empezada: " .. table.concat(sections, " | ")
+  page.view = "route"
   -- Anunciar en la AH: a platas enteras (la AH de Forever no admite cobres)
   assert(ES.Ledger.PostPrice(2070) == 2000 and ES.Ledger.PostPrice(50) == 100, "precio de anuncio en platas enteras")
   -- Con la AH abierta y nada en las bolsas, el clic avisa en vez de marcar el subastador

@@ -237,6 +237,88 @@ local ahUpAt, ahSpentAt = 0, 0          -- cuándo llegó lo que aún no se ha e
 local AH_PAIR_WINDOW = 3                -- s: lo que no se empareja en este tiempo no es de la ruta
 local function Now() return GetTime and GetTime() or 0 end
 
+---------------------------------------------------------------------------
+-- Compras en la AH: en Forever llegan por correo, así que se apuntan al comprar
+-- (al confirmar la compra en la AH), con lo que baja tu dinero en ese momento.
+-- Mientras esperan en el buzón cuentan como tuyas (Ledger:InMail).
+---------------------------------------------------------------------------
+local ahPending = {}           -- compras enviadas a la AH aún sin cobrar: { itemID, qty, cost, t }
+local AH_CHARGE_WINDOW = 15    -- s entre confirmar la compra y que baje tu dinero
+local MAIL_KEEP = 2 * 86400    -- lo comprado que no aparece en 2 días ya no se espera
+
+local function NoteAHPurchase(itemID, qty, cost)
+  if not itemID then return end
+  ahPending[#ahPending + 1] = { itemID = itemID, qty = qty or 1, cost = cost, t = Now() }
+  Log(string.format("ah: compra enviada %dx%d%s", qty or 1, itemID, cost and (" por " .. cost) or ""))
+end
+
+-- Lo comprado en la AH que aún está en el buzón: [personaje][itemID] = { q, base, t }
+local function MailStore()
+  ES.db.mailBought = ES.db.mailBought or {}
+  local char = ES:CharKey()
+  ES.db.mailBought[char] = ES.db.mailBought[char] or {}
+  return ES.db.mailBought[char]
+end
+
+local function NoteMail(itemID, qty)
+  local store = MailStore()
+  local left = Ledger:InMail(itemID)
+  store[itemID] = { q = left + qty, base = Count(itemID), t = time() }
+end
+
+-- Unidades compradas en la AH que aún no han salido del buzón
+function Ledger:InMail(itemID)
+  local store = ES.db and ES.db.mailBought and ES.db.mailBought[ES:CharKey()]
+  local m = store and store[itemID]
+  if not m then return 0 end
+  local left = m.q - math.max(0, Count(itemID) - m.base)
+  if left <= 0 or time() - m.t > MAIL_KEEP then
+    store[itemID] = nil
+    return 0
+  end
+  return left
+end
+
+-- Baja tu dinero con la AH abierta y había una compra enviada: es su cobro
+local function ChargeAHPurchase(amount)
+  local t = Now()
+  while ahPending[1] and t - ahPending[1].t > AH_CHARGE_WINDOW do table.remove(ahPending, 1) end
+  local p = table.remove(ahPending, 1)
+  if not p then return false end
+  local kind = Ledger:Kind(p.itemID)
+  if kind then Ledger:Record(kind, p.itemID, p.qty, p.cost or amount) end
+  NoteMail(p.itemID, p.qty)
+  return true
+end
+
+-- Las compras que se hacen en la AH, con el addon o a mano
+if hooksecurefunc and C_AuctionHouse then
+  if C_AuctionHouse.ConfirmCommoditiesPurchase then
+    -- Materiales ("Comprar ahora"): el precio llega al cobrarlo
+    hooksecurefunc(C_AuctionHouse, "ConfirmCommoditiesPurchase", function(itemID, qty) NoteAHPurchase(itemID, qty) end)
+    Ledger.hooksAH = true
+  end
+  if C_AuctionHouse.PlaceBid then
+    -- Objetos sueltos: la subasta dice qué es y cuántos
+    hooksecurefunc(C_AuctionHouse, "PlaceBid", function(auctionID, amount)
+      local ok, info = false, nil
+      if C_AuctionHouse.GetAuctionInfoByID then ok, info = pcall(C_AuctionHouse.GetAuctionInfoByID, auctionID) end
+      local itemID = ok and type(info) == "table" and info.itemKey and info.itemKey.itemID
+      if itemID then NoteAHPurchase(itemID, info.quantity or 1, amount) end
+    end)
+    Ledger.hooksAH = true
+  end
+end
+if hooksecurefunc and PlaceAuctionBid and GetAuctionItemInfo then
+  -- AH clásica: comprar al precio de compra directa en la lista
+  hooksecurefunc("PlaceAuctionBid", function(kind, index, bid)
+    local _, _, count, _, _, _, _, _, _, buyout, _, _, _, _, _, _, itemID = GetAuctionItemInfo(kind or "list", index)
+    if itemID and bid and buyout and buyout > 0 and bid >= buyout then NoteAHPurchase(itemID, count or 1, bid) end
+  end)
+  Ledger.hooksAH = true
+end
+Ledger.NoteAHPurchase, Ledger.ChargeAHPurchase = NoteAHPurchase, ChargeAHPurchase -- para pruebas
+
 local function Tracked()
   local items = {}
   for _, r in ipairs(Routes()) do
@@ -385,6 +467,8 @@ do
       local delta = money - lastMoney
       lastMoney = money
       if not where then return end
+      -- Cobro de una compra enviada a la AH (llega por correo): se apunta ya
+      if where == "ah" and delta < 0 and ChargeAHPurchase(-delta) then return end
       if delta < 0 then spent = spent - delta else gained = gained + delta end
       if where == "trainer" and spent > 0 then
         Ledger:RecordFee(spent, trainerProf)
