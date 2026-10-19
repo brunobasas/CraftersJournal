@@ -21,6 +21,15 @@ local L = ES.L
 local Ledger = { sets = {}, stamp = 0 }
 ES.Ledger = Ledger
 
+-- Diario de lo que lee el registro (para diagnosticar en el juego): ES.db.ledgerLog
+local function Log(text)
+  ES.db.ledgerLog = ES.db.ledgerLog or {}
+  local log = ES.db.ledgerLog
+  log[#log + 1] = (date and date("%H:%M:%S ") or "") .. text
+  while #log > 60 do table.remove(log, 1) end
+end
+Ledger.Log = Log
+
 local NumSlots = (C_Container and C_Container.GetContainerNumSlots) or GetContainerNumSlots
 local ContainerItemID = (C_Container and C_Container.GetContainerItemID) or GetContainerItemID
 local UseItem = (C_Container and C_Container.UseContainerItem) or UseContainerItem
@@ -107,6 +116,7 @@ function Ledger:Record(kind, itemID, qty, money, when)
   for _, r in ipairs(Routes()) do
     if r.set[kind] and r.set[kind][itemID] and not (when and when < r.lock.started) then
       local b = Book(r.lock)
+      Log(string.format("  apuntado %s %dx%d = %d en %s", kind, qty, itemID, money, r.key))
       if kind == "sell" then
         b.sell = b.sell + money
         b.sold[itemID] = (b.sold[itemID] or 0) + qty
@@ -183,6 +193,7 @@ local where          -- "merchant" | "ah" | "trainer" | nil
 local snapshot = {}  -- [itemID] = unidades al abrir (o en la última lectura)
 local lastMoney, spent, gained = 0, 0, 0
 local processStamp = 0
+local ahUp, ahUpQty, ahSpent = {}, 0, 0 -- AH: objetos y dinero aún sin emparejar
 
 local function Tracked()
   local items = {}
@@ -199,19 +210,41 @@ local function Snapshot()
   for itemID in pairs(Tracked()) do snapshot[itemID] = Count(itemID) end
   lastMoney = GetMoney and GetMoney() or 0
   spent, gained = 0, 0
+  ahUp, ahUpQty, ahSpent = {}, 0, 0
 end
+
+-- Objeto de la casilla `i` del vendedor abierto
+local function MerchantItemID(i)
+  local id = GetMerchantItemID and GetMerchantItemID(i)
+  if not id and GetMerchantItemLink then
+    local link = GetMerchantItemLink(i)
+    id = link and tonumber(link:match("item:(%d+)"))
+  end
+  return id
+end
+Ledger.MerchantItemID = MerchantItemID
+
+-- Precio, cuántos vienen por compra, cuántos quedan (-1 sin límite), si se compra con
+-- oro. Forever (cliente moderno) usa C_MerchantFrame.GetItemInfo; el clásico, GetMerchantItemInfo
+local function MerchantInfo(i)
+  if C_MerchantFrame and C_MerchantFrame.GetItemInfo then
+    local info = C_MerchantFrame.GetItemInfo(i)
+    if info then
+      return info.price, info.stackCount, info.numAvailable, info.isPurchasable ~= false and not info.hasExtendedCost
+    end
+  elseif GetMerchantItemInfo then
+    local _, _, price, stack, avail, purchasable, _, ext = GetMerchantItemInfo(i)
+    return price, stack, avail, purchasable ~= false and not ext
+  end
+end
+Ledger.MerchantInfo = MerchantInfo
 
 -- Precio de una unidad en el vendedor abierto, o nil
 local function MerchantUnitPrice(itemID)
-  if not (GetMerchantNumItems and GetMerchantItemInfo) then return nil end
+  if not GetMerchantNumItems then return nil end
   for i = 1, GetMerchantNumItems() do
-    local id = GetMerchantItemID and GetMerchantItemID(i)
-    if not id and GetMerchantItemLink then
-      local link = GetMerchantItemLink(i)
-      id = link and tonumber(link:match("item:(%d+)"))
-    end
-    if id == itemID then
-      local _, _, price, stack = GetMerchantItemInfo(i)
+    if MerchantItemID(i) == itemID then
+      local price, stack = MerchantInfo(i)
       return price and price / math.max(1, stack or 1)
     end
   end
@@ -226,9 +259,16 @@ local function Process()
     if now < before then down[itemID] = before - now end
     snapshot[itemID] = now
   end
+  if next(up) or next(down) then
+    local parts = {}
+    for itemID, q in pairs(up) do parts[#parts + 1] = "+" .. q .. "x" .. itemID end
+    for itemID, q in pairs(down) do parts[#parts + 1] = "-" .. q .. "x" .. itemID end
+    Log(string.format("%s: %s · dinero -%d +%d", where, table.concat(parts, " "), spent, gained))
+  end
   if where == "merchant" then
     for itemID, q in pairs(up) do
       local unit = MerchantUnitPrice(itemID)
+      if not unit then Log("  sin precio en el vendedor para " .. itemID) end
       if unit then
         local kind = Ledger:Kind(itemID)
         if kind then Ledger:Record(kind, itemID, q, unit * q) end
@@ -241,14 +281,19 @@ local function Process()
       Ledger:Record("sell", itemID, q, q * (ES:VendorSellPrice(itemID) or 0))
     end
   elseif where == "ah" then
-    -- Compras: el dinero que bajó, repartido entre lo que ha llegado
-    if upQty > 0 and spent > 0 then
-      for itemID, q in pairs(up) do
+    -- Compras: el dinero que bajó, repartido entre lo que ha llegado. El dinero y los
+    -- objetos pueden llegar por separado: lo que falta de emparejar se guarda un rato
+    for itemID, q in pairs(up) do ahUp[itemID] = (ahUp[itemID] or 0) + q end
+    ahUpQty, ahSpent = ahUpQty + upQty, ahSpent + spent
+    if ahUpQty > 0 and ahSpent > 0 then
+      for itemID, q in pairs(ahUp) do
         local kind = Ledger:Kind(itemID)
-        if kind then Ledger:Record(kind, itemID, q, spent * q / upQty) end
+        if kind then Ledger:Record(kind, itemID, q, ahSpent * q / ahUpQty) end
       end
-    elseif next(down) and spent > 0 then
-      Ledger:RecordFee(spent) -- depósito al anunciar
+      ahUp, ahUpQty, ahSpent = {}, 0, 0
+    elseif next(down) and ahSpent > 0 then
+      Ledger:RecordFee(ahSpent) -- depósito al anunciar
+      ahSpent = 0
     end
   end
   spent, gained = 0, 0
@@ -271,6 +316,9 @@ do
     if event == "MERCHANT_SHOW" or event == "AUCTION_HOUSE_SHOW" or event == "TRAINER_SHOW" then
       where = event == "MERCHANT_SHOW" and "merchant" or event == "TRAINER_SHOW" and "trainer" or "ah"
       Snapshot()
+      local n = 0
+      for _ in pairs(snapshot) do n = n + 1 end
+      Log(string.format("abierto %s · %d objetos de rutas fijadas vigilados", where, n))
       if ES.RefreshAfterBags then ES:RefreshAfterBags() end -- la vista Profit cambia sus clics
     elseif event == "MERCHANT_CLOSED" or event == "AUCTION_HOUSE_CLOSED" or event == "TRAINER_CLOSED" then
       Process()
@@ -285,6 +333,8 @@ do
       if where == "trainer" and spent > 0 then
         Ledger:RecordFee(spent)
         spent = 0
+      elseif where == "ah" and delta < 0 then
+        QueueProcess() -- el dinero de una compra puede llegar después que el objeto
       end
     elseif event == "BAG_UPDATE_DELAYED" and where then
       QueueProcess()
@@ -318,30 +368,55 @@ function Ledger:SellToVendor(itemID, n)
   return sold
 end
 
+-- Precio de anuncio en la AH de Forever: solo admite platas enteras (redondeo hacia abajo)
+function Ledger.PostPrice(unit)
+  unit = math.floor(unit or 0)
+  return math.max(unit - unit % 100, 100)
+end
+
 -- Anuncia `n` unidades en la AH abierta a `unit` cobre cada una (24 h). Solo con
--- la AH de Forever (C_AuctionHouse); con la clásica, se anuncia a mano.
+-- la AH de Forever (C_AuctionHouse); con la clásica, se anuncia a mano. Los
+-- materiales (commodities) van en un solo anuncio; el resto, todos de una vez y,
+-- si la AH no lo acepta, de uno en uno. Devuelve cuántos anunció.
 function Ledger:PostOnAH(itemID, n, unit)
   local AH = C_AuctionHouse
   if not (ES:IsAuctionHouseOpen() and AH and AH.PostItem and ItemLocation) then
     ES:Print(L["Anúncialo desde la ventana de la Casa de Subastas."])
     return 0
   end
-  local first = Slots(itemID)[1]
-  if not first or n <= 0 then return 0 end
+  if AH.IsThrottledMessageSystemReady and not AH.IsThrottledMessageSystemReady() then
+    ES:Print(L["La Casa de Subastas está ocupada: vuelve a pulsar en un momento."])
+    return 0
+  end
+  local slot
+  for _, s in ipairs(Slots(itemID)) do
+    local locked = C_Container and C_Container.GetContainerItemInfo and (C_Container.GetContainerItemInfo(s.bag, s.slot) or {}).isLocked
+    if not locked then slot = s break end
+  end
+  if not slot or n <= 0 then return 0 end
   local qty = math.min(n, BagCount(itemID))
-  local location = ItemLocation:CreateFromBagAndSlot(first.bag, first.slot)
-  local commodity = AH.GetItemCommodityStatus and AH.GetItemCommodityStatus(location) == 2
-  local price = math.max(1, math.floor(unit + 0.5))
-  local ok, err = pcall(function()
-    if commodity and AH.PostCommodity then
-      AH.PostCommodity(location, 2, qty, price)
-    else
-      AH.PostItem(location, 2, qty, nil, price)
+  local location = ItemLocation:CreateFromBagAndSlot(slot.bag, slot.slot)
+  local commodity = false
+  if AH.GetItemCommodityStatus then
+    local ok, status = pcall(AH.GetItemCommodityStatus, location)
+    local COMMODITY = Enum and Enum.ItemCommodityStatus and Enum.ItemCommodityStatus.Commodity or 2
+    commodity = ok and status == COMMODITY
+  end
+  local price = Ledger.PostPrice(unit)
+  local ok, err
+  if commodity and AH.PostCommodity then
+    ok, err = pcall(AH.PostCommodity, location, 2, qty, price)
+  else
+    ok, err = pcall(AH.PostItem, location, 2, qty, nil, price)
+    if not ok and qty > 1 then -- no acepta varios de una vez: uno (el resto, con otro clic)
+      qty = 1
+      ok, err = pcall(AH.PostItem, location, 2, 1, nil, price)
     end
-  end)
+  end
   if not ok then
     ES:Print(L["No se pudo anunciar: "] .. tostring(err))
     return 0
   end
+  ES:Print(string.format(L["Anunciados %d de %s a %s cada uno (24 h)."], qty, ES:DataItemName(itemID) or itemID, ES.Money(price)))
   return qty
 end

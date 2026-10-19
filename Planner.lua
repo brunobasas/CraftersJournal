@@ -148,7 +148,7 @@ function Planner.LearnSkill(recipe, opts)
   -- Solo con su icono activado (opts.useFavor; por defecto no): entonces cuesta 0 oro
   if recipe.favor then return opts.useFavor and (recipe.train or 1) or nil end
   if Sourced(recipe, opts) then
-    local src = ES.Waypoints.RecipeSource(recipe, ScanPrices(), opts.noQuests)
+    local src = ES.Waypoints.RecipeSource(recipe, opts.prices or ScanPrices(), opts.noQuests)
     return src and src.best and (recipe.train or 1) or nil
   end
   if recipe.fee or recipe.intermediate then return recipe.train end
@@ -168,7 +168,7 @@ function Planner.LearnCost(ctx, recipe)
   if recipe.fee then return recipe.fee, "trainer" end
   if recipe.favor then return 0, "favor" end
   if Sourced(recipe, ctx.opts) then
-    local src = ES.Waypoints.RecipeSource(recipe, ScanPrices(), ctx.opts.noQuests)
+    local src = ES.Waypoints.RecipeSource(recipe, ctx.prices, ctx.opts.noQuests)
     if src and src.best then return src.best.cost, src.best.kind end
     return 0, "unknown"
   end
@@ -236,8 +236,9 @@ local function NewContext(data, opts)
   local ctx = {
     data = data,
     opts = opts,
-    prices = scan and scan.items or {},
-    scanTime = scan and scan.time,
+    -- opts.prices: los de la ruta fijada (guardados al empezarla); si no, el último escaneo
+    prices = opts.prices or (scan and scan.items) or {},
+    scanTime = opts.prices and opts.pricesTime or (scan and scan.time),
     ladders = {},
     supply = {},     -- unidades a la venta de cada objeto (suma de su escalera)
     medians = {},    -- mediana de lo anunciado (con todos los precios; ver Scanner.BuildLadder)

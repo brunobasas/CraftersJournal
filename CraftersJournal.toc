@@ -46,4 +46,5 @@ AuctionUI.lua
 EarnUI.lua
 CollectionUI.lua
 PatternsUI.lua
+VendorUI.lua
 Options.lua

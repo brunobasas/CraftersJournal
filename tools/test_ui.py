@@ -695,17 +695,24 @@ step("portada: tarjetas de profesiones", function()
   ES.IsRecipeKnown = function() return true end
   ES:RenderPlan(page)
   local craftLine
-  for _, l in ipairs(page.lines) do if l.onCraft then craftLine = l break end end
-  assert(craftLine, "los pasos con receta sabida deberían tener Fabricar")
-  craftLine.onClick()
+  for _, l in ipairs(page.lines) do if l.craftCount then craftLine = l break end end
+  assert(craftLine, "con la opción por defecto, el clic en un paso debería fabricar")
+  craftLine.onClick() -- un solo clic: abre la receta y fabrica lo que falta
   assert(opened == page.plan.steps[1].id, "el clic no abrió la receta del paso")
-  craftLine.onCraft()
-  assert(crafted and crafted[1] == page.plan.steps[1].id and crafted[2] == page.plan.steps[1].crafts, "Fabricar no fabricó lo del paso")
-  local craftRow
-  for _, row in ipairs(page.rows) do if row.onCraft then craftRow = row break end end
-  assert(craftRow and craftRow.craft._shown ~= false, "falta el botón Fabricar en la fila")
-  craftRow.craft._scripts.OnEnter(craftRow.craft)
-  log[#log+1] = "     fabricar: " .. tostring(craftLine.craftLabel)
+  assert(crafted and crafted[1] == page.plan.steps[1].id and crafted[2] == page.plan.steps[1].crafts, "el clic no fabricó lo del paso")
+  log[#log+1] = "     fabricar: " .. tostring(craftLine.title)
+  -- Opción desactivada (Opciones > AddOns): el clic solo abre la receta
+  local op = ES.optionsPanel
+  op._scripts.OnShow(op)
+  op.craftCheck:SetChecked(false)
+  op.craftCheck._scripts.OnClick(op.craftCheck)
+  assert(ES.db.autoCraft == false, "la opción no se guardó")
+  ES:RenderPlan(page)
+  crafted, opened = nil, nil
+  for _, l in ipairs(page.lines) do assert(not l.craftCount, "con la opción desactivada no debería fabricar") end
+  for _, l in ipairs(page.lines) do if l.onClick and l.item then l.onClick() break end end
+  assert(opened and not crafted, "con la opción desactivada el clic solo abre la receta")
+  ES.db.autoCraft = nil
   ES.IsRecipeKnown, C_TradeSkillUI = savedKnown, nil
   ES:RenderPlan(page)
   -- ✕ en un paso: la receta sale de la ruta y una fila permite recuperarla
@@ -742,6 +749,20 @@ step("portada: tarjetas de profesiones", function()
     end
   end
   log[#log+1] = "     lista de la compra: " .. buyLine.title
+  -- Clic en un material de la AH: sin la AH abierta marca el subastador; con ella, lo busca
+  local savedSearch, savedOpen = ES.SearchAuction, ES.IsAuctionHouseOpen
+  ES.IsAuctionHouseOpen = function() return false end
+  ES:RenderPlan(page)
+  local ahLine
+  for _, l in ipairs(page.lines) do if l.go and not l.onClick and l.sub and l.sub:find("AH ·") then ahLine = l break end end
+  assert(ahLine, "sin la AH abierta, el clic en un material de la AH debería marcar el subastador")
+  local searched
+  ES.SearchAuction = function(_, id) searched = id end
+  ES.IsAuctionHouseOpen = function() return true end
+  ES:RenderPlan(page)
+  for _, l in ipairs(page.lines) do if l.item == ahLine.item and l.onClick then l.onClick() end end
+  assert(searched == ahLine.item, "con la AH abierta, el clic debería buscar el objeto")
+  ES.SearchAuction, ES.IsAuctionHouseOpen = savedSearch, savedOpen
   -- Empezar ruta: comprar (cambian las bolsas) no cambia la ruta ni su coste
   page.view = "route"
   bags = 0
@@ -766,6 +787,49 @@ step("portada: tarjetas de profesiones", function()
   assert(#rebuilt.steps == #before.steps and rebuilt.steps[1].id == before.steps[1].id, "la ruta fijada cambió al recargar")
   assert(math.abs(rebuilt.net - net) < 1, "el coste de la ruta fijada cambió al recargar")
   log[#log+1] = string.format("     ruta fijada: %d pasos, %s", #rebuilt.steps, tostring(page.routeButton._text))
+  -- Escaneo nuevo con la ruta fijada: ni la ruta ni sus totales cambian, aunque se
+  -- rehaga (recarga); "Actualizar precios" la recalcula con el escaneo nuevo
+  local scanKey = ES:RealmKey()
+  local oldScan = ES.db.scans[scanKey]
+  local newItems = {}
+  for id, e in pairs(oldScan.items) do
+    local c = {}
+    for k, v in pairs(e) do c[k] = v end
+    if c.minUnit then c.minUnit = c.minUnit * 3 end
+    if c.ladder then
+      c.ladder = {}
+      for i, v in ipairs(e.ladder) do c.ladder[i] = (i % 2 == 1) and v * 3 or v end
+    end
+    newItems[id] = c
+  end
+  ES.db.scans[scanKey] = { time = oldScan.time + 3600, total = oldScan.total, unique = oldScan.unique, items = newItems }
+  ES.lockedPlans = {}
+  local frozen = ES:LockedPlan("Leatherworking")
+  assert(math.abs(frozen.net - net) < 1, string.format("la ruta fijada cambió de coste con el escaneo nuevo: %d -> %d", net, frozen.net))
+  ES:RenderPlan(page)
+  assert(page.pricesButton._shown ~= false, "falta Actualizar precios con un escaneo nuevo")
+  page.pricesButton._scripts.OnEnter(page.pricesButton)
+  page.pricesButton._scripts.OnClick(page.pricesButton)
+  local updated = ES:LockedPlan("Leatherworking")
+  assert(updated.net > net + 1 and updated.steps[1].id == frozen.steps[1].id, "Actualizar precios no usó el escaneo nuevo con la misma ruta")
+  log[#log+1] = string.format("     precios: fijada %d, actualizada %d (mismas recetas)", frozen.net, updated.net)
+  ES.db.scans[scanKey] = oldScan
+  ES:RefreshRoutePrices("Leatherworking")
+  -- Subes de nivel fabricando: el paso actual se resalta y dice cuántas faltan
+  local savedDetect = ES.DetectSkill
+  local s1 = rebuilt.steps[1]
+  local newLevel = s1.from + math.max(1, math.floor((s1.to - s1.from) / 2))
+  ES.DetectSkill = function(_, p) p.from = newLevel end
+  page.view = "route"
+  ES:RefreshAfterSkill()
+  local cur
+  for _, l in ipairs(page.lines) do if l.current then cur = l end end
+  assert(cur and cur.sub:find("faltan"), "falta el paso actual con lo que queda: " .. tostring(cur and cur.sub))
+  local curRow
+  for _, row in ipairs(page.rows) do if row._shown ~= false and row.title._text == cur.title then curRow = row end end
+  log[#log+1] = "     paso actual: " .. tostring(cur.level) .. " · " .. tostring(cur.sub)
+  ES.DetectSkill = savedDetect
+  ES:DetectSkill(page)
   -- Gasto real: comprar un material de la ruta al vendedor y vender algo fabricado
   local buyItem, sellItem = rebuilt.shopping[1].itemID, nil
   for _, st in ipairs(rebuilt.steps) do if st.sale then sellItem = st.sale.itemID break end end
@@ -791,6 +855,36 @@ step("portada: tarjetas de profesiones", function()
   assert(soldLine, "la vista Profit debería decir cuántos llevas vendidos")
   assert(soldLine.go, "sin vendedor ni AH abiertos, el clic marca dónde venderlo")
   log[#log+1] = string.format("     gasto real: compras %d, ventas %d · %s", real.buy, real.sell, page.real.total._text)
+  -- Anunciar en la AH: a platas enteras (la AH de Forever no admite cobres)
+  assert(ES.Ledger.PostPrice(2070) == 2000 and ES.Ledger.PostPrice(50) == 100, "precio de anuncio en platas enteras")
+  -- Con la AH abierta y nada en las bolsas, el clic avisa en vez de marcar el subastador
+  local savedOpen = ES.IsAuctionHouseOpen
+  ES.IsAuctionHouseOpen = function() return true end
+  ES:RenderPlan(page)
+  for _, l in ipairs(page.lines) do
+    if l.sub and l.sub:find("no llevas ninguno") then
+      assert(l.onClick and not l.go, "con la AH abierta y sin el objeto, el clic no debería marcar el subastador")
+      l.onClick()
+    end
+  end
+  ES.IsAuctionHouseOpen = savedOpen
+  -- Vendedor abierto con la ruta empezada: ventana al lado con lo que falta y "Comprar todo"
+  local bought = {}
+  MerchantFrame = CreateFrame("Frame")
+  GetMoney = function() return 10000000 end
+  C_MerchantFrame = { GetItemInfo = function() return { price = 300, stackCount = 3, numAvailable = -1, isPurchasable = true } end }
+  BuyMerchantItem = function(i, n) bought[#bought + 1] = n end
+  counts[buyItem] = 0
+  ES.VendorShop:Refresh()
+  local vp = CraftersJournalVendorPanel
+  assert(vp and vp.rows[1].entry and vp.rows[1].entry.itemID == buyItem, "la ventana del vendedor no lista lo que falta")
+  assert(vp.rows[1].entry.qty % 3 == 0, "se compra en los lotes del vendedor: " .. vp.rows[1].entry.qty)
+  vp.rows[1]._scripts.OnEnter(vp.rows[1])
+  vp.buyAll._scripts.OnClick(vp.buyAll)
+  assert(#bought > 0 and bought[1] > 0, "Comprar todo no compró nada")
+  log[#log+1] = string.format("     vendedor: %s · primera compra de %d", tostring(vp.buyAll._text), bought[1])
+  ES.VendorShop.queue, ES.VendorShop.pumping = {}, nil
+  MerchantFrame, C_MerchantFrame, BuyMerchantItem, GetMoney = nil, nil, nil, nil
   page.view = "route"
   GetMerchantNumItems, GetMerchantItemID, GetMerchantItemInfo = nil, nil, nil
   -- Portada: la tarjeta de la profesión con la ruta en curso se distingue
