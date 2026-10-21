@@ -25,6 +25,11 @@ local function Mock(name)
     if k == "GetText" then return function(self) return self._text or "" end end
     if k == "SetText" then return function(self, v) self._text = v and tostring(v) end end
     if k == "GetCenter" then return function() return 0, 0 end end
+    if k == "SetAttribute" then return function(self, a, v) self._attributes = self._attributes or {} self._attributes[a] = v end end
+    if k == "GetAttribute" then return function(self, a) return self._attributes and self._attributes[a] end end
+    if k == "Show" then return function(self) self._shown = true end end
+    if k == "Hide" then return function(self) self._shown = false end end
+    if k == "SetShown" then return function(self, v) self._shown = v and true or false end end
     if k == "IsShown" or k == "IsVisible" then return function() return true end end
     if k == "GetChecked" then return function(self) if self._checked == nil then return true end return self._checked end end
     if k == "SetChecked" then return function(self, v) self._checked = v and true or false end end
@@ -55,7 +60,7 @@ lua.execute(r"""
 LEAKS = {}
 local ALLOWED = { CraftersJournalDB = true, SLASH_CRAFTERSJOURNAL1 = true, SLASH_CRAFTERSJOURNAL2 = true, SLASH_CRAFTERSJOURNAL3 = true,
   CraftersJournal_OnAddonCompartmentClick = true, CraftersJournal = true, CraftersJournalMainFrame = true,
-  CraftersJournalAHButton = true, CraftersJournalMinimapButton = true }
+  CraftersJournalAHButton = true, CraftersJournalMinimapButton = true, CraftersJournalRowMarkButton = true, }
 setmetatable(_G, { __newindex = function(t, k, v)
   local info = debug.getinfo(2, "S")
   if info and info.source:match("^@[%w\\/]+%.lua$") and not ALLOWED[k] then LEAKS[#LEAKS + 1] = info.source .. ":" .. tostring(k) end
@@ -83,6 +88,10 @@ local events
 -- El frame de eventos de Core es el primero creado con OnEvent: lo buscamos por el handler
 for _, v in pairs(_G) do end
 """)
+
+# --v1: todo con el planificador antiguo (el de antes del GPS), para comparar
+if "--v1" in sys.argv:
+    lua.execute("ES.Planner.USE_GPS = false")
 
 out = lua.execute(r"""
 local log = {}
@@ -276,8 +285,18 @@ step("lista de compra en la AH", function()
   CanSendAuctionQuery = function() return true, true end
   local realData = ES.GetItemData
   ES.GetItemData = function(self, id) return "Item" .. id, 1, 134400 end
+  -- Solo salen las profesiones con una ruta empezada: sin ninguna, Peletería no está
   ES:SetupAuctionPanel(AuctionFrame)
   local st = ES.AuctionPanelState
+  assert(st.profKey ~= "Leatherworking", "sin ruta empezada no debería salir Peletería")
+  -- Con la de Peletería empezada (la ruta de siempre, sin fijar de verdad), sale ella
+  local realLock, realLocked = ES.RouteLock, ES.LockedPlan
+  ES.RouteLock = function(self, key) if key == "Leatherworking" then return {} end return realLock(self, key) end
+  ES.LockedPlan = function(self, key) if key == "Leatherworking" then return nil end return realLocked(self, key) end
+  ES.db.lastProf = "Leatherworking"
+  st.profKey = nil -- como al volver a abrir la AH
+  ES:RefreshAuctionPlan(true)
+  ES.RouteLock, ES.LockedPlan = realLock, realLocked
   assert(st.profKey == "Leatherworking", "profesión: " .. tostring(st.profKey))
   local buys = 0
   for _, l in ipairs(st.lines) do if l.buy then buys = buys + 1 end end
@@ -387,6 +406,16 @@ step("colección de recetas", function()
   ES:RenderPatterns()
   local pcard
   for _, c in ipairs(ES.patternsPage.cards) do if c.key == "Leatherworking" then pcard = c end end
+  -- Mismo orden fijo que la portada (ES.PROFESSIONS)
+  local porder, want = {}, {}
+  for _, c in ipairs(ES.patternsPage.cards) do if c.key then porder[#porder + 1] = c.key end end
+  for _, learnedPass in ipairs({ true, false }) do
+    for _, pr in ipairs(ES.PROFESSIONS) do
+      local has = ES.Data[pr.key] and ES:GetProfessionSkill(ES.Data[pr.key].skillLine) ~= nil
+      if ES:ProfessionVisible(pr) and ES.Data[pr.key] and has == learnedPass then want[#want + 1] = pr.key end
+    end
+  end
+  assert(table.concat(porder, ",") == table.concat(want, ","), "orden de Patterns: " .. table.concat(porder, ","))
   log[#log+1] = "     tarjeta colección: " .. tostring(pcard.cost._text) .. " | " .. tostring(pcard.level._text)
   assert(tostring(pcard.level._text):find(res.known .. "|r de " .. res.total), "progreso en la tarjeta")
   pcard._scripts.OnClick(pcard) -- abre la colección de peletería
@@ -649,8 +678,22 @@ step("portada: tarjetas de profesiones", function()
   assert(ES.homePage.shownCards == #ES.PROFESSIONS, "tarjetas: " .. tostring(ES.homePage.shownCards))
   local first = ES.homePage.cards[1]
   log[#log+1] = "     1ª: " .. tostring(first.name._text) .. " | " .. tostring(first.cost._text) .. " | " .. tostring(first.level._text) .. " | " .. tostring(first.note._text)
-  assert(first.key == "Leatherworking", "la profesión del personaje debería ir primera, va " .. tostring(first.key))
-  assert(tostring(first.level._text):find("120"), "nivel no mostrado")
+  -- Orden: secciones (tuyas / demás) y dentro el fijo de ES.PROFESSIONS; el mismo en Patterns
+  local order = {}
+  for i, c in ipairs(ES.homePage.cards) do if c._shown ~= false and c.key then order[#order + 1] = c.key end end
+  -- Primero las que tienes, luego las demás; en cada sección, el orden de ES.PROFESSIONS
+  local want = {}
+  for _, learnedPass in ipairs({ true, false }) do
+    for _, p in ipairs(ES.PROFESSIONS) do
+      local has = ES.Data[p.key] and ES:GetProfessionSkill(ES.Data[p.key].skillLine) ~= nil
+      if ES:ProfessionVisible(p) and has == learnedPass then want[#want + 1] = p.key end
+    end
+  end
+  assert(table.concat(order, ",") == table.concat(want, ","), "orden de la portada: " .. table.concat(order, ","))
+  log[#log+1] = "     orden: " .. table.concat(order, ", ")
+  local lw
+  for _, c in ipairs(ES.homePage.cards) do if c.key == "Leatherworking" then lw = c end end
+  assert(tostring(lw.level._text):find("%d+|r / %d+"), "nivel no mostrado: " .. tostring(lw.level._text))
   -- Pestañas laterales: cada una abre su página y queda marcada
   local mf = ES:GetMainFrame()
   assert(#mf.tabs == 4, "pestañas: " .. #mf.tabs)
@@ -695,7 +738,8 @@ step("portada: tarjetas de profesiones", function()
   ES.IsRecipeKnown = function() return true end
   ES:RenderPlan(page)
   local craftLine
-  for _, l in ipairs(page.lines) do if l.craftCount then craftLine = l break end end
+  -- (un paso de la ruta, no "Fabrica N×" de un material: esos se prueban aparte)
+  for _, l in ipairs(page.lines) do if l.craftCount and not l.skipTip then craftLine = l break end end
   assert(craftLine, "con la opción por defecto, el clic en un paso debería fabricar")
   craftLine.onClick() -- un solo clic: abre la receta y fabrica lo que falta
   assert(opened == page.plan.steps[1].id, "el clic no abrió la receta del paso")
@@ -718,7 +762,8 @@ step("portada: tarjetas de profesiones", function()
   -- ✕ en un paso: la receta sale de la ruta y una fila permite recuperarla
   local firstStep = page.plan.steps[1].id
   local skipRow
-  for _, row in ipairs(page.rows) do if row.onSkip and row._shown ~= false then skipRow = row break end end
+  -- (la de un paso de receta, no la de fabricar un material: esa lo compra hecho)
+  for _, row in ipairs(page.rows) do if row.onSkip and not row.skipTip and row._shown ~= false then skipRow = row break end end
   assert(skipRow, "los pasos de la ruta deberían tener la ✕")
   skipRow.skip._scripts.OnEnter(skipRow.skip)
   skipRow.skip._scripts.OnClick(skipRow.skip)
@@ -831,10 +876,27 @@ step("portada: tarjetas de profesiones", function()
   local newLevel = s1.from + math.max(1, math.floor((s1.to - s1.from) / 2))
   ES.DetectSkill = function(_, p) p.from = newLevel end
   page.view = "route"
+  local knownBefore = ES.IsRecipeKnown
+  ES.IsRecipeKnown = function() return false end
   ES:RefreshAfterSkill()
   local cur
+  -- Sin saber aún la receta del paso, lo que toca es aprenderla (o, antes, fabricar
+  -- el material que haga falta: "Fabrica N× ...")
+  if s1.fee and s1.fee > 0 then
+    for _, l in ipairs(page.lines) do if l.current then cur = l end end
+    assert(cur and (cur.skipTip or (cur.title:find("Entrenar") or cur.title:find("Comprar"))) ~= nil,
+      "sin saber la receta, el paso actual debería ser aprenderla: " .. tostring(cur and cur.title))
+  end
+  -- Sabiéndola y con lo que hay que fabricar antes ya hecho, el de fabricar, con lo que queda
+  ES.IsRecipeKnown = function() return true end
+  local countBefore = ES.ItemCount
+  ES.ItemCount = function() return 1000000 end
+  ES:RenderPlan(page)
+  cur = nil
   for _, l in ipairs(page.lines) do if l.current then cur = l end end
-  assert(cur and cur.sub:find("faltan"), "falta el paso actual con lo que queda: " .. tostring(cur and cur.sub))
+  ES.IsRecipeKnown, ES.ItemCount = knownBefore, countBefore
+  -- (lo que llevas en puntos, no en fabricaciones de esa receta: otras también suben)
+  assert(cur and cur.sub:find("puntos") and cur.sub:find("fabricaciones más"), "falta el paso actual con lo que queda: " .. tostring(cur and cur.sub))
   local curRow
   for _, row in ipairs(page.rows) do if row._shown ~= false and row.title._text == cur.title then curRow = row end end
   log[#log+1] = "     paso actual: " .. tostring(cur.level) .. " · " .. tostring(cur.sub)
@@ -850,7 +912,7 @@ step("portada: tarjetas de profesiones", function()
   lp.lock.completed = nil
   ES:DetectSkill(page)
   ES:CalculatePlan(page)
-  -- Gasto real: comprar un material de la ruta al vendedor y vender algo fabricado
+  -- Sin registro de dinero: la franja no tiene fila "Real" y Profit no cuenta vendidos
   local buyItem, sellItem = rebuilt.shopping[1].itemID, nil
   for _, st in ipairs(rebuilt.steps) do if st.sale then sellItem = st.sale.itemID break end end
   local counts = { [buyItem] = 0, [sellItem] = 10 }
@@ -858,40 +920,17 @@ step("portada: tarjetas de profesiones", function()
   GetMerchantNumItems = function() return 1 end
   GetMerchantItemID = function() return buyItem end
   GetMerchantItemInfo = function() return "x", nil, 300, 3 end -- 3 por 300: 100 cada uno
-  ES.Ledger:SetWhere("merchant")
-  ES.Ledger.Snapshot()
-  -- Fabricar con el vendedor abierto (sin que cambie tu dinero) no cuenta como venta
-  counts[sellItem] = 9
-  ES.Ledger.Process()
-  assert(ES.Ledger:Summary("Leatherworking").sell == 0, "fabricar con el vendedor abierto contó como venta")
-  counts[sellItem] = 10
-  ES.Ledger.Process()
-  assert(ES.Ledger:Summary("Leatherworking").sell == 0, "fabricar con el vendedor abierto contó como recompra")
-  -- Compra y venta de verdad (baja y sube tu dinero)
-  counts[buyItem], counts[sellItem] = 6, 7
-  ES.Ledger:SetMoney(600, 3 * (ES:VendorSellPrice(sellItem) or 0))
-  ES.Ledger.Process()
-  local real = ES.Ledger:Summary("Leatherworking")
-  assert(real.buy == 600, "compra al vendedor: " .. tostring(real.buy))
-  assert(real.sold[sellItem] == 3 and real.sell == 3 * (ES:VendorSellPrice(sellItem) or 0), "venta al vendedor: " .. tostring(real.sell))
-  ES.Ledger:SetWhere(nil)
   ES:RenderPlan(page)
-  assert(tostring(page.real.materials._text):find("Real"), "falta la fila Real en la franja")
+  assert(page.real == nil, "la franja no debería tener la fila Real")
   page.view = "profit"
   ES:RenderPlan(page)
-  local soldLine
-  for _, l in ipairs(page.lines) do if l.item == sellItem and l.sub and l.sub:find("vendidos 3") then soldLine = l end end
-  assert(soldLine, "la vista Profit debería decir cuántos llevas vendidos")
-  assert(soldLine.go, "sin vendedor ni AH abiertos, el clic marca dónde venderlo")
-  log[#log+1] = string.format("     gasto real: compras %d, ventas %d · %s", real.buy, real.sell, page.real.total._text)
-  -- Compra en la AH (llega por correo): se apunta al cobrarla y cuenta como tuya
-  local beforeBuy = ES.Ledger:Summary("Leatherworking").buy
-  ES.Ledger:SetWhere("ah")
-  ES.Ledger.NoteAHPurchase(buyItem, 2)
-  assert(ES.Ledger.ChargeAHPurchase(640), "no se cobró la compra enviada a la AH")
-  assert(ES.Ledger:Summary("Leatherworking").buy == beforeBuy + 640, "la compra en la AH no se apuntó")
-  assert(ES.Ledger:InMail(buyItem) == 2, "lo comprado en la AH debería contar como en el correo")
-  ES.Ledger:SetWhere(nil)
+  local sellLine
+  for _, l in ipairs(page.lines) do if l.item == sellItem then sellLine = l end end
+  assert(sellLine and not (sellLine.sub or ""):find("vendidos"), "Profit no debería contar vendidos")
+  assert(sellLine.go, "sin vendedor ni AH abiertos, el clic marca dónde venderlo")
+  assert(sellLine.title:find("en bolsas"), "Profit debería decir cuántos llevas en las bolsas: " .. sellLine.title)
+  -- Sin correo: lo comprado en la AH no cuenta hasta que está en las bolsas
+  assert(ES.Ledger.InMail == nil and ES.Ledger.NoteAHPurchase == nil, "el correo ya no debería contar")
   -- Lista de la compra con la ruta empezada: secciones según lo que llevas ahora
   page.view = "shop"
   ES:RenderPlan(page)
@@ -907,15 +946,19 @@ step("portada: tarjetas de profesiones", function()
   -- Anunciar en la AH: a platas enteras (la AH de Forever no admite cobres)
   assert(ES.Ledger.PostPrice(2070) == 2000 and ES.Ledger.PostPrice(50) == 100, "precio de anuncio en platas enteras")
   -- Con la AH abierta y nada en las bolsas, el clic avisa en vez de marcar el subastador
+  -- (y sin repetir "no llevas ninguno": el título ya dice "0 en bolsas")
   local savedOpen = ES.IsAuctionHouseOpen
   ES.IsAuctionHouseOpen = function() return true end
+  page.view = "profit"
   ES:RenderPlan(page)
   for _, l in ipairs(page.lines) do
-    if l.sub and l.sub:find("no llevas ninguno") then
-      assert(l.onClick and not l.go, "con la AH abierta y sin el objeto, el clic no debería marcar el subastador")
+    if l.title and l.title:find("0 en bolsas") and l.onClick then
+      assert(not l.go, "con la AH abierta y sin el objeto, el clic no debería marcar el subastador")
+      assert(not (l.sub or ""):find("no llevas ninguno"), "repite que no llevas ninguno")
       l.onClick()
     end
   end
+  page.view = "route"
   ES.IsAuctionHouseOpen = savedOpen
   -- Vendedor abierto con la ruta empezada: ventana al lado con lo que falta y "Comprar todo"
   local bought = {}
@@ -936,6 +979,29 @@ step("portada: tarjetas de profesiones", function()
   ES.VendorShop:Buy({ itemID = buyItem, qty = 3, batch = 3, price = 300, cost = 300 })
   assert(#ES.VendorShop.queue == queued, "compró dos veces el mismo material")
   log[#log+1] = string.format("     vendedor: %s · primera compra de %d", tostring(vp.buyAll._text), bought[1])
+  -- Lo que la vista Profit dice que vendas al vendedor, en la misma ventana, con "Vender todo"
+  local savedBag, savedSell, savedOpen2 = ES.Ledger.BagCount, ES.Ledger.SellToVendor, ES.Ledger.MerchantOpen
+  local sold = {}
+  ES.Ledger.BagCount = function(id) return counts[id] or 0 end
+  ES.Ledger.SellToVendor = function(_, id, n) sold[#sold + 1] = { id, n } return n end
+  ES.Ledger.MerchantOpen = function() return true end
+  ES.VendorShop.queue, ES.VendorShop.pumping = {}, nil
+  local sellList = ES.VendorShop:SellList()
+  if #sellList > 0 then
+    ES.VendorShop:Refresh()
+    local sellRow
+    for _, row in ipairs(vp.rows) do if row.kind == "sell" and row._shown ~= false then sellRow = row break end end
+    assert(sellRow and sellRow.entry.n > 0, "falta la fila de vender en la ventana del vendedor")
+    sellRow._scripts.OnEnter(sellRow)
+    assert(vp.sellAll._shown ~= false and tostring(vp.sellAll._text):find("Vender todo"), "falta Vender todo")
+    vp.sellAll._scripts.OnClick(vp.sellAll)
+    assert(#sold > 0 and sold[1][1] == sellList[1].itemID, "Vender todo no vendió")
+    log[#log+1] = string.format("     vendedor: %s · vende %d de %s", tostring(vp.sellAll._text), sold[1][2], ES:DataItemName(sold[1][1]) or sold[1][1])
+  else
+    log[#log+1] = "     vendedor: nada que vender en esta ruta"
+  end
+  ES.Ledger.BagCount, ES.Ledger.SellToVendor, ES.Ledger.MerchantOpen = savedBag, savedSell, savedOpen2
+  ES.VendorShop.selling = nil
   ES.VendorShop.queue, ES.VendorShop.pumping = {}, nil
   MerchantFrame, C_MerchantFrame, BuyMerchantItem, GetMoney = nil, nil, nil, nil
   page.view = "route"
@@ -951,16 +1017,76 @@ step("portada: tarjetas de profesiones", function()
   activeCard._scripts.OnLeave(activeCard)
   log[#log+1] = "     portada: " .. tostring(activeCard.note._text)
   ES:SelectPage("Leatherworking")
-  -- Recalcular ruta la libera
+  -- Con lo que llevas (bolsas activadas): una cita que solo informa (no se pulsa).
+  -- Con alternativas de mentira: no compensa -> "mejor vender"; compensa con la
+  -- ruta fijada -> "Recalcular ruta"; compensa sin fijar -> nada (ya va en la ruta)
+  local function FindBagsLine()
+    for _, l in ipairs(page.lines) do if l.quote then return l end end
+  end
+  local savedAlt = ES.Planner.BagsAlternative
+  local fake = { saving = 380, value = 900 }
+  ES.Planner.BagsAlternative = function(data, plan, owned, from, excluded)
+    local st = plan.steps[#plan.steps]
+    if excluded and excluded[st.id] then return nil end
+    local r = data.recipes[st.id]
+    return { id = st.id, recipe = r, from = st.from, to = st.to, crafts = 3, fee = 0, gold = 120, spend = 150, value = fake.value,
+      routeCost = 500, saving = fake.saving, use = { { itemID = r.r[1][1], qty = 6, value = fake.value } } }
+  end
+  ES:RenderPlan(page)
+  local bagsLine = FindBagsLine()
+  assert(bagsLine and bagsLine.quote:find("Con lo que llevas podrías hacer") and bagsLine.quote:find("Vender lo tuyo"),
+    "falta la cita de Con lo que llevas (no compensa)")
+  assert(not bagsLine.onClick and not bagsLine.tooltip, "la cita no debería pulsarse")
+  log[#log+1] = "     con lo que llevas: " .. bagsLine.quote:gsub("\n", " / ")
+  -- ✕ en la cita: deja de salir (la ruta no cambia) y se recupera con "Recetas quitadas"
+  local lockBefore = ES.db.prof.Leatherworking.lock
+  assert(bagsLine.onSkip, "la cita debería tener la ✕ para descartarla")
+  bagsLine.onSkip()
+  assert(not FindBagsLine(), "la cita descartada sigue saliendo")
+  assert(ES.db.prof.Leatherworking.lock == lockBefore, "descartar la cita no debería soltar la ruta")
+  local restoreNote
+  for _, l in ipairs(page.lines) do if l.title and l.title:find("Avisos ocultos") then restoreNote = l end end
+  assert(restoreNote, "falta la fila para recuperar la cita descartada")
+  restoreNote.onClick()
+  assert(FindBagsLine(), "la cita no volvió al recuperarla")
+  assert(ES.db.prof.Leatherworking.lock == lockBefore, "recuperar la cita no debería soltar la ruta")
+  fake.saving, fake.value = 900, 100
+  ES:RenderPlan(page)
+  bagsLine = FindBagsLine()
+  assert(bagsLine and bagsLine.quote:find("Recalcular ruta"), "con la ruta fijada, la cita debería pedir recalcular")
+  -- Aprendes la receta (instructor) con la ruta fijada: su fila de aprender queda hecha
+  local learnRows = 0
+  for _, l in ipairs(page.lines) do if l.onSkip and l.title and (l.title:find("Entrenar") or l.title:find("Comprar receta")) then learnRows = learnRows + 1 end end
+  local knownBefore = ES.IsRecipeKnown
+  ES.IsRecipeKnown = function() return true end
+  ES:RefreshAfterLearn()
+  local learned, pendingLearn = 0, 0
+  for _, l in ipairs(page.lines) do
+    if l.sub and l.sub:find("Aprendida") then learned = learned + 1 end
+    if l.onSkip and l.title and (l.title:find("Entrenar") or l.title:find("Comprar receta")) then pendingLearn = pendingLearn + 1 end
+  end
+  ES.IsRecipeKnown = knownBefore
+  assert(pendingLearn == 0 and learned == learnRows, string.format("al aprenderla, la fila no quedó hecha (%d de %d)", learned, learnRows))
+  log[#log+1] = string.format("     aprendidas: %d filas de aprender marcadas como hechas", learned)
+  -- Un doble clic en Empezar ruta no la suelta; Recalcular ruta (más tarde) sí
+  page.routeStartedAt = GetTime and GetTime() or 0
+  page.routeButton._scripts.OnClick(page.routeButton)
+  assert(ES.db.prof.Leatherworking.lock, "un doble clic en Empezar ruta la soltó")
+  page.routeStartedAt = nil
   page.routeButton._scripts.OnClick(page.routeButton)
   assert(not ES.db.prof.Leatherworking.lock, "Recalcular ruta no la liberó")
+  ES:RenderPlan(page)
+  assert(not FindBagsLine(), "sin fijar, lo que compensa ya va en la ruta: no hay cita")
+  ES.Planner.BagsAlternative = savedAlt
   ES.db.prof.Leatherworking.useBags = savedBags
   GetItemCount = nil
   ES:ClearHomeCache()
   ES:CalculatePlan(page)
   ES:SelectPage("home")
   -- Pulsar la tarjeta abre la profesión; Volver regresa
-  first._scripts.OnClick(first)
+  local lwCard
+  for _, c in ipairs(ES.homePage.cards) do if c.key == "Leatherworking" then lwCard = c end end
+  lwCard._scripts.OnClick(lwCard)
   assert(ES.db.lastPage == "Leatherworking", "no abrió la profesión")
   CraftersJournalMainFrame.back._scripts.OnClick(CraftersJournalMainFrame.back)
   assert(ES.db.lastPage == "home", "Volver no regresó a la portada")
@@ -1102,7 +1228,96 @@ step("ir al instructor o vendedor más cercano", function()
   log[#log+1] = "     datos propios: instructor de Peletería más cercano: " .. tostring(npc and npc.name)
   ES.Print = savedPrint
 end)
-step("comandos /es", function() SlashCmdList.CRAFTERSJOURNAL("") SlashCmdList.CRAFTERSJOURNAL("cancel") end)
+step("estrella sobre el PNJ al que te manda el addon", function()
+  -- Poner marcas está protegido: el addon no llama a SetRaidTarget; al pasar el
+  -- ratón por una fila de vendedor, un botón seguro con la macro se pone encima
+  local WP = ES.Waypoints
+  local called = false
+  local savedSet, savedGo, savedAvail = SetRaidTarget, WP.Go, WP.Available
+  SetRaidTarget = function() called = true end
+  WP.Go, WP.Available = function() end, function() return true end
+  local npcID = WP.Nearest(ES.Data.Auctioneers) or next(ES.Data.NPCs or {})
+  local npc = WP.NPC(npcID)
+  local row = CreateFrame("Button")
+  row.go = function() return npcID end
+  WP.HoverRow(row)
+  local h = WP.HoverButton()
+  local macro = h and h:GetAttribute("macrotext")
+  assert(h._shown and macro and macro:find("/targetexact [nocombat] " .. npc.name, 1, true) and macro:find("/tm [nocombat,exists] 1", 1, true),
+    "falta el botón seguro sobre la fila: " .. tostring(macro)) -- (su clic: PostClick, solo en el juego)
+  assert(not called, "el addon no puede llamar a SetRaidTarget por su cuenta (acción bloqueada)")
+  assert(CraftersJournalMarkButton == nil, "no debería haber botón flotante")
+  -- En combate no se toca
+  local savedLock = InCombatLockdown
+  InCombatLockdown = function() return true end
+  local other = CreateFrame("Button")
+  other.go = function() return npcID end
+  WP.HoverRow(other)
+  assert(h.row == row, "en combate el botón seguro no debería moverse")
+  InCombatLockdown = savedLock
+  WP.ReleaseHover()
+  assert(h._shown == false, "al salir de la fila el botón seguro se suelta")
+  SetRaidTarget, WP.Go, WP.Available = savedSet, savedGo, savedAvail
+  log[#log+1] = "     estrella: " .. macro:gsub("\n", " / ")
+end)
+step("precio real del vendedor, aprendido al vender", function()
+  -- Hillman's Shoulders: los datos del cliente dicen 11s 99c; el vendedor paga 6s 59c
+  local savedMF, savedCC, savedSeen = MerchantFrame, C_Container, ES.db.sellSeen
+  MerchantFrame = CreateFrame("Frame")
+  C_Container = { GetContainerItemInfo = function() return { itemID = 4251, stackCount = 10 } end }
+  ES.db.sellSeen = nil
+  ES.Ledger.NoteSale(0, 1)
+  ES.Ledger.ChargeSale(6590)
+  assert(ES:VendorSellPrice(4251) == 659, "no aprendió el precio real: " .. tostring(ES:VendorSellPrice(4251)))
+  -- Dos pilas vendidas seguidas: cada cobro con su venta
+  C_Container.GetContainerItemInfo = function(_, slot) return { itemID = 2318, stackCount = slot } end
+  ES.Ledger.NoteSale(0, 20)
+  ES.Ledger.NoteSale(0, 5)
+  ES.Ledger.ChargeSale(200)
+  ES.Ledger.ChargeSale(50)
+  assert(ES:VendorSellPrice(2318) == 10, "dos pilas: " .. tostring(ES:VendorSellPrice(2318)))
+  MerchantFrame, C_Container, ES.db.sellSeen = savedMF, savedCC, savedSeen
+end)
+step("conversión de esencias: dice cuáles, cuántas veces y que se compran antes", function()
+  local page
+  for _, p in ipairs(ES.professionPages) do if p.profKey == "Enchanting" then page = p end end
+  local savedDetect, savedCount = ES.DetectSkill, ES.ItemCount
+  ES.DetectSkill = function(_, pg) pg.from = 28 end
+  ES.ItemCount = function() return 0 end
+  ES.db.prof.Enchanting = ES.db.prof.Enchanting or {}
+  ES.db.prof.Enchanting.target, ES.db.prof.Enchanting.lock = 225, nil
+  page.toBox._text = "225"
+  ES:DetectSkill(page)
+  ES:CalculatePlan(page)
+  ES:SelectProfessionView(page, "route")
+  local conv
+  for _, l in ipairs(page.lines) do if l.title and l.title:find("^Convierte") then conv = l end end
+  local hasConv = false
+  for _, c in ipairs(page.plan and page.plan.crafted or {}) do if c.recipe and c.recipe.conversion then hasConv = true end end
+  assert(not hasConv or conv, "la ruta convierte esencias pero no hay fila que lo explique")
+  if conv then
+    assert(conv.sub:find("veces") and conv.sub:find("cómpralas"), "la conversión no explica qué hacer: " .. tostring(conv.sub))
+    log[#log+1] = "     " .. conv.title .. " · " .. conv.sub
+  else
+    log[#log+1] = "     (esta ruta no convierte esencias)"
+  end
+  -- Herramientas fabricadas (Runed Golden Rod): en el nivel donde hacen falta, y sin
+  -- ✕ si no se pueden comprar (se ligan al recogerlas)
+  local toolSkill = {}
+  for _, tl in ipairs(page.plan and page.plan.tools or {}) do toolSkill[tl.item] = tl.skill end
+  for _, l in ipairs(page.lines) do
+    if l.item and toolSkill[l.item] and l.title and l.title:find("^Fabrica") then
+      assert(tonumber(l.level) == toolSkill[l.item], string.format("herramienta fuera de sitio: %s en %s (hace falta en %d)", l.title, tostring(l.level), toolSkill[l.item]))
+      if l.sub:find("no se puede comprar") then assert(not l.onSkip, "una herramienta que no se puede comprar no debería tener la ✕") end
+      log[#log+1] = "     " .. l.level .. " · " .. l.title .. " · " .. l.sub
+    end
+  end
+  ES.DetectSkill, ES.ItemCount = savedDetect, savedCount
+end)
+step("comandos /es", function()
+  SlashCmdList.CRAFTERSJOURNAL("") SlashCmdList.CRAFTERSJOURNAL("cancel")
+  -- Registro de errores: los iguales juntos, con cuántas veces; /cj errores los lista y los borra   ES.db.errorLog = nil   ES:RecordError("lua", "Interface/AddOns/CraftersJournal/Planner.lua:1: boom", "pila")   ES:RecordError("lua", "Interface/AddOns/CraftersJournal/Planner.lua:1: boom", "pila")   ES:RecordError("bloqueada", "SetRaidTarget()")   assert(#ES.db.errorLog == 2 and ES.db.errorLog[1].count == 2, "no agrupó los errores iguales")   SlashCmdList.CRAFTERSJOURNAL("errores")   SlashCmdList.CRAFTERSJOURNAL("errores borrar")   assert(ES.db.errorLog == nil, "/cj errores borrar no lo vació")
+end)
 step("rutas repartidas entre fotogramas (sin tirones)", function()
   -- En el juego (con debugprofilestop) las rutas no se calculan al abrir: cada
   -- fotograma hace un trozo de 8 ms y las tarjetas ponen "Calculando la ruta…"
@@ -1111,9 +1326,19 @@ step("rutas repartidas entre fotogramas (sin tirones)", function()
   C_Timer.After = function(_, fn) frames[#frames + 1] = fn end
   local ms = 0
   debugprofilestop = function() ms = ms + 0.05 return ms end
+  -- El personaje tiene Peletería (nivel 50); las demás no se calculan solas
+  local savedSkill = ES.GetProfessionSkill
+  ES.GetProfessionSkill = function(self, line)
+    if line == ES.Data.Leatherworking.skillLine then return 50, 225 end
+    return savedSkill(self, line)
+  end
   ES:ClearHomeCache()
   ES:SelectPage("home")
   local first = ES.homePage.cards[1]
+  for _, c in ipairs(ES.homePage.cards) do
+    if c.key == "Leatherworking" then first = c
+    else assert(not tostring(c.note._text):find("Calculando"), "no debería calcular una profesión que no tienes: " .. tostring(c.key)) end
+  end
   log[#log+1] = "     al abrir: " .. tostring(first.cost._text) .. " | " .. tostring(first.note._text)
   assert(tostring(first.note._text):find("Calculando"), "la tarjeta debería poner Calculando: " .. tostring(first.note._text))
   local n = 0
@@ -1124,9 +1349,9 @@ step("rutas repartidas entre fotogramas (sin tirones)", function()
     assert(ms - before < 30, "un fotograma ha durado " .. (ms - before) .. " ms simulados")
     n = n + 1
   end
-  log[#log+1] = "     fotogramas hasta tener las 8 rutas: " .. n
-  assert(n > 8, "no se repartió el cálculo (" .. n .. " fotogramas)")
-  first = ES.homePage.cards[1]
+  log[#log+1] = "     fotogramas hasta tener la ruta de tu profesión: " .. n
+  assert(n > 1, "no se repartió el cálculo (" .. n .. " fotogramas)")
+  for _, c in ipairs(ES.homePage.cards) do if c.key == "Leatherworking" then first = c end end
   log[#log+1] = "     al acabar: " .. tostring(first.cost._text) .. " | " .. tostring(first.note._text)
   assert(not tostring(first.note._text):find("Calculando"), "sigue calculando tras acabar")
   -- Abrir la profesión con la ruta ya calculada: sin esperar (de la caché)
@@ -1140,6 +1365,7 @@ step("rutas repartidas entre fotogramas (sin tirones)", function()
   assert(#frames == 0, "no debería recalcular: " .. #frames)
   debugprofilestop = nil
   C_Timer.After = realAfter
+  ES.GetProfessionSkill = savedSkill
   ES:SelectPage("home")
 end)
 step("versión publicada: sin las pestañas en desarrollo", function()
@@ -1183,24 +1409,71 @@ step("interruptor de desarrollo: vista de jugador", function()
   panel.devCheck._scripts.OnClick(panel.devCheck)
   assert(ES.DEV == true and not ES.db.userPreview and #ES:GetMainFrame().tabs == 4, "no volvió al modo desarrollo")
 end)
+step("materiales: o se fabrican o se compran, y la ✕ los compra hechos", function()
+  local data = ES.Data.Leatherworking
+  -- Nunca las dos cosas a la vez con un mismo material
+  local opts = ES:PlanOptions("Leatherworking", 75, 125, nil)
+  local plan = ES.Planner:Plan(data, opts)
+  local crafted = {}
+  for _, c in ipairs(plan.crafted) do crafted[c.itemID] = true end
+  for _, it in ipairs(plan.shopping) do
+    assert(not (crafted[it.itemID] and it.source == "ah"), "se fabrica y se compra a la vez: " .. it.itemID)
+  end
+  -- Con la ✕ (comprarlo) no se fabrica: un material que se pueda comprar en la AH
+  -- (sin precio, fabricarlo es la única vía y se fabrica igual)
+  local item
+  for id in pairs(plan.ctx.via) do if plan.ctx.ladders[id] then item = id break end end
+  if item then
+    local o = ES:PlanOptions("Leatherworking", 75, 125, nil)
+    o.via = { [item] = "buy" }
+    local p = ES.Planner:Plan(data, o)
+    for _, c in ipairs(p.crafted) do assert(c.itemID ~= item, "con la ✕ no debería fabricarlo") end
+  end
+  -- La fila de fabricar tiene la ✕; al pulsarla queda en "Recetas quitadas" y se recupera
+  local page
+  for _, pg in ipairs(ES.professionPages) do if pg.profKey == "Leatherworking" then page = pg end end
+  page.view = "route"
+  ES:CalculatePlan(page)
+  local craftLine
+  for _, l in ipairs(page.lines) do if l.skipTip and l.onSkip then craftLine = l end end
+  if craftLine then
+    craftLine.onSkip()
+    assert(ES.db.prof.Leatherworking.noCraft and next(ES.db.prof.Leatherworking.noCraft), "la ✕ no apuntó el material")
+    local restore
+    for _, l in ipairs(page.lines) do if l.title and l.title:find("Recetas quitadas") then restore = l end end
+    assert(restore, "falta la fila para recuperar el material")
+    restore.onClick()
+    assert(not ES.db.prof.Leatherworking.noCraft, "no se recuperó el material")
+    log[#log+1] = "     ✕ en fabricar: " .. craftLine.title
+  else
+    log[#log+1] = "     ✕ en fabricar: la ruta de prueba no fabrica materiales"
+  end
+end)
 step("cada personaje tiene sus rutas", function()
-  -- El hunter empieza una ruta y sale; el warrior no la ve; el hunter vuelve y la recupera
-  if not ES.charData then ES.LoadCharacterData() end
+  -- El hunter empieza una ruta y sale; el warrior (que se llama igual, en el mismo
+  -- reino: en Forever pasa) no la ve; el hunter vuelve y la recupera
+  local savedGUID, savedProf = UnitGUID, ES.db.prof -- los ajustes de las demás pruebas
+  UnitGUID = function() return "Player-70-0000AAAA" end
+  ES.LoadCharacterData()
   ES.db.prof.Leatherworking = ES.db.prof.Leatherworking or {}
   ES.db.prof.Leatherworking.lock = { from = 1, to = 2, started = 1, choice = {} }
   ES.db.prof.Leatherworking.target = 175
   ES.SaveCharacterData()
   assert(ES.db.prof == nil, "al salir no deberían quedar copias sueltas")
-  local savedName = UnitName
-  UnitName = function() return "Warrior" end
+  UnitGUID = function() return "Player-70-0000BBBB" end -- mismo nombre (UnitName no cambia)
   ES.LoadCharacterData()
-  assert(not (ES.db.prof.Leatherworking and ES.db.prof.Leatherworking.lock), "otro personaje ve la ruta del primero")
+  assert(not (ES.db.prof.Leatherworking and ES.db.prof.Leatherworking.lock), "otro personaje con el mismo nombre ve la ruta del primero")
   ES.SaveCharacterData()
-  UnitName = savedName
+  UnitGUID = function() return "Player-70-0000AAAA" end
   ES.LoadCharacterData()
   assert(ES.db.prof.Leatherworking.lock and ES.db.prof.Leatherworking.target == 175, "al volver, el personaje no recupera su ruta")
   ES.db.prof.Leatherworking.lock, ES.db.prof.Leatherworking.target = nil, nil
   ES.lockedPlans = {}
+  -- De vuelta al personaje de las demás pruebas
+  ES.SaveCharacterData()
+  UnitGUID = savedGUID
+  ES.LoadCharacterData()
+  ES.charData.prof, ES.db.prof = savedProf, savedProf
 end)
 step("al volver a abrir, sigue donde estabas", function()
   local mf = ES:GetMainFrame()
@@ -1233,6 +1506,101 @@ step("merchant's favor: solo con su icono", function()
   log[#log+1] = string.format("     merchant's favor: %d pasos con el icono, neto %.1f oro (sin él %.1f)", used, withFavor.net / 10000, plan.net / 10000)
   page.favorButton._scripts.OnClick(page.favorButton)
   assert(not ES.db.prof.Engineering.useFavor, "el icono no desactivó Merchant's Favor")
+end)
+step("instructor: aprende los precios reales", function()
+  -- Receta nueva de Forever sin precio conocido (trainer = true, sin fee): al abrir
+  -- el instructor se lee lo que cobra y el nivel que pide, y manda sobre los datos
+  local data = ES.Data.Alchemy
+  ES.Planner.Annotate(data)
+  local acid, mana = data.recipes[1249633], data.recipes[2331]
+  local saved = { acid.fee, acid.train, acid.trainer }
+  acid.fee, acid.train, acid.trainer = nil, nil, true
+  ES.db.trainerFees = nil
+  local ctx = { opts = {}, prices = {} }
+  local cost, source = ES.Planner.LearnCost(ctx, acid)
+  assert(cost == 0 and source == "trainer", "sin precio conocido debería ser instructor a 0 (\"?\")")
+  -- Ventana del instructor de Alquimia: una cabecera, el ácido por nombre y la
+  -- poción de maná por el objeto que fabrica
+  local services = {
+    { name = "Alchemy", kind = "header" },
+    { name = acid.nameEN or acid.name, kind = "available", cost = 135, skill = 40 },
+    { name = "Whatever", kind = "used", cost = 100, skill = 25, link = "|cffffffff|Hitem:2455::::::::|h[Minor Mana Potion]|h|r" },
+  }
+  GetNumTrainerServices = function() return #services end
+  GetTrainerServiceInfo = function(i) return services[i].name, "", services[i].kind end
+  GetTrainerServiceSkillLine = function() return ES:ProfLabel("Alchemy") end
+  GetTrainerServiceCost = function(i) return services[i].cost end
+  GetTrainerServiceSkillReq = function(i) return "Alchemy", services[i].skill, true end
+  GetTrainerServiceItemLink = function(i) return services[i].link end
+  UnitReaction = function() return 4 end -- neutral: sin descuento
+  -- Al abrirlo se leen todas, aunque sus filtros oculten algunas (y se dejan como estaban)
+  local filters = { available = 1, unavailable = nil, used = nil }
+  local shownAtRead
+  GetTrainerServiceTypeFilter = function(f) return filters[f] end
+  SetTrainerServiceTypeFilter = function(f, v) filters[f] = v == 1 and 1 or nil end
+  local realCount = GetNumTrainerServices
+  GetNumTrainerServices = function() shownAtRead = filters.unavailable and filters.used return realCount() end
+  local changed = ES.Ledger:ReadAllTrainerServices()
+  assert(shownAtRead, "al leer, los filtros del instructor deberían mostrarlo todo")
+  assert(filters.available == 1 and not filters.unavailable and not filters.used, "los filtros deberían quedar como estaban")
+  GetTrainerServiceTypeFilter, SetTrainerServiceTypeFilter, GetNumTrainerServices = nil, nil, realCount
+  assert(changed == 2, "debería haber leído 2 recetas: " .. tostring(changed))
+  -- Cuánto se ha comprobado de cada profesión (/cj instructor)
+  local cov
+  for _, c in ipairs(ES.Ledger:TrainerCoverage()) do if c.prof == "Alchemy" then cov = c end end
+  assert(cov and cov.seen == 2 and cov.diff == 2 and cov.total > 2, "cobertura de Alquimia: " .. tostring(cov and cov.seen))
+  local seen = ES.db.trainerFees[1249633]
+  assert(seen and seen.cost == 135 and seen.skill == 40, "no guardó el precio del ácido")
+  cost, source = ES.Planner.LearnCost(ctx, acid)
+  assert(cost == 135 and source == "trainer", "no usa el precio visto: " .. tostring(cost))
+  assert(ES.Planner.LearnSkill(acid, {}) == 40, "no usa el nivel visto")
+  assert(ES.Planner.LearnCost(ctx, mana) == 100, "la poción de maná debería costar lo visto (100)")
+  -- Lo distinto de los datos, para copiar a tools/forever/trainer_fees.csv
+  local rows = ES.Ledger:TrainerDiffs()
+  local text = table.concat(rows, "\n")
+  log[#log+1] = "     instructor: " .. text:gsub("\n", "\n     instructor: ")
+  assert(text:find("^2331,Minor Mana Potion,100,25,") and text:find("\n1249633,Sulfuric Acid,135,40,"), "diferencias: " .. text)
+  -- Con reputación el instructor rebaja: el CSV lleva el precio base
+  assert(ES.Ledger.BaseCost({ cost = 135, rep = 6 }) == 150, "precio base con Honorable")
+  -- El comando lo imprime y lo deja en SavedVariables
+  local printed = 0
+  local savedPrint = print
+  print = function(s) if tostring(s):find("^%d+,") then printed = printed + 1 end end
+  SlashCmdList.CRAFTERSJOURNAL("instructor")
+  print = savedPrint
+  assert(printed == 2 and #ES.db.trainerFeesCSV == 2, "/cj instructor no listó las diferencias")
+  -- Ruta fijada: el precio real del instructor también la corrige (mismas recetas)
+  local lw = ES.Data.Leatherworking
+  local hideID, from -- una receta de instructor de pago de nivel bajo (en los datos)
+  for id, r in pairs(lw.recipes) do
+    if r.fee and r.fee > 200 and r.train and r.train >= 10 and r.train <= 50 and r.t[4] > r.train + 15 and (not hideID or id < hideID) then hideID, from = id, r.train end
+  end
+  local choice = {}
+  for s = from, from + 9 do choice[s] = hideID end
+  ES.db.prof.Leatherworking = ES.db.prof.Leatherworking or {}
+  local lp = ES.db.prof.Leatherworking
+  local savedLock = lp.lock
+  lp.lock = { from = from, to = from + 10, choice = choice, via = {}, started = 12345 }
+  ES.lockedPlans.Leatherworking = nil
+  local savedKnown = ES.IsRecipeKnown
+  ES.IsRecipeKnown = function() return false end
+  local before = ES:LockedPlan("Leatherworking")
+  local fee = lw.recipes[hideID].fee
+  services = { { name = lw.recipes[hideID].nameEN or lw.recipes[hideID].name, kind = "available", cost = fee - 100, skill = from } }
+  GetTrainerServiceSkillLine = function() return ES:ProfLabel("Leatherworking") end
+  ES.Ledger:ReadTrainer()
+  local after = ES:LockedPlan("Leatherworking")
+  assert(after ~= before and math.abs((before.fees - after.fees) - 100) < 1,
+    string.format("la ruta fijada no usó el precio del instructor: %d -> %d (pasos %d, para en %s, fee %s)", before.fees, after.fees, #before.steps, tostring(before.stoppedAt), tostring(before.steps[1] and before.steps[1].fee)))
+  assert(after.steps[1].id == hideID, "la ruta fijada debería seguir con las mismas recetas")
+  log[#log+1] = string.format("     ruta fijada: instructor %d -> %d", before.fees, after.fees)
+  lp.lock = savedLock
+  ES.IsRecipeKnown = savedKnown
+  ES.lockedPlans.Leatherworking = nil
+  acid.fee, acid.train, acid.trainer = saved[1], saved[2], saved[3]
+  ES.db.trainerFees, ES.db.trainerFeesCSV = nil, nil
+  GetNumTrainerServices, GetTrainerServiceInfo, GetTrainerServiceSkillLine, GetTrainerServiceCost = nil, nil, nil, nil
+  GetTrainerServiceSkillReq, GetTrainerServiceItemLink, UnitReaction = nil, nil, nil
 end)
 step("pesca: guía por tramos", function()
   -- Página propia: tramos con cómo conseguir el rango y las zonas; marca el tuyo

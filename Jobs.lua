@@ -41,6 +41,9 @@ end
 
 function Step()
   scheduled = false
+  -- Con la ventana cerrada no se calcula nada: lo pedido sigue en la cola y se
+  -- retoma al abrirla (Jobs.Resume, UI.lua). Las rutas solo se calculan si se ven
+  if CraftersJournalMainFrame and not CraftersJournalMainFrame:IsShown() then return end
   frameStart = debugprofilestop()
   while queue[1] and not OverBudget() do
     local job = queue[1]
@@ -79,6 +82,8 @@ function Jobs.Run(key, version, fn, onDone, owner)
   queue[#queue + 1] = { key = key, version = version, fn = fn, listeners = { [owner] = onDone } }
   Schedule()
 end
+
+function Jobs.Resume() Schedule() end
 
 function Jobs.Busy(key)
   for _, job in ipairs(queue) do

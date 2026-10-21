@@ -4,7 +4,9 @@ local L = ES.L
 -- Al abrir un vendedor que tiene algo de tu lista de la compra (de las rutas
 -- empezadas o, si no hay, de la profesión que estabas mirando) sale al lado una
 -- ventana con esos materiales: lo que te falta, con un botón "Comprar todo", y lo
--- que ya tienes, en gris. Solo compra cuando pulsas (fila o botón).
+-- que ya tienes, en gris. Debajo, lo fabricado que la vista Profit dice que vendas
+-- al vendedor y llevas encima, con "Vender todo". Solo compra o vende cuando
+-- pulsas (fila o botón).
 --
 -- Comprar en Forever: cada compra pide un número de objetos (como mucho una pila);
 -- el servidor ignora las compras que llegan muy seguidas, así que van de una en
@@ -38,8 +40,8 @@ local function Plans()
   return plans
 end
 
--- Lo que pide la lista de la compra desde tu nivel, y lo que tienes (bolsas, banco y
--- lo comprado que espera en el correo): { [itemID] = { need, have } }
+-- Lo que pide la lista de la compra desde tu nivel, y lo que tienes (bolsas, más lo
+-- que acabas de comprar aquí y aún no ha llegado): { [itemID] = { need, have } }
 local function Needs()
   local need = {}
   for _, p in ipairs(Plans()) do
@@ -52,7 +54,7 @@ local function Needs()
   for itemID, q in pairs(need) do
     local n = math.ceil(q - 0.001)
     if n > 0 then
-      out[itemID] = { need = n, have = ES:ItemCount(itemID) + Ledger():InMail(itemID) + Vendor:Pending(itemID) }
+      out[itemID] = { need = n, have = ES:ItemCount(itemID) + Vendor:Pending(itemID) }
     end
   end
   return out
@@ -85,6 +87,46 @@ function Vendor:List()
     return a.cost > b.cost
   end)
   return list
+end
+
+-- Lo que la vista Profit dice que vendas al vendedor y llevas en las bolsas (de las
+-- mismas rutas): { { itemID, n, unit, value } }, lo que más da arriba
+function Vendor:SellList()
+  local sell = {}
+  if not Ledger() then return {} end
+  for _, p in ipairs(Plans()) do
+    for _, d in ipairs(p.plan.destinations or {}) do
+      local a = ES.Planner.SaleAdvice(d)
+      if a.vendor > 0 then sell[d.itemID] = (sell[d.itemID] or 0) + a.vendor end
+    end
+  end
+  local list = {}
+  for itemID, n in pairs(sell) do
+    n = math.min(n, Ledger().BagCount(itemID))
+    local unit = ES:VendorSellPrice(itemID) or 0
+    if n > 0 and unit > 0 then list[#list + 1] = { itemID = itemID, n = n, unit = unit, value = n * unit } end
+  end
+  table.sort(list, function(a, b) return a.value > b.value or (a.value == b.value and a.itemID < b.itemID) end)
+  return list
+end
+
+-- Vende `entry` (de Vendor:SellList), o todo, de uno en uno con BUY_GAP (como las compras)
+function Vendor:Sell(entries)
+  local i = 0
+  local function Next()
+    i = i + 1
+    local e = entries[i]
+    if not e or not Ledger():MerchantOpen() then
+      self.selling = nil
+      self:Refresh()
+      return
+    end
+    Ledger():SellToVendor(e.itemID, e.n)
+    C_Timer.After(BUY_GAP, Next)
+  end
+  if self.selling then return end
+  self.selling = true
+  Next()
 end
 
 ---------------------------------------------------------------------------
@@ -183,6 +225,30 @@ end
 -- Ventana
 ---------------------------------------------------------------------------
 local panel
+local SECTION_H = 20
+local SELL_ROWS = 4 -- filas reservadas para vender (ver Refresh)
+
+-- Tooltip y clic de una fila: comprar lo que falta o vender lo que sobra
+local function RowClick(self)
+  if self.kind == "buy" and self.entry.qty > 0 then Vendor:Buy(self.entry)
+  elseif self.kind == "sell" then Vendor:Sell({ self.entry }) end
+end
+
+local function RowEnter(self)
+  if not self.entry then return end
+  GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+  if GameTooltip.SetItemByID then GameTooltip:SetItemByID(self.entry.itemID) end
+  GameTooltip:AddLine(" ")
+  if self.kind == "sell" then
+    GameTooltip:AddLine(string.format(L["Clic: vender %d por %s."], self.entry.n, ES.Money(self.entry.value)), 0.5, 0.8, 1)
+  elseif self.entry.qty > 0 then
+    GameTooltip:AddLine(string.format(L["Clic: comprar %d por %s."], self.entry.qty, ES.Money(self.entry.cost)), 0.5, 0.8, 1)
+  else
+    GameTooltip:AddLine(L["Ya tienes lo que te hace falta para la ruta."], 0.4, 1, 0.4)
+  end
+  GameTooltip:Show()
+end
+
 local function CreatePanel()
   local f = CreateFrame("Frame", "CraftersJournalVendorPanel", MerchantFrame or UIParent, "BackdropTemplate")
   f:SetWidth(WIDTH)
@@ -198,11 +264,12 @@ local function CreatePanel()
   f.sub:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -3)
   f.sub:SetWidth(WIDTH - 24)
   f.sub:SetJustifyH("LEFT")
+  -- Encabezado de la sección de vender (se coloca al pintar, tras las filas de comprar)
+  f.sellHeader = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   f.rows = {}
   for i = 1, MAX_ROWS do
     local row = CreateFrame("Button", nil, f)
     row:SetSize(WIDTH - 16, ROW_H)
-    row:SetPoint("TOPLEFT", 8, -40 - (i - 1) * ROW_H)
     local hl = row:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints()
     hl:SetColorTexture(1, 0.82, 0.25, 0.1)
@@ -218,28 +285,36 @@ local function CreatePanel()
     row.qty:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 6, 1)
     row.cost = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     row.cost:SetPoint("RIGHT", -4, 0)
-    row:SetScript("OnClick", function(self) if self.entry and self.entry.qty > 0 then Vendor:Buy(self.entry) end end)
-    row:SetScript("OnEnter", function(self)
-      if not self.entry then return end
-      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      if GameTooltip.SetItemByID then GameTooltip:SetItemByID(self.entry.itemID) end
-      GameTooltip:AddLine(" ")
-      if self.entry.qty > 0 then
-        GameTooltip:AddLine(string.format(L["Clic: comprar %d por %s."], self.entry.qty, ES.Money(self.entry.cost)), 0.5, 0.8, 1)
-      else
-        GameTooltip:AddLine(L["Ya tienes lo que te hace falta para la ruta."], 0.4, 1, 0.4)
-      end
-      GameTooltip:Show()
-    end)
+    row:SetScript("OnClick", RowClick)
+    row:SetScript("OnEnter", RowEnter)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
     f.rows[i] = row
   end
   f.buyAll = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
   f.buyAll:SetSize(WIDTH - 24, 24)
-  f.buyAll:SetPoint("BOTTOM", 0, 10)
   f.buyAll:SetScript("OnClick", function() Vendor:BuyAll() end)
+  f.sellAll = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+  f.sellAll:SetSize(WIDTH - 24, 24)
+  f.sellAll:SetScript("OnClick", function()
+    local list = Vendor:SellList()
+    local total = 0
+    for _, e in ipairs(list) do total = total + e.value end
+    ES:Print(string.format(L["Vendiendo %d objetos de tus rutas por %s..."], #list, ES.Money(total)))
+    Vendor:Sell(list)
+  end)
   f:Hide()
   return f
+end
+
+local function Icon(row, itemID, grey)
+  local _, _, texture = ES:GetItemData(itemID)
+  row.icon:SetTexture(texture or (GetItemIcon and GetItemIcon(itemID)) or 134400)
+  row.icon:SetDesaturated(grey)
+end
+
+local function Label(itemID)
+  local name = ES:GetItemData(itemID)
+  return name or ES:DataItemName(itemID) or ("#" .. itemID)
 end
 
 function Vendor:Refresh()
@@ -247,8 +322,8 @@ function Vendor:Refresh()
     if panel then panel:Hide() end
     return
   end
-  local list = self:List()
-  if #list == 0 and not self.pumping then
+  local list, sell = self:List(), self:SellList()
+  if #list == 0 and #sell == 0 and not self.pumping and not self.selling then
     if panel then panel:Hide() end
     return
   end
@@ -261,37 +336,82 @@ function Vendor:Refresh()
     total = total + e.cost
     if e.qty > 0 then missing = missing + 1 end
   end
-  panel.sub:SetText(self.pumping and L["Comprando…"]
+  panel.sub:SetText(self.pumping and L["Comprando…"] or self.selling and L["Vendiendo…"]
+    or #list == 0 and L["Para vender al vendedor, de tus rutas:"]
     or missing > 0 and L["De tu lista de la compra, este vendedor tiene:"]
     or L["Ya tienes todo lo que te hace falta de este vendedor."])
-  for i, row in ipairs(panel.rows) do
-    local e = list[i]
-    row.entry = e
-    if e then
-      local name, _, texture = ES:GetItemData(e.itemID)
-      row.icon:SetTexture(texture or (GetItemIcon and GetItemIcon(e.itemID)) or 134400)
-      row.icon:SetDesaturated(e.qty == 0)
-      local label = name or ES:DataItemName(e.itemID) or ("#" .. e.itemID)
-      if e.qty > 0 then
-        row.name:SetText(label)
-        row.qty:SetText(string.format(L["Tienes %d/%d · compras %d × %s"], math.min(e.have, e.need), e.need, e.qty,
-          ES.Money(e.price / e.batch)))
-        row.cost:SetText(ES.Money(e.cost))
-      else
-        -- Ya lo tienes: se ve, en gris, para que sepas que este vendedor también lo vende
-        row.name:SetText("|cff9d9d9d" .. label:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "") .. "|r")
-        row.qty:SetText("|cff40ff40" .. string.format(L["Tienes %d/%d"], e.have, e.need) .. "|r")
-        row.cost:SetText("")
-      end
-      row:Show()
+  -- Filas: lo que comprar y, debajo, lo que vender (entre las dos, como mucho MAX_ROWS)
+  local y = -40
+  -- (con algo que vender, al menos SELL_ROWS filas para ello: una lista de compra
+  -- larga no tapa la sección de vender ni su botón)
+  local shownBuy = math.min(#list, MAX_ROWS - math.min(#sell, SELL_ROWS))
+  local shownSell = math.min(#sell, MAX_ROWS - shownBuy)
+  local r = 0
+  for i = 1, shownBuy do
+    r = r + 1
+    local row, e = panel.rows[r], list[i]
+    row.kind, row.entry = "buy", e
+    row:ClearAllPoints()
+    row:SetPoint("TOPLEFT", 8, y)
+    y = y - ROW_H
+    Icon(row, e.itemID, e.qty == 0)
+    local label = Label(e.itemID)
+    if e.qty > 0 then
+      row.name:SetText(label)
+      row.qty:SetText(string.format(L["Tienes %d/%d · compras %d × %s"], math.min(e.have, e.need), e.need, e.qty,
+        ES.Money(e.price / e.batch)))
+      row.cost:SetText(ES.Money(e.cost))
     else
-      row:Hide()
+      -- Ya lo tienes: se ve, en gris, para que sepas que este vendedor también lo vende
+      row.name:SetText("|cff9d9d9d" .. label:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "") .. "|r")
+      row.qty:SetText("|cff40ff40" .. string.format(L["Tienes %d/%d"], e.have, e.need) .. "|r")
+      row.cost:SetText("")
     end
+    row:Show()
   end
-  local shown = math.min(#list, MAX_ROWS)
-  panel:SetHeight(40 + shown * ROW_H + 44)
-  panel.buyAll:SetText(missing > 0 and string.format(L["Comprar todo (%s)"], ES.Money(total)) or L["Nada que comprar"])
-  panel.buyAll:SetEnabled(missing > 0 and not self.pumping)
+  panel.buyAll:ClearAllPoints()
+  panel.buyAll:SetShown(shownBuy > 0)
+  if shownBuy > 0 then
+    panel.buyAll:SetPoint("TOP", panel, "TOP", 0, y - 6)
+    y = y - 34
+    panel.buyAll:SetText(missing > 0 and string.format(L["Comprar todo (%s)"], ES.Money(total)) or L["Nada que comprar"])
+    panel.buyAll:SetEnabled(missing > 0 and not self.pumping)
+  end
+  local sellTotal = 0
+  for _, e in ipairs(sell) do sellTotal = sellTotal + e.value end
+  panel.sellHeader:SetShown(shownSell > 0 and shownBuy > 0)
+  if shownSell > 0 and shownBuy > 0 then
+    panel.sellHeader:ClearAllPoints()
+    panel.sellHeader:SetPoint("TOPLEFT", 12, y - 4)
+    panel.sellHeader:SetText(L["Vender al vendedor"])
+    y = y - SECTION_H - 4
+  end
+  for i = 1, shownSell do
+    r = r + 1
+    local row, e = panel.rows[r], sell[i]
+    row.kind, row.entry = "sell", e
+    row:ClearAllPoints()
+    row:SetPoint("TOPLEFT", 8, y)
+    y = y - ROW_H
+    Icon(row, e.itemID, false)
+    row.name:SetText(Label(e.itemID))
+    row.qty:SetText(string.format(L["Vendes %d × %s"], e.n, ES.Money(e.unit)))
+    row.cost:SetText("|cff40ff40+" .. ES.Money(e.value) .. "|r")
+    row:Show()
+  end
+  for k = r + 1, MAX_ROWS do
+    panel.rows[k].entry, panel.rows[k].kind = nil, nil
+    panel.rows[k]:Hide()
+  end
+  panel.sellAll:ClearAllPoints()
+  panel.sellAll:SetShown(shownSell > 0)
+  if shownSell > 0 then
+    panel.sellAll:SetPoint("TOP", panel, "TOP", 0, y - 6)
+    y = y - 34
+    panel.sellAll:SetText(string.format(L["Vender todo (%s)"], ES.Money(sellTotal)))
+    panel.sellAll:SetEnabled(not self.selling)
+  end
+  panel:SetHeight(-y + 10)
   panel:Show()
 end
 
@@ -303,7 +423,7 @@ do
   f:SetScript("OnEvent", function(_, event)
     if not ES.db then return end
     if event == "MERCHANT_CLOSED" then
-      Vendor.queue, Vendor.pumping = {}, nil
+      Vendor.queue, Vendor.pumping, Vendor.selling = {}, nil, nil
       if panel then panel:Hide() end
     elseif MerchantFrame and MerchantFrame:IsShown() then
       Vendor:Refresh()

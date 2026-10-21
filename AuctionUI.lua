@@ -19,21 +19,19 @@ local function ItemName(itemID)
   return name
 end
 
--- Modos del panel: "money" (lote de Ganar dinero) y las profesiones que tienes
--- (si no tienes ninguna, todas, sin el modo Ganar dinero)
+-- Modos del panel: "money" (lote de Ganar dinero) y las profesiones con una ruta
+-- empezada ("Empezar ruta"): es lo que vas a comprar. Sin ninguna, el panel dice
+-- cómo empezar una.
 local MONEY = "money"
 -- (Ganar dinero solo en desarrollo, ES.DEV; la Pesca no compra nada: fuera)
 local function ProfessionKeys()
-  local mine, all = ES.DEV and { MONEY } or {}, {}
-  local base = #mine
+  local keys = {}
   for _, p in ipairs(ES.PROFESSIONS) do
     local data = ES.Data[p.key]
-    if data and not data.guide then
-      all[#all + 1] = p.key
-      if ES:GetProfessionSkill(data.skillLine) then mine[#mine + 1] = p.key end
-    end
+    if data and not data.guide and ES:RouteLock(p.key) then keys[#keys + 1] = p.key end
   end
-  return #mine > base and mine or all
+  if ES.DEV then keys[#keys + 1] = MONEY end -- al final: por defecto sale una ruta
+  return keys
 end
 
 ---------------------------------------------------------------------------
@@ -147,7 +145,9 @@ function ES:RefreshAuctionPlan(force)
   end
   state.need, state.baseline, state.live = {}, {}, {}
   state.plan, state.earn = nil, nil
-  if state.profKey == MONEY then
+  if not state.profKey then
+    -- Ninguna ruta empezada: nada que comprar (RenderAuctionPanel lo explica)
+  elseif state.profKey == MONEY then
     -- Lote de Ganar dinero: lo que ya llevas cuenta (no hay que comprarlo)
     state.earn = ES.Earn:Ideas()
     for _, it in ipairs(state.earn.shopping) do
@@ -268,8 +268,10 @@ local function CreatePanel(ahFrame)
   p.prof = p:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   p.prof:SetPoint("LEFT", prev, "RIGHT", 4, 0)
   p.prof:SetPoint("RIGHT", nextB, "LEFT", -4, 0)
+  p.prevButton, p.nextProfButton = prev, nextB
   local function Cycle(delta)
     local keys = ProfessionKeys()
+    if #keys == 0 then return end
     local at = 1
     for i, k in ipairs(keys) do if k == state.profKey then at = i end end
     state.profKey = keys[(at - 1 + delta) % #keys + 1]
@@ -372,7 +374,13 @@ end
 function ES:RenderAuctionPanel()
   if not panel or not panel:IsShown() then return end
   local plan, earn = state.plan, state.earn
-  if earn then
+  -- Flechas solo si hay más de una lista entre la que elegir
+  local several = #ProfessionKeys() > 1
+  panel.prevButton:SetShown(several)
+  panel.nextProfButton:SetShown(several)
+  if not state.profKey then
+    panel.prof:SetText(GREY .. L["Ninguna ruta empezada"] .. "|r")
+  elseif earn then
     panel.prof:SetText(L["Ganar dinero"] .. " " .. GREY .. L["(lote de hoy)"] .. "|r")
   else
     panel.prof:SetText(string.format("%s %s(%d → %d)|r", ES:ProfLabel(state.profKey), GREY, state.from or 1, state.to or 1))
@@ -388,7 +396,9 @@ function ES:RenderAuctionPanel()
       if rem == 0 then done = done + 1 else left = left + rem * l.it.unit end
     end
   end
-  if earn and #earn.batch == 0 then
+  if not state.profKey then
+    panel.summary:SetText(GREY .. L["Aquí sale lo que comprar para tus rutas empezadas.|r"])
+  elseif earn and #earn.batch == 0 then
     panel.summary:SetText(GREY .. L["Ninguna receta tuya da beneficio ahora.|r"])
   elseif not plan and not earn then
     panel.summary:SetText(GREEN .. L["Ya estás en el objetivo de esta profesión.|r"])
@@ -397,7 +407,9 @@ function ES:RenderAuctionPanel()
   else
     panel.summary:SetText(string.format(L["%d de %d comprados · te falta ~%s"], done, total, ES.Money(left)))
   end
-  panel.empty:SetText(#lines == 0 and ((plan or earn) and L["Nada que comprar ni vender aquí."] or "") or "")
+  panel.empty:SetText(#lines == 0 and (not state.profKey
+    and L["En Crafter's Journal, abre una profesión y pulsa Empezar ruta: su lista de la compra saldrá aquí."]
+    or (plan or earn) and L["Nada que comprar ni vender aquí."] or "") or "")
   panel.nextButton:SetEnabled(total > done)
 
   local y = 0

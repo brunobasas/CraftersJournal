@@ -34,7 +34,7 @@ ES.Data.Leatherworking = {
     [2162] = { name = "Embossed Leather Cloak", t = { 1, 70, 85, 100 }, fee = 100, train = 40, r = { { 2318, 5 }, { 2320, 2 } }, out = { 2310, 1 }, oq = 2 },
     [2163] = { name = "White Leather Jerkin", t = { 1, 70, 85, 100 }, scroll = 2407, train = 40, sq = 2, r = { { 2318, 8 }, { 2320, 2 }, { 2324, 1 } }, out = { 2311, 1 }, oq = 2 },
     [2164] = { name = "Fine Leather Gloves", t = { 1, 80, 95, 110 }, scroll = 2408, train = 50, sq = 2, r = { { 4231, 1 }, { 2318, 4 }, { 2320, 2 } }, out = { 2312, 1 }, oq = 2 },
-    [2165] = { name = "Medium Armor Kit", t = { 1, 90, 97, 105 }, fee = 650, train = 75, r = { { 2319, 4 }, { 2320, 1 } }, out = { 2313, 1 }, oq = 1 },
+    [2165] = { name = "Medium Armor Kit", t = { 1, 90, 97, 105 }, fee = 250, train = 75, r = { { 2319, 4 }, { 2320, 1 } }, out = { 2313, 1 }, oq = 1 },
     [2166] = { name = "Toughened Leather Armor", t = { 1, 120, 132, 145 }, fee = 1400, train = 95, r = { { 2319, 10 }, { 4231, 2 }, { 2321, 2 } }, out = { 2314, 1 }, oq = 1 },
     [2167] = { name = "Dark Leather Boots", t = { 1, 100, 112, 125 }, fee = 650, train = 75, r = { { 2319, 4 }, { 2321, 2 }, { 4340, 1 } }, out = { 2315, 1 }, oq = 2 },
     [2168] = { name = "Dark Leather Cloak", t = { 1, 110, 122, 135 }, fee = 1000, train = 85, r = { { 2319, 8 }, { 2321, 1 }, { 4340, 1 } }, out = { 2316, 1 }, oq = 2 },
@@ -65,7 +65,7 @@ ES.Data.Leatherworking = {
     [3779] = { name = "Barbaric Belt", t = { 1, 195, 205, 215 }, scroll = 4301, train = 175, sq = 3, r = { { 4234, 6 }, { 4236, 2 }, { 4096, 2 }, { 5633, 1 }, { 4291, 1 }, { 7071, 1 } }, out = { 4264, 1 }, oq = 2 },
     [3780] = { name = "Heavy Armor Kit", t = { 1, 145, 155, 165 }, fee = 2000, train = 125, r = { { 4234, 5 }, { 2321, 1 } }, out = { 4265, 1 }, oq = 1 },
     [3816] = { name = "Cured Light Hide", t = { 1, 50, 60, 70 }, fee = 50, train = 30, r = { { 783, 1 }, { 4289, 1 } }, out = { 4231, 1 }, oq = 1 },
-    [3817] = { name = "Cured Medium Hide", t = { 1, 90, 97, 105 }, fee = 650, train = 75, r = { { 4232, 1 }, { 4289, 1 } }, out = { 4233, 1 }, oq = 1 },
+    [3817] = { name = "Cured Medium Hide", t = { 1, 90, 97, 105 }, fee = 200, train = 75, r = { { 4232, 1 }, { 4289, 1 } }, out = { 4233, 1 }, oq = 1 },
     [3818] = { name = "Cured Heavy Hide", t = { 1, 135, 140, 145 }, fee = 1800, train = 125, r = { { 4235, 1 }, { 4289, 3 } }, out = { 4236, 1 }, oq = 1 },
     [4096] = { name = "Raptor Hide Harness", t = { 1, 160, 170, 180 }, scroll = 13287, train = 140, scrollPrice = 2500, sq = 2, r = { { 4461, 6 }, { 4234, 4 }, { 2321, 2 } }, out = { 4455, 1 }, oq = 2 },
     [4097] = { name = "Raptor Hide Belt", t = { 1, 160, 170, 180 }, scroll = 13288, train = 140, scrollPrice = 2500, sq = 2, r = { { 4461, 4 }, { 4234, 4 }, { 2321, 2 } }, out = { 4456, 1 }, oq = 2 },
@@ -303,7 +303,7 @@ ES.Data.Leatherworking = {
     [1224630] = { name = "Scarlet Huntsman's Boots", t = { 1, 270, 287, 305 }, scroll = 238321, train = 260, sq = 3, r = { { 12811, 1 }, { 15408, 10 } }, out = { 238287, 1 }, oq = 1 },
     [1226689] = { name = "Scarlet Quiver", t = { 1, 280, 285, 290 }, scroll = 238927, train = 275, sq = 2, r = { { 12811, 1 }, { 8170, 24 }, { 15407, 2 } }, out = { 238925, 1 }, oq = 1 },
     [1226690] = { name = "Scarlet Ammo Pouch", t = { 1, 280, 285, 290 }, scroll = 238928, train = 275, sq = 2, r = { { 12811, 1 }, { 15408, 24 }, { 15407, 2 } }, out = { 238926, 1 }, oq = 1 },
-    [1229432] = { name = "Camp Tent", t = { 1, 20, 22, 25 }, trainer = true, train = 20, r = { { 2318, 5 } }, out = { 279978, 1 }, oq = 1 },
+    [1229432] = { name = "Camp Tent", t = { 1, 20, 22, 25 }, fee = 0, train = 20, r = { { 2318, 5 } }, out = { 279978, 1 }, oq = 1 },
     [1254965] = { name = "Forceful Rugged Armor Kit", t = { 1, 235, 245, 255 }, scroll = 252942, train = 235, scrollPrice = 5500, sq = 2, r = { { 15564, 1 }, { 11176, 2 }, { 9206, 2 }, { 249429, 1 }, { 248824, 1 } }, out = { 252488, 1 }, oq = 2 },
     [1254966] = { name = "Mystic Rugged Armor Kit", t = { 1, 235, 245, 255 }, scroll = 252941, train = 235, sq = 2, favor = 90, favorRep = 6, r = { { 15564, 1 }, { 11176, 2 }, { 13444, 2 }, { 249429, 1 }, { 248824, 1 } }, out = { 252487, 1 }, oq = 2 },
     [1254967] = { name = "Pristine Scorpid Leggings", t = { 1, 320, 330, 340 }, scroll = 252940, train = 300, sq = 4, r = { { 8170, 20 }, { 15408, 40 }, { 12810, 12 }, { 15407, 4 }, { 249429, 10 }, { 14341, 2 }, { 248825, 20 } }, out = { 252606, 1 }, oq = 4 },
@@ -620,7 +620,7 @@ ES.Data.SellPrices[4247] = 1049
 ES.Data.SellPrices[4248] = 791
 ES.Data.SellPrices[4249] = 703
 ES.Data.SellPrices[4250] = 705
-ES.Data.SellPrices[4251] = 1199
+ES.Data.SellPrices[4251] = 659
 ES.Data.SellPrices[4252] = 1457
 ES.Data.SellPrices[4253] = 962
 ES.Data.SellPrices[4254] = 1071

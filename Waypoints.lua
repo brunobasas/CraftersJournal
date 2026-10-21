@@ -449,6 +449,90 @@ function WP.SetWaypoint(npcID)
   return true
 end
 
+---------------------------------------------------------------------------
+-- Estrella sobre el PNJ al que te manda el addon (como RestedXP). Poner una marca
+-- está protegido: el addon no puede hacerlo él solo ("bloqueado de una acción
+-- solo disponible para la interfaz de Blizzard"), solo como respuesta a un clic
+-- tuyo, con una macro (/targetexact nombre + /tm estrella) en un botón seguro.
+---------------------------------------------------------------------------
+local STAR = 1
+
+-- Macro que selecciona al PNJ por su nombre exacto y le pone la estrella. Antes
+-- quita el objetivo: si el PNJ no está cerca, /targetexact no encuentra a nadie y
+-- /tm no marca a quien tuvieras seleccionado; y entonces se recupera el que
+-- tenías (/targetlasttarget). En combate no hace nada
+function WP.MarkMacro(name)
+  return "/cleartarget [nocombat]\n/targetexact [nocombat] " .. name .. "\n/tm [nocombat,exists] " .. STAR
+    .. "\n/targetlasttarget [nocombat,noexists]"
+end
+
+-- Clic en una fila de instructor o vendedor (ProfessionUI.lua): al pasar el ratón
+-- se le pone encima un botón seguro invisible con la macro, así tu clic le pone la
+-- estrella si está cerca y luego marca el camino como siempre. Es uno solo y cuelga
+-- de UIParent: un botón seguro dentro de la ventana la volvería protegida y
+-- cerrarla en combate daría el aviso de acción bloqueada. Se suelta al entrar en
+-- combate (en ese momento aún se puede); en combate, la fila funciona como antes
+local hover
+local function ReleaseHover()
+  if not hover or (InCombatLockdown and InCombatLockdown()) then return end
+  if hover.row then hover.row:UnlockHighlight() end
+  hover.row = nil
+  hover:ClearAllPoints()
+  hover:Hide()
+end
+
+function WP.HoverRow(row)
+  if (InCombatLockdown and InCombatLockdown()) or not WP.Available() or not row.go then return end
+  local npc = WP.NPC(row.go() or 0)
+  if not (npc and npc.name) then return end
+  if not hover then
+    hover = CreateFrame("Button", "CraftersJournalRowMarkButton", UIParent, "SecureActionButtonTemplate")
+    -- Solo el botón izquierdo, como la fila (bajando o soltando, según la opción del juego)
+    hover:RegisterForClicks("LeftButtonUp", "LeftButtonDown")
+    hover:SetAttribute("type", "macro")
+    -- Después de la macro, lo que haga la fila (marcar el camino, buscar en la AH...)
+    hover:HookScript("PostClick", function(self, _, down)
+      local onClick = not down and self.row and self.row:GetScript("OnClick")
+      if onClick then onClick(self.row) end
+    end)
+    hover:SetScript("OnEnter", function(self)
+      if not self.row then return end
+      self.row:LockHighlight()
+      if self.row.tooltip then self.row.tooltip(self.row) end
+    end)
+    hover:SetScript("OnLeave", function()
+      GameTooltip:Hide()
+      ReleaseHover()
+    end)
+    -- La rueda sigue moviendo la lista de debajo
+    hover:EnableMouseWheel(true)
+    hover:SetScript("OnMouseWheel", function(self, delta)
+      local p = self.row
+      while p and not p:GetScript("OnMouseWheel") do p = p:GetParent() end
+      if p then p:GetScript("OnMouseWheel")(p, delta) end
+    end)
+  end
+  hover.row = row
+  hover:SetFrameStrata(row:GetFrameStrata())
+  hover:SetFrameLevel(row:GetFrameLevel() + 5)
+  hover:ClearAllPoints()
+  -- Sin tapar la ✕ de la fila
+  hover:SetPoint("TOPLEFT", row, "TOPLEFT")
+  hover:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", row.onSkip and -28 or 0, 0)
+  hover:SetAttribute("macrotext", WP.MarkMacro(npc.name))
+  hover:Show()
+end
+WP.HoverButton = function() return hover end -- para pruebas
+WP.ReleaseHover = ReleaseHover -- al cerrar la ventana (UI.lua)
+
+-- Al entrar en combate se suelta (en ese momento aún se puede): la ventana no queda
+-- atada a un botón seguro
+do
+  local f = CreateFrame("Frame")
+  ES.SafeRegister(f, "PLAYER_REGEN_DISABLED")
+  f:SetScript("OnEvent", ReleaseHover)
+end
+
 -- Para una fila de la ruta: devuelve una función que elige el PNJ al pulsar
 -- (la posición del jugador puede cambiar) y las líneas del tooltip.
 -- kind: "trainer" (profKey, cap), "vendor" (itemID), "auction" (subastador) o

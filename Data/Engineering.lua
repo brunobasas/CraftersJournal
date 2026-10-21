@@ -208,7 +208,7 @@ ES.Data.Engineering = {
     [1226211] = { name = "Tinker: Nitro Boosts", t = { 1, 280, 282, 285 }, scroll = 238787, train = 280, sq = 3, r = { { 238737, 1 }, { 16006, 1 }, { 16000, 1 } }, tool = 14 },
     [1226212] = { name = "Tinker: Magnetic Displacement", t = { 1, 280, 282, 285 }, scroll = 238788, train = 280, sq = 3, r = { { 238737, 1 }, { 16006, 1 }, { 4387, 2 } }, tool = 14 },
     [1228088] = { name = "Pop-Up Shrub", t = { 1, 255, 257, 260 }, scroll = 239222, train = 250, sq = 3, r = { { 15994, 1 }, { 10560, 1 }, { 4382, 1 } }, tool = 14, out = { 237023, 1 }, oq = 1 },
-    [1230656] = { name = "Reagent Bot", t = { 1, 20, 22, 25 }, trainer = true, train = 20, r = { { 4359, 1 }, { 4361, 1 } }, out = { 279950, 1 }, oq = 1 },
+    [1230656] = { name = "Reagent Bot", t = { 1, 20, 22, 25 }, fee = 0, train = 20, r = { { 4359, 1 }, { 4361, 1 } }, out = { 279950, 1 }, oq = 1 },
     [1249634] = { name = "Sandpaper", t = { 1, 130, 142, 155 }, r = { { 249425, 2 }, { 2996, 1 } }, out = { 249432, 1 }, oq = 2 },
     [1263034] = { name = "Repair Bot", t = { 1, 140, 142, 145 }, scroll = 273092, train = 140, sq = 2, r = { { 4375, 2 }, { 4371, 1 }, { 4234, 1 } }, out = { 279949, 1 }, oq = 1 },
     [1266893] = { name = "SAF-T Tabs", t = { 1, 25, 27, 30 }, scroll = 264201, train = 25, sq = 1, favor = 45, r = { { 2570, 1 }, { 249409, 1 } }, out = { 260784, 1 }, oq = 1 },

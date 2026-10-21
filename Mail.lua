@@ -64,26 +64,9 @@ function Mail:Scan()
   if not GetInboxNumItems or not GetInboxHeaderInfo then return 0 end
   local soldPat = SubjectPattern(AUCTION_SOLD_MAIL_SUBJECT)
   local expiredPat = SubjectPattern(AUCTION_EXPIRED_MAIL_SUBJECT)
-  local wonPat = SubjectPattern(AUCTION_WON_MAIL_SUBJECT)
   local s, now, added = Store(), time(), 0
   for i = 1, GetInboxNumItems() do
     local _, _, _, subject, money, _, daysLeft = GetInboxHeaderInfo(i)
-    -- Subasta ganada: lo pagado, al gasto real de la ruta fijada. Solo si la compra no
-    -- se apuntó ya al hacerla (Ledger.hooksAH: la AH de Forever), para no contarla dos veces
-    local won = subject and daysLeft and wonPat and subject:match(wonPat)
-    if won and ES.Ledger and not ES.Ledger.hooksAH then
-      local expires = math.floor((now + daysLeft * 86400) / 3600)
-      local key = table.concat({ "won", won, expires }, "|")
-      local itemID = not s.seen[key] and ES.Ledger:IDByName(won)
-      if itemID and GetInboxInvoiceInfo then
-        local invoiceType, _, _, bid, _, _, _, _, _, _, count = GetInboxInvoiceInfo(i)
-        if invoiceType == "buyer" and bid then
-          s.seen[key] = now
-          local when = math.min(now, now - (30 - daysLeft) * 86400) -- llegada del correo
-          ES.Ledger:Record(ES.Ledger:Kind(itemID), itemID, count or 1, bid, when)
-        end
-      end
-    end
     if subject and daysLeft then
       local kind, name
       local sold = soldPat and subject:match(soldPat)

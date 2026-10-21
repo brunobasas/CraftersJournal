@@ -197,7 +197,7 @@ ES.Data.Enchanting = {
     [1219587] = { name = "Enchant Cloak - Agility", t = { 1, 320, 340, 360 }, scroll = 274399, train = 300, sq = 3, favor = 240, favorRep = 6, r = { { 16203, 3 }, { 16204, 9 }, { 7078, 1 } }, tool = 377 },
     [1220623] = { name = "Enchant Shield - Critical Strike", t = { 1, 320, 340, 360 }, scroll = 274400, train = 300, sq = 3, r = { { 14344, 5 }, { 16204, 15 }, { 12938, 1 } }, tool = 377 },
     [1220624] = { name = "Enchant Bracer - Greater Spellpower", t = { 1, 320, 340, 360 }, scroll = 274401, train = 300, sq = 3, favor = 240, favorRep = 6, r = { { 16203, 3 }, { 16204, 9 }, { 12808, 12 }, { 8831, 2 } }, tool = 377 },
-    [1230643] = { name = "Enchanted Lute", t = { 1, 20, 22, 25 }, trainer = true, train = 20, r = { { 4470, 1 }, { 10940, 1 } }, out = { 279976, 1 }, oq = 1 },
+    [1230643] = { name = "Enchanted Lute", t = { 1, 20, 22, 25 }, fee = 0, train = 20, r = { { 4470, 1 }, { 10940, 1 } }, out = { 279976, 1 }, oq = 1 },
     [1231128] = { name = "Enchant Weapon - Grand Crusader", t = { 1, 305, 307, 310 }, scroll = 241191, train = 280, sq = 3, r = { { 14344, 5 }, { 12811, 2 }, { 20725, 2 }, { 12938, 1 } }, tool = 377 },
     [1231139] = { name = "Enchant 2H Weapon - Grand Arcanist", t = { 1, 305, 307, 310 }, scroll = 241195, train = 280, sq = 3, r = { { 14344, 10 }, { 12811, 4 }, { 20725, 4 }, { 12938, 1 } }, tool = 377 },
     [1231164] = { name = "Enchant Weapon - Grand Sorcerer", t = { 1, 305, 307, 310 }, scroll = 241201, train = 280, sq = 3, r = { { 14344, 6 }, { 12811, 3 }, { 20725, 2 }, { 12938, 1 } }, tool = 377 },

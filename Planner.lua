@@ -32,6 +32,10 @@ local BASIC_MAX_YELLOW = 50 -- recetas sin instructor ni pergamino por debajo de
 -- Coste simbólico por fabricación y cuánto más puede costar la ruta que lo tiene
 -- en cuenta frente a la más barata (ver Planner:Plan)
 local CRAFT_COST = 5          -- cobre por fabricación, solo para elegir
+-- Lo que tiene que ahorrar cada fabricación de un material intermedio (Light Leather
+-- de Ruined Leather Scraps, barras...) frente a comprarlo para fabricarlo (ver Acquire)
+local INTERMEDIATE_CRAFT_COST = 5
+local VIA_ROUNDS = 2          -- vueltas de cambiar fabricar ↔ comprar (ver Planner:Plan)
 local MAX_EXTRA_PCT = 0.03    -- hasta un 3% de los materiales más
 local MAX_EXTRA_MIN = 100     -- o 1 plata, lo que sea mayor
 -- Recetas de pago usadas menos puntos de los supuestos al elegirlas (ver Planner:Plan)
@@ -46,6 +50,21 @@ local SMOOTH_PASSES = 4       -- tramos que se arreglan como mucho
 local MAX_SEARCH = 3
 local SEARCH_MIN_SAVING = 10  -- cobre: por debajo no merece cambiar la ruta
 local SEARCH_SOURCES = { vendor = true, ah = true, scroll = true, quest = true }
+-- Con lo que llevas (ver Planner.BagsAlternative)
+local BAGS_MIN_POINTS = 5   -- puntos que te tienen que dar tus materiales
+local BAGS_MIN_SAVING = 50  -- cobre de oro ahorrado: por debajo no se considera
+local BAGS_MIN_WORTH = 50   -- cobre que tiene que ganar a vender lo tuyo para meterla en la ruta
+local BAGS_PASSES = 3       -- recetas con lo tuyo que se meten como mucho
+-- Empate: si usar lo tuyo sale casi igual que venderlo (la diferencia es menos del
+-- BAGS_TIE_PCT de lo que vale lo tuyo), se usa lo tuyo: no hay que vender 68 telas
+-- en la AH (depósito, sin garantía de venderlas) ni comprar los materiales de la ruta
+local BAGS_TIE_PCT = 0.15
+Planner.BAGS_MIN_WORTH = BAGS_MIN_WORTH
+
+-- ¿Usar lo tuyo (alt: ver BagsAlternative) compensa o empata con venderlo?
+function Planner.BagsWorth(alt)
+  return alt.saving - alt.value > -BAGS_TIE_PCT * (alt.value or 0)
+end
 
 -- Tramos de pasos cortos (menos de SMOOTH_MIN puntos cada uno, al menos dos
 -- seguidos): se rehace la ruta con cada receta del tramo para todo él (ruta fijada,
@@ -116,10 +135,19 @@ function Planner.Chance(t, skill)
   return (grey - skill) / (grey - yellow)
 end
 
+-- Precio del instructor y nivel al que enseña la receta: lo visto en el juego
+-- (Ledger:ReadTrainer, CraftersJournalDB.trainerFees) manda sobre los datos
+function Planner.Fee(recipe)
+  local seen = recipe.id and ES.db and ES.db.trainerFees and ES.db.trainerFees[recipe.id]
+  if seen then return seen.cost, seen.skill or recipe.train end
+  return recipe.fee, recipe.train
+end
+local Fee = Planner.Fee
+
 -- Recetas de pergamino buscadas por sus fuentes reales (misión, vendedor, AH;
 -- ver Waypoints.RecipeSource): solo si la profesión está en la prueba piloto
 local function Sourced(recipe, opts)
-  return opts.sourcedScrolls and recipe.scroll and not recipe.fee
+  return opts.sourcedScrolls and recipe.scroll and not Fee(recipe)
 end
 
 local function ScanPrices()
@@ -142,7 +170,8 @@ Planner.Annotate = Annotate
 
 -- Nivel mínimo para aprender la receta, o nil si no la consideramos disponible
 function Planner.LearnSkill(recipe, opts)
-  if Known(recipe) then return recipe.train or 1 end -- ya la sabes: siempre disponible
+  local fee, train = Fee(recipe)
+  if Known(recipe) then return train or 1 end -- ya la sabes: siempre disponible
   if recipe.rep and not ES:RepMet(recipe.rep) then return nil end -- te falta reputación
   -- Merchant's Favor: se compra con fichas y reputación del campamento, no con oro.
   -- Solo con su icono activado (opts.useFavor; por defecto no): entonces cuesta 0 oro
@@ -151,10 +180,10 @@ function Planner.LearnSkill(recipe, opts)
     local src = ES.Waypoints.RecipeSource(recipe, opts.prices or ScanPrices(), opts.noQuests)
     return src and src.best and (recipe.train or 1) or nil
   end
-  if recipe.fee or recipe.intermediate then return recipe.train end
+  if fee or recipe.intermediate then return train end
   if recipe.basic then return 1 end -- se aprende sola al coger la profesión (dato del cliente)
   -- De instructor sin precio conocido (nueva de Forever): al ponerse amarilla
-  if recipe.trainer then return recipe.train or recipe.t[2] end
+  if recipe.trainer then return train or recipe.t[2] end
   -- Datos antiguos sin "basic": las de amarilla baja eran básicas
   if not recipe.scroll and recipe.basic == nil and recipe.trainer == nil and recipe.t[2] <= BASIC_MAX_YELLOW then return 1 end
   if not opts.includeScrolls then return nil end
@@ -169,7 +198,8 @@ end
 function Planner.LearnCost(ctx, recipe)
   if Known(recipe) then return 0, "known" end
   if recipe.rep and not ES:RepMet(recipe.rep) then return 0, "rep" end -- solo para la vista Recetas
-  if recipe.fee then return recipe.fee, "trainer" end
+  local fee = Fee(recipe)
+  if fee then return fee, "trainer" end
   if recipe.trainer then return 0, "trainer" end -- de instructor, precio desconocido (se pinta "?")
   if recipe.basic then return 0, nil end
   if recipe.favor then return 0, "favor" end
@@ -251,18 +281,31 @@ local function NewContext(data, opts)
     used = {},       -- unidades de cada objeto ya compradas en la AH por el plan
     stock = {},      -- inventario del plan: lo fabricado en pasos anteriores, por lotes de valor
     owned = {},      -- lo que llevas en bolsas/banco y queda por usar
+    -- [itemID] = "craft" | "buy": lo que se decidió la primera vez para un material que
+    -- se puede fabricar; se mantiene en todo el plan (no restos Y cuero comprado a la
+    -- vez). opts.via lo fija de antemano (ver Plan y la ruta fijada)
+    via = {},
     visiting = {},
     producers = {},
   }
-  for itemID, entry in pairs(ctx.prices) do
-    local ladder = Ladder(entry)
-    ctx.ladders[itemID] = ladder
-    ctx.supply[itemID] = ladder and LadderSupply(ladder)
-    ctx.medians[itemID] = entry.median
+  -- opts.shared (PlanGPS): escaleras y quién fabrica qué, ya preparadas en este
+  -- mismo cálculo (mismos precios y mismo objetivo); no se modifican, se comparten
+  local shared = opts.shared
+  if shared and shared.prices == ctx.prices and shared.to == opts.to then
+    ctx.ladders, ctx.supply, ctx.medians, ctx.producers = shared.ladders, shared.supply, shared.medians, shared.producers
+  else
+    shared = nil
+    for itemID, entry in pairs(ctx.prices) do
+      local ladder = Ladder(entry)
+      ctx.ladders[itemID] = ladder
+      ctx.supply[itemID] = ladder and LadderSupply(ladder)
+      ctx.medians[itemID] = entry.median
+    end
   end
   for itemID, count in pairs(opts.owned or {}) do
     if count > 0 then ctx.owned[itemID] = count end
   end
+  for itemID, way in pairs(opts.via or {}) do ctx.via[itemID] = way end
   -- Herramientas por familia (bastones rúnicos, martillo, piedra filosofal):
   -- dentro de una familia la mejor que ya tienes cubre las inferiores
   ctx.toolMask = {}
@@ -270,12 +313,14 @@ local function NewContext(data, opts)
     local fam = tool.family or "rod"
     if (opts.owned or {})[tool.item] and tool.mask > (ctx.toolMask[fam] or 0) then ctx.toolMask[fam] = tool.mask end
   end
-  for id, r in pairs(data.recipes) do
-    local learn = r.out and Planner.LearnSkill(r, opts)
-    if learn and learn <= opts.to then
-      local list = ctx.producers[r.out[1]] or {}
-      list[#list + 1] = id
-      ctx.producers[r.out[1]] = list
+  if not shared then
+    for id, r in pairs(data.recipes) do
+      local learn = r.out and Planner.LearnSkill(r, opts)
+      if learn and learn <= opts.to then
+        local list = ctx.producers[r.out[1]] or {}
+        list[#list + 1] = id
+        ctx.producers[r.out[1]] = list
+      end
     end
   end
   return ctx
@@ -332,10 +377,13 @@ local function Acquire(ctx, itemID, qty, depth, extra, actions, why, skip)
     local avail = have - usedNow
     if avail > EPS then
       local take = math.min(avail, qty)
+      -- (el GPS le pone precio: lo que te darían vendiéndolo; ver PlanGPS)
+      local own = take * (ctx.ownedPrice and ctx.ownedPrice[itemID] or 0)
       extra[ownKey] = usedNow + take
-      actions[#actions + 1] = { kind = "owned", item = itemID, qty = take, cost = 0 }
-      if qty - take <= EPS then return 0 end
-      return Acquire(ctx, itemID, qty - take, depth, extra, actions, why, "owned")
+      actions[#actions + 1] = { kind = "owned", item = itemID, qty = take, cost = own }
+      if qty - take <= EPS then return own end
+      local rest = Acquire(ctx, itemID, qty - take, depth, extra, actions, why, "owned")
+      return rest and rest + own
     end
   end
 
@@ -395,7 +443,11 @@ local function Acquire(ctx, itemID, qty, depth, extra, actions, why, skip)
     end
   end
 
-  if depth < MAX_CRAFT_DEPTH and ctx.producers[itemID] and not ctx.visiting[itemID] then
+  -- Decidido antes comprarlo (y se puede): no se mira fabricarlo
+  local via = ctx.via[itemID]
+  local canCraft = depth < MAX_CRAFT_DEPTH and ctx.producers[itemID] and not ctx.visiting[itemID]
+  if via == "buy" and best then canCraft = false end
+  if canCraft then
     ctx.visiting[itemID] = true
     for _, rid in ipairs(ctx.producers[itemID]) do
       local r = ctx.data.recipes[rid]
@@ -406,7 +458,16 @@ local function Acquire(ctx, itemID, qty, depth, extra, actions, why, skip)
         if not cost then total = nil break end
         total = total + cost
       end
-      if total and (not best or total < best) then
+      -- Fabricarlo tiene que ahorrar al menos INTERMEDIATE_CRAFT_COST por fabricación:
+      -- si no, se compra (521 Ruined Leather Scraps y 174 fabricaciones de Light
+      -- Leather por 1 cobre menos cada uno no compensan). Solo si se puede comprar:
+      -- si no hay otra vía, se fabrica igual
+      -- Decidido antes fabricarlo: se fabrica aunque ahora comprarlo saliera algo
+      -- mejor. Entre dos recetas que lo fabrican, la más barata
+      local better = total and (not best
+        or (kind == "craft" and total < best)
+        or (kind ~= "craft" and (via == "craft" or total + crafts * INTERMEDIATE_CRAFT_COST < best)))
+      if better then
         best, kind = total, "craft"
         craft = { extra = subExtra, actions = subActions, recipe = rid }
       end
@@ -543,11 +604,663 @@ local function SaleValue(sale, crafts)
 end
 
 ---------------------------------------------------------------------------
+-- GPS: la ruta más corta de nivel en nivel (Planner.PlanGPS)
+---------------------------------------------------------------------------
+-- Subir una profesión es como buscar el camino más corto: los niveles son las
+-- ciudades y cada receta, una carretera que cuesta en cada punto sus fabricaciones
+-- esperadas (materiales menos lo que sacas vendiéndolo). Empezar a usar una receta
+-- paga su instructor o pergamino y GPS_STEP_COST (pocos pasos; volver a una ya
+-- usada lo paga otra vez: sin zigzag). Programación dinámica: para cada nivel y
+-- receta, la ruta más barata que llega ahí usándola. Mira la ruta entera.
+-- El camino se calcula con precios por unidad; la escalera de la AH, lo fabricado
+-- que se reutiliza y tus bolsas solo se ven al recorrer la ruta de verdad (la
+-- pasada forzada de Plan, rápida). Así que PlanGPS propone caminos, los recorre,
+-- y repite con los precios que pagaría la mejor (linealizar), quitando cada una de
+-- sus recetas y cambiando fabricar ↔ comprar. Gana la de menor Planner.RouteScore.
+Planner.USE_GPS = true         -- el planificador del addon (false: el antiguo, solo para tools/route_qa.py)
+local GPS_STEP_COST = 100      -- cobre por cada receta nueva en la ruta (pocos pasos)
+local GPS_ROUNDS = 4           -- vueltas con los precios de la mejor ruta hasta ahora
+local GPS_VIA_ROUNDS = 2       -- vueltas de fabricar ↔ comprar sobre cada ruta recorrida
+local GPS_BAGS_ALTS = 4        -- recetas con lo tuyo que se prueban en su tramo
+local GPS_TUNE_MOVES = 40      -- ajustes finos de fronteras que se aceptan como mucho
+local GPS_TUNE_WALKS = 500     -- recorridos del ajuste fino como mucho
+local GPS_SEGMENT_ROUNDS = 3   -- vueltas repensando cada tramo con el GPS
+local GPS_SUB_ROUNDS = 8       -- cambios de receta de un paso que se aceptan como mucho
+local GPS_SUB_CANDIDATES = 5   -- recetas que se prueban en lugar de cada paso
+local GPS_TOP = 4              -- mejores rutas vistas que se repasan al final
+local GPS_NEAR_PCT = 0.05      -- fabricar ↔ comprar solo en rutas a menos de un 5%
+local GPS_NEAR_MIN = 500       -- (o 5s) de la mejor
+
+-- Puntuación de una ruta entera, la vara con la que se comparan (PlanGPS y
+-- tools/route_qa.py): lo que cuesta, más CRAFT_COST por fabricación (pasos e
+-- intermedios: no 2000 materiales por unas monedas) y GPS_STEP_COST por paso. Lo
+-- que ganas vendiendo un paso que da dinero cuenta como si hicieras una
+-- fabricación por punto: si no, gana una receta casi gris solo por fabricar mucho
+-- para el vendedor (96 Phoenix Bindings con un patrón de 75g). Lo que usas de tus
+-- bolsas cuenta por lo que te darían vendiéndolo, con un margen de BAGS_TIE_PCT a
+-- favor de usarlo (como Planner.BagsWorth): no se gastan 34 Medium Hide de 15g
+-- para ahorrar 1g
+function Planner.RouteScore(plan)
+  local score, crafts = plan.fees + (plan.toolsCost or 0), 0
+  for _, st in ipairs(plan.steps) do
+    local gain = st.crafts * (st.unitValue - st.unitCost)
+    if gain > 0 then gain = gain * (st.to - st.from) / st.crafts end
+    score = score - gain
+    crafts = crafts + st.crafts
+  end
+  for _, c in ipairs(plan.crafted or {}) do crafts = crafts + c.quantity end
+  score = score + CRAFT_COST * crafts + GPS_STEP_COST * math.max(0, #plan.steps - 1)
+  local have = plan.ctx and plan.ctx.opts.owned
+  if have and plan.owned then
+    for _, o in ipairs(plan.owned) do
+      score = score + (1 - BAGS_TIE_PCT) * Planner.OwnedCost(plan.ctx, o.itemID, have[o.itemID] or o.quantity, o.quantity)
+    end
+  end
+  return score
+end
+
+-- Devuelve { [nivel] = receta } con la ruta más barata, o nil. weight: coste
+-- simbólico por fabricación; skip: recetas que no se pueden usar; fixed:
+-- { [nivel] = receta } que van sí o sí (una receta con lo tuyo en su tramo)
+-- Lo que cuesta un punto de una receta en un nivel (sin el peso por fabricación):
+-- { neto, fabricaciones } o false. Se guarda en el contexto: las variantes del
+-- camino (sin tal receta, con tal tramo fijo) reutilizan los mismos costes
+local function PointCost(ctx, rc, s)
+  local row = ctx.gpsCost[rc.id]
+  if not row then row = {} ctx.gpsCost[rc.id] = row end
+  local v = row[s]
+  if v == nil then
+    v = false
+    local chance = Planner.Chance(rc.r.t, s)
+    if chance > 0 then
+      local crafts = 1 / chance
+      local cost = RecipeCost(ctx, rc.r, crafts, {})
+      if cost then
+        -- Lo fabricado que la ruta necesita después (Light Leather, Handful of
+        -- Copper Bolts) vale lo que costaría conseguirlo, no lo del vendedor
+        -- (ctx.needValue, ver PlanGPS). Como al elegir punto a punto (ver Plan):
+        -- el beneficio no crece con las fabricaciones de una receta casi gris
+        local value = SaleValue(rc.sale, crafts)
+        local need = rc.sale and ctx.needValue and ctx.needValue[rc.sale.itemID]
+        if need then value = math.max(value, crafts * rc.sale.qty * need) end
+        local net = cost - value
+        if net < 0 then net = net / crafts + CRAFT_COST * (crafts - 1) end
+        v = { net, crafts }
+      end
+    end
+    row[s] = v
+  end
+  return v
+end
+
+-- Recetas candidatas del GPS con este contexto (las mismas para todas sus variantes)
+local function GPSRecipes(data, opts, ctx)
+  if not ctx.gpsRecipes then
+    local list = {}
+    for id, r in pairs(data.recipes) do
+      local learn = Planner.LearnSkill(r, opts)
+      if learn and learn < opts.to and r.t[4] > opts.from and not (opts.excluded and opts.excluded[id]) then
+        -- Empezarla paga el instructor y, si pide una herramienta que no tienes
+        -- (Arclight Spanner para Crude Scope), la herramienta. Sin precio: no vale
+        local fee = Planner.LearnCost(ctx, r)
+        local tool = r.tool and ES.Data.Tools and ES.Data.Tools[r.tool]
+        if tool and (ctx.toolMask[tool.family or "rod"] or 0) < tool.mask then
+          local cost = Acquire(ctx, tool.item, 1, 0, {}, {}, {})
+          fee = cost and fee + cost or nil
+        end
+        if fee then
+          list[#list + 1] = { id = id, r = r, learn = learn, fee = fee, sale = Planner.SaleInfo(ctx, r) }
+        end
+      end
+    end
+    table.sort(list, function(a, b) return a.id < b.id end) -- mismo orden siempre: misma ruta
+    ctx.gpsRecipes, ctx.gpsCost = list, {}
+  end
+  return ctx.gpsRecipes
+end
+
+local function ShortestRoute(data, opts, ctx, weight, skip, fixed, paid)
+  local recipes = GPSRecipes(data, opts, ctx)
+  local INF = math.huge
+  local prev = {}
+  for i = 1, #recipes do prev[i] = INF end
+  local bestAll, bestIdx = 0, nil -- al empezar: nada pagado, ninguna receta
+  local back, last = {}, nil
+  for s = opts.from, opts.to - 1 do
+    local cur, b = {}, {}
+    local newBest, newIdx = INF, nil
+    for i, rc in ipairs(recipes) do
+      ES.Yield()
+      local c = INF
+      local allowed = not skip[rc.id] and (not (fixed and fixed[s]) or fixed[s] == rc.id)
+      if allowed and rc.learn <= s and (prev[i] < INF or bestIdx or s == opts.from) then
+        local pc = PointCost(ctx, rc, s)
+        if pc then
+          local point = pc[1] + weight * pc[2]
+          -- (paid: recetas que la ruta ya aprende en otro tramo: no se pagan otra vez)
+          local switch = bestAll + (paid and paid[rc.id] and 0 or rc.fee) + GPS_STEP_COST
+          if prev[i] <= switch then
+            c, b[i] = prev[i] + point, i
+          else
+            c, b[i] = switch + point, bestIdx
+          end
+        end
+      end
+      cur[i] = c
+      if c < newBest then newBest, newIdx = c, i end
+    end
+    if not newIdx then break end -- ninguna receta sigue: la ruta llega hasta aquí
+    back[s], last = b, s
+    prev, bestAll, bestIdx = cur, newBest, newIdx
+  end
+  if not last then return nil end
+  local choice, i = {}, bestIdx
+  for s = last, opts.from, -1 do
+    if not i then break end
+    choice[s] = recipes[i].id
+    i = back[s][i]
+  end
+  return choice
+end
+Planner.ShortestRoute, Planner.NewContext = ShortestRoute, NewContext -- (para pruebas)
+
+-- Clave de una ruta (para no recorrer dos veces la misma)
+local function ChoiceKey(opts, choice, via)
+  local keys = {}
+  for s = opts.from, opts.to - 1 do keys[#keys + 1] = tostring(choice[s]) end
+  local v = {}
+  for itemID, way in pairs(via or {}) do v[#v + 1] = itemID .. way end
+  table.sort(v)
+  return table.concat(keys, ",") .. "|" .. table.concat(v, ",")
+end
+
+-- Lo que el GPS decidió fabricar o comprar al calcular un camino (cada material,
+-- lo más barato en ese momento): para recorrerlo igual. Si no, se recorre con lo
+-- que decida la pasada forzada y una ruta buena puede parecer mala (Deadly
+-- Blunderbuss comprando los Handful of Copper Bolts en vez de fabricarlos)
+local function RouteVia(data, opts, ctx, choice)
+  -- Fabricaciones de cada receta en todo el camino: con poca cantidad comprar
+  -- suele salir más barato, y lo que cuenta es lo que pide el tramo entero
+  local crafts, order = {}, {}
+  for s = opts.from, opts.to - 1 do
+    local id = choice[s]
+    local chance = id and Planner.Chance(data.recipes[id].t, s) or 0
+    if chance > 0 then
+      if not crafts[id] then order[#order + 1] = id end
+      crafts[id] = (crafts[id] or 0) + 1 / chance
+    end
+  end
+  local via = {}
+  for _, id in ipairs(order) do
+    local _, _, _, actions = RecipeCost(ctx, data.recipes[id], crafts[id], {})
+    for _, a in ipairs(actions or {}) do
+      if ctx.producers[a.item] and not via[a.item] then
+        if a.kind == "craft" then via[a.item] = "craft"
+        elseif a.kind == "ah" or a.kind == "vendor" then via[a.item] = "buy" end
+      end
+    end
+  end
+  for itemID, way in pairs(ctx.opts.via or {}) do via[itemID] = way end
+  return via
+end
+
+-- Lo que vale fabricar al subir un material que la ruta `best` necesita (lo compra
+-- o lo fabrica aparte): lo que costaría conseguirlo, lo más barato de comprarlo o
+-- fabricarlo. Para el GPS (ver PointCost): subir con Light Leather no "regala" el
+-- cuero al vendedor, ahorra comprarlo para los pasos de después
+local function NeedValue(ctx, best)
+  local v = {}
+  local function Add(itemID, paid)
+    if not ctx.producers[itemID] or v[itemID] then return end
+    local ladder = ctx.ladders[itemID]
+    local buy = paid or ES.Data.VendorPrices[itemID] or (ladder and ladder[1])
+    local craft = Planner.CraftUnitCost(ctx, itemID)
+    v[itemID] = (buy and craft) and math.min(buy, craft) or buy or craft
+  end
+  for _, it in ipairs(best.shopping or {}) do Add(it.itemID, it.unit) end
+  for _, c in ipairs(best.crafted or {}) do Add(c.itemID) end
+  return v
+end
+
+-- Precios con tus bolsas para el GPS: lo tuyo, al precio de la puntuación (lo que
+-- te darían vendiéndolo, con el margen a favor de usarlo): ni gratis ni infinito
+local function OwnedContext(data, opts, via)
+  local w = Copy(opts)
+  w.via = via
+  local ctx = NewContext(data, w)
+  ctx.ownedPrice = {}
+  for itemID, q in pairs(ctx.owned) do
+    ctx.ownedPrice[itemID] = (1 - BAGS_TIE_PCT) * Planner.OwnedValue(ctx, itemID, q) / q
+  end
+  return ctx
+end
+
+function Planner.PlanGPS(data, opts)
+  -- Lo que no cambia en todo el cálculo (escaleras de precios, quién fabrica qué),
+  -- preparado una vez para los cientos de recorridos (ver NewContext)
+  opts = Copy(opts)
+  local tpl = NewContext(data, opts)
+  opts.shared = { prices = tpl.prices, to = opts.to, ladders = tpl.ladders, supply = tpl.supply,
+    medians = tpl.medians, producers = tpl.producers }
+  local Score = Planner.RouteScore
+  local best, seen, pool = nil, {}, {}
+  local function Better(p)
+    return not best or p.reached > best.reached or (p.reached == best.reached and Score(p) < Score(best) - EPS)
+  end
+  -- Recorre una ruta de verdad (pasada forzada, rápida). via: fabricar o comprar
+  -- fijado (lo del jugador siempre manda)
+  local function Walk(choice, via)
+    local v = Copy(via or {})
+    for itemID, way in pairs(opts.via or {}) do v[itemID] = way end
+    local key = ChoiceKey(opts, choice, v)
+    if seen[key] then return nil end
+    seen[key] = true
+    local t = Copy(opts)
+    t.forced, t.via = choice, v
+    local p = Planner:Plan(data, t)
+    -- Las mejores rutas vistas (la mejor recorrida de cada una), para repasarlas al final
+    local rk = ChoiceKey(opts, p.choice)
+    local q = pool[rk]
+    if not q or p.reached > q.reached or (p.reached == q.reached and Score(p) < Score(q)) then pool[rk] = p end
+    return p
+  end
+  -- Cambiar cada material (fabricar ↔ comprar) mientras mejore
+  local function ViaPolish(p)
+    for _ = 1, GPS_VIA_ROUNDS do
+      local improved = false
+      local items = {}
+      for itemID in pairs(p.ctx and p.ctx.via or {}) do
+        if not (opts.via and opts.via[itemID]) then items[#items + 1] = itemID end
+      end
+      table.sort(items)
+      for _, itemID in ipairs(items) do
+        local v = Copy(p.ctx.via)
+        v[itemID] = v[itemID] == "craft" and "buy" or "craft"
+        local q = Walk(p.choice, v)
+        if q and (q.reached > p.reached or (q.reached == p.reached and Score(q) < Score(p) - EPS)) then
+          p, improved = q, true
+        end
+      end
+      if not improved then break end
+    end
+    return p
+  end
+  -- Recorrida y, si está cerca de la mejor, con fabricar ↔ comprar (en una ruta que
+  -- sale mucho más cara no la salva, y es lo que más recorridos cuesta)
+  local function Try(choice, via)
+    local p = Walk(choice, via)
+    if not p then return false end
+    local near = not best or p.reached > best.reached
+      or Score(p) <= Score(best) + GPS_NEAR_PCT * math.abs(Score(best)) + GPS_NEAR_MIN
+    if near then p = ViaPolish(p) end
+    if Better(p) then best = p return true end
+    return false
+  end
+  -- Un camino del GPS: recorrido con lo que el GPS decidió fabricar o comprar, con
+  -- lo de su contexto y (extra) con otro; gana el mejor
+  local function TryDP(choice, ctx, extra)
+    local a = Try(choice, RouteVia(data, opts, ctx, choice))
+    local b = Try(choice, ctx.opts.via)
+    local c = extra and Try(choice, extra)
+    return a or b or c or false
+  end
+  -- Puntos de partida: la ruta voraz de una sola pasada (sin restricciones) y,
+  -- con bolsas, la voraz del mercado (sin ellas) recorrida con lo tuyo
+  Try({}, nil)
+  -- La ruta que ya tenías (opts.hint, la última calculada de esta profesión): si
+  -- cambian tus bolsas (conviertes chatarras en cuero), sigue siendo la misma salvo
+  -- que de verdad haya otra mejor. Sin esto la ruta podía saltar a otra solo porque
+  -- la búsqueda tomó otro camino
+  if opts.hint and opts.hint.choice then Try(opts.hint.choice, opts.hint.via) end
+  do -- (y la voraz con peso por fabricación: de ella sale a menudo la de siempre)
+    local t = Copy(opts)
+    t.forced, t.craftCost = {}, CRAFT_COST
+    Try(Planner:Plan(data, t).choice, nil)
+  end
+  local owned = opts.owned and next(opts.owned)
+  local marketGreedy
+  if owned then
+    local t = Copy(opts)
+    t.owned, t.forced = nil, {}
+    marketGreedy = Planner:Plan(data, t)
+    Try(marketGreedy.choice, nil)
+  end
+  for round = 1, GPS_ROUNDS do
+    local improved = false
+    -- Contextos de precios: los del mercado (primera unidad) la primera vez; luego
+    -- los que pagaría la mejor ruta (la mitad de lo que compra ya "comprada") y con
+    -- lo que ella decidió fabricar o comprar. Con tus bolsas, también contándolas
+    local ctxs = {}
+    local m = Copy(opts)
+    m.owned = nil
+    if best and round > 1 then m.via = Copy(best.ctx.via) end
+    ctxs[1] = NewContext(data, m)
+    if owned then
+      -- Lo tuyo, al precio de la puntuación (ver OwnedContext). A partir de la
+      -- segunda vuelta, menos la mitad de lo que ya usa la mejor ruta
+      local ctx = OwnedContext(data, opts, m.via)
+      if best and round > 1 then
+        for _, o in ipairs(best.owned or {}) do
+          if ctx.owned[o.itemID] then ctx.owned[o.itemID] = math.max(0, ctx.owned[o.itemID] - o.quantity / 2) end
+        end
+      end
+      ctxs[2] = ctx
+    end
+    if best and round > 1 then
+      -- Lo fabricado que la ruta necesita, valorado a lo que costaría (NeedValue)
+      -- y también sin eso, al precio del vendedor: cada vara ve bien unas rutas
+      -- (subir con Light Leather o con Light Armor Kit) y mal otras
+      local plain = NewContext(data, m)
+      for _, ctx in ipairs(ctxs) do ctx.needValue = NeedValue(ctx, best) end
+      ctxs[#ctxs + 1] = plain
+      for _, ctx in ipairs(ctxs) do
+        for itemID, q in pairs(best.ctx.used or {}) do ctx.used[itemID] = q / 2 end
+      end
+    end
+    -- Caminos: el más corto, y sin cada receta de la mejor ruta hasta ahora
+    local skips = { {} }
+    for _, st in ipairs(best and best.steps or {}) do skips[#skips + 1] = { [st.id] = true } end
+    for _, ctx in ipairs(ctxs) do
+      for i, skip in ipairs(skips) do
+        for _, weight in ipairs(i == 1 and { CRAFT_COST, 0 } or { CRAFT_COST }) do
+          local choice = ShortestRoute(data, opts, ctx, weight, skip)
+          if choice and TryDP(choice, ctx) then improved = true end
+        end
+      end
+    end
+    if not improved and round > 1 then break end
+  end
+  if not best then return Planner:Plan(data, (function() local t = Copy(opts) t.forced = {} return t end)()) end
+
+  -- Fases de pulido sobre la mejor ruta
+  local function Polish()
+    -- Recetas que puedes hacer con lo tuyo (como el aviso "Con lo que llevas"): el
+    -- camino que la usa en su tramo. El GPS solo no las ve si lo que fabricas se
+    -- reutiliza luego (Cured Medium Hide con tus Medium Hide, para Hillman's Shoulders)
+    if owned then
+      local m = Copy(opts)
+      m.owned = nil
+      local ctxs = { NewContext(data, m), OwnedContext(data, opts), OwnedContext(data, opts) }
+      -- (y lo tuyo descontando la mitad de lo que ya gasta la mejor ruta: con 50
+      -- Light Leather, Light Leather Pants parece gratis hasta que se acaba)
+      for _, o in ipairs(best.owned or {}) do
+        local have = ctxs[3].owned[o.itemID]
+        if have then ctxs[3].owned[o.itemID] = math.max(0, have - o.quantity / 2) end
+      end
+      for itemID, q in pairs(best.ctx.used or {}) do ctxs[3].used[itemID] = q / 2 end
+      -- Frente a la mejor ruta (con lo que ella no gasta) y frente a la del mercado
+      -- (con todo lo tuyo): sin repetir receta
+      local alts, tried = {}, {}
+      for _, base in ipairs({ best, marketGreedy }) do
+        local ex = Copy(opts.excluded or {})
+        for _ = 1, GPS_BAGS_ALTS do
+          local alt = Planner.BagsAlternative(data, base, opts.owned, opts.from, ex, false)
+          if not alt then break end
+          ex[alt.id] = true
+          if not tried[alt.id .. ":" .. alt.to] then
+            tried[alt.id .. ":" .. alt.to] = true
+            alts[#alts + 1] = alt
+          end
+        end
+      end
+      for _, alt in ipairs(alts) do
+        -- Su tramo, y hasta donde se podría usar (lo tuyo da para más si la ruta
+        -- no lo gasta en otra cosa)
+        local spans, last = {}, math.max(alt.to, math.min(opts.to, alt.recipe.t[3]))
+      for _, f in ipairs({ 0.5, 0.75, 1 }) do spans[#spans + 1] = math.max(alt.from + 1, math.floor(alt.from + f * (alt.to - alt.from) + 0.5)) end
+      if last > alt.to then spans[#spans + 1] = last end
+      for _, span in ipairs(spans) do
+          local fixed = {}
+          for s = alt.from, span - 1 do fixed[s] = alt.id end
+          for _, ctx in ipairs(ctxs) do
+            local choice = ShortestRoute(data, opts, ctx, CRAFT_COST, {}, fixed)
+            if choice then TryDP(choice, ctx) end
+          end
+        end
+      end
+    end
+
+    -- Repensar cada tramo (un paso, o dos seguidos) con el GPS dejando el resto de la
+    -- ruta como está, con los precios que paga la mejor ruta: mete una receta en
+    -- medio de un paso largo (Deadly Blunderbuss dentro de Flying Tiger Goggles)
+    for _ = 1, GPS_SEGMENT_ROUNDS do
+      local improved = false
+      local m = Copy(opts)
+      m.owned, m.via = nil, Copy(best.ctx.via)
+      local ctxs = { NewContext(data, m) }
+      if owned then ctxs[2] = OwnedContext(data, opts, m.via) end
+      for _, ctx in ipairs(ctxs) do
+        for itemID, q in pairs(best.ctx.used or {}) do ctx.used[itemID] = q / 2 end
+        ctx.needValue = NeedValue(ctx, best)
+      end
+      local steps, windows = best.steps, {}
+      for i, st in ipairs(steps) do
+        windows[#windows + 1] = { st.from, st.to }
+        if steps[i + 1] then windows[#windows + 1] = { st.from, steps[i + 1].to } end
+        -- Y el principio o el final de un paso largo (cuando la receta ya sube peor:
+        -- Bronze Framework en los últimos niveles de Flying Tiger Goggles)
+        for _, k in ipairs({ 5, 10 }) do
+          if st.to - st.from > k then
+            windows[#windows + 1] = { st.to - k, st.to }
+            windows[#windows + 1] = { st.from, st.from + k }
+          end
+        end
+      end
+      for _, w in ipairs(windows) do
+        local fixed, paid = {}, {}
+        for s = opts.from, opts.to - 1 do
+          if (s < w[1] or s >= w[2]) and best.choice[s] then
+            fixed[s] = best.choice[s]
+            paid[best.choice[s]] = true
+          end
+        end
+        for _, ctx in ipairs(ctxs) do
+          local choice = ShortestRoute(data, opts, ctx, CRAFT_COST, {}, fixed, paid)
+          if choice and TryDP(choice, ctx, best.ctx.via) then improved = true end
+        end
+      end
+      if not improved then break end
+    end
+
+    -- Cambiar la receta de un paso por otra en el mismo tramo (Raptor Hide Harness por
+    -- Raptor Hide Belt, Rough Weightstone por Rough Sharpening Stone): las
+    -- GPS_SUB_CANDIDATES que mejor lo cubren según el GPS, recorridas de verdad
+    for _ = 1, GPS_SUB_ROUNDS do
+      local improved = false
+      local m = Copy(opts)
+      m.owned, m.via = nil, Copy(best.ctx.via)
+      local ctxs = { NewContext(data, m), NewContext(data, m) }
+      ctxs[1].needValue = NeedValue(ctxs[1], best)
+      for _, ctx in ipairs(ctxs) do
+        for itemID, q in pairs(best.ctx.used or {}) do ctx.used[itemID] = q / 2 end
+      end
+      local paid = {}
+      for _, st in ipairs(best.steps) do paid[st.id] = true end
+      for _, st in ipairs(best.steps) do
+        local tried = {}
+        for _, ctx in ipairs(ctxs) do
+          local cands = {}
+          for _, rc in ipairs(GPSRecipes(data, opts, ctx)) do
+            -- (desde que se aprende, si es a mitad del paso)
+            local from = math.max(st.from, rc.learn)
+            if rc.id ~= st.id and not tried[rc.id] and from < st.to then
+              local sum = paid[rc.id] and 0 or rc.fee
+              for s = from, st.to - 1 do
+                local pc = PointCost(ctx, rc, s)
+                if not pc then sum = nil break end
+                sum = sum + pc[1] + CRAFT_COST * pc[2]
+              end
+              -- (por punto: los tramos cortos no salen baratos solo por ser cortos)
+              if sum then cands[#cands + 1] = { id = rc.id, from = from, cost = sum / (st.to - from) } end
+            end
+          end
+          table.sort(cands, function(a, b) return a.cost < b.cost or (a.cost == b.cost and a.id < b.id) end)
+          for k = 1, math.min(GPS_SUB_CANDIDATES, #cands) do
+            tried[cands[k].id] = true
+            local choice = Copy(best.choice)
+            for s = cands[k].from, st.to - 1 do choice[s] = cands[k].id end
+            local p = Walk(choice, best.ctx.via)
+            if p and Better(p) then best, improved = p, true break end
+          end
+          if improved then break end
+        end
+        if improved then break end
+      end
+      if not improved then break end
+    end
+
+    -- Ajuste fino, recorriendo de verdad: mover cada frontera entre pasos unos
+    -- niveles, o quitar un paso dándoselo a la receta de antes o a la de después
+    local tuneWalks = 0
+    for _ = 1, GPS_TUNE_MOVES do
+      local improved = false
+      local steps = best.steps
+      for i = 1, #steps do
+        local st, prevSt, nextSt = steps[i], steps[i - 1], steps[i + 1]
+        local moves = {}
+        if nextSt then
+          for _, d in ipairs({ -3, -1, 1, 3 }) do
+            local cut = nextSt.from + d
+            if cut > st.from and cut < nextSt.to then moves[#moves + 1] = { cut = cut, a = st, b = nextSt } end
+          end
+        end
+        if prevSt then moves[#moves + 1] = { whole = st, to = prevSt.id } end
+        if nextSt then moves[#moves + 1] = { whole = st, to = nextSt.id } end
+        -- Los últimos niveles del paso, con una receta ya aprendida antes (no se
+        -- vuelve a pagar: Flying Tiger Goggles al final de Deadly Blunderbuss)
+        local earlier = {}
+        for j = math.max(1, i - 3), i - 1 do
+          if not earlier[steps[j].id] and steps[j].id ~= st.id then
+            earlier[steps[j].id] = true
+            for _, k in ipairs({ 2, 4, 8 }) do
+              if st.to - st.from > k then moves[#moves + 1] = { tail = st, k = k, to = steps[j].id } end
+            end
+          end
+        end
+        for _, mv in ipairs(moves) do
+          local choice = Copy(best.choice)
+          if mv.whole then
+            for s = mv.whole.from, mv.whole.to - 1 do choice[s] = mv.to end
+          elseif mv.tail then
+            for s = mv.tail.to - mv.k, mv.tail.to - 1 do choice[s] = mv.to end
+          elseif mv.cut < mv.b.from then
+            for s = mv.cut, mv.b.from - 1 do choice[s] = mv.b.id end
+          else
+            for s = mv.b.from, mv.cut - 1 do choice[s] = mv.a.id end
+          end
+          local p = Walk(choice, best.ctx.via)
+          if p then tuneWalks = tuneWalks + 1 end
+          if p and Better(p) then
+            best, improved = p, true
+            break
+          end
+          if tuneWalks >= GPS_TUNE_WALKS then break end
+        end
+        if improved or tuneWalks >= GPS_TUNE_WALKS then break end
+      end
+      if not improved then break end
+    end
+  end
+  Polish()
+
+  -- Al final, las mejores rutas vistas, con fabricar ↔ comprar sin poda: una ruta
+  -- buena recorrida con una mala decisión pudo quedar por detrás de otra peor
+  local top = {}
+  for _, p in pairs(pool) do top[#top + 1] = p end
+  -- (primero las que llegan más lejos: una que se para antes sale barata por subir menos)
+  table.sort(top, function(a, b) return a.reached > b.reached or (a.reached == b.reached and Score(a) < Score(b)) end)
+  local again = false
+  for k = 1, math.min(GPS_TOP, #top) do
+    local p = ViaPolish(top[k])
+    if Better(p) then best, again = p, true end
+  end
+  if again then Polish() end
+
+  -- La elegida, recorrida una vez con toda la información (las recetas que no se
+  -- pudieron usar por falta de precio, para el tooltip de cada paso): mismo resultado
+  local final = Copy(opts)
+  final.forced, final.via, final.fullInfo = best.choice, best.ctx.via, true
+  best = Planner:Plan(data, final)
+
+  return best
+end
+
+---------------------------------------------------------------------------
 -- Plan
 ---------------------------------------------------------------------------
 -- opts = { from, to, includeScrolls, hours (duración subasta), neutral, reuseCrafted, ignoreSupply, cap,
---          owned = { [itemID] = cantidad en bolsas/banco } }
+--          owned = { [itemID] = cantidad en bolsas/banco }, via = { [itemID] = "craft" | "buy" } }
 function Planner:Plan(data, opts)
+  -- El planificador es el GPS (ver arriba). Lo de aquí abajo son las pasadas forzadas
+  -- (ruta fijada, las que recorre el GPS) y el planificador antiguo, que solo se usa
+  -- para compararlo en tools/route_qa.py (Planner.USE_GPS = false)
+  if Planner.USE_GPS and not opts.forced then return Planner.PlanGPS(data, opts) end
+
+  -- Materiales que se pueden fabricar (Light Leather de Ruined Leather Scraps): o se
+  -- fabrican todos o se compran todos, nunca las dos cosas (ver Acquire). La primera
+  -- vez decide con poca cantidad, así que se prueba la otra opción para todo el plan
+  -- y se queda la más barata, contando INTERMEDIATE_CRAFT_COST por cada fabricación
+  if not opts.forced and not opts.viaSearched then
+    local o = Copy(opts)
+    o.viaSearched = true
+    local function Score(p)
+      local n = 0
+      for _, c in ipairs(p.crafted or {}) do n = n + c.quantity end
+      return p.net + INTERMEDIATE_CRAFT_COST * n
+    end
+    local function Better(p, best)
+      return p.reached > best.reached or (p.reached == best.reached and Score(p) < Score(best) - EPS)
+    end
+    local best = Planner:Plan(data, o)
+    -- Cambiar un material cada vez (fabricar ↔ comprar), otra vuelta si alguno mejora.
+    -- No solo los de la ruta actual: también los que salieron en otras rutas probadas
+    -- (la ruta con Cured Medium Hide no usa Cured Light Hide, pero comprarlo hecho
+    -- abre la de Black Whelp Cloak)
+    local seen, tried = {}, {}
+    local function See(p)
+      for itemID in pairs(p.ctx and p.ctx.via or {}) do seen[itemID] = true end
+    end
+    See(best)
+    -- Lo decidido sobre la marcha, fijado desde el principio: la ruta se elige ya
+    -- sabiendo que Light Leather se fabrica. Con chatarras en las bolsas, la primera
+    -- pasada lo decidía tarde, se quedaba con una ruta pensada para comprarlo y la
+    -- ruta saltaba al ir convirtiéndolas (tener más cosas daba una ruta peor)
+    if best.ctx and next(best.ctx.via) then
+      local t = Copy(o)
+      t.via = Copy(best.ctx.via)
+      local p = Planner:Plan(data, t)
+      if Better(p, best) then best = p end
+      See(p)
+    end
+    for _ = 1, VIA_ROUNDS do
+      local improved = false
+      local items = {}
+      for itemID in pairs(seen) do items[#items + 1] = itemID end
+      table.sort(items) -- orden fijo: la misma ruta cada vez
+      for _, itemID in ipairs(items) do
+        local cur = best.ctx and best.ctx.via or {}
+        -- Lo que el jugador fijó (✕ en "Fabrica 30× Light Leather": comprarlo) no se toca
+        if not (opts.via and opts.via[itemID]) then
+          for _, way in ipairs({ "craft", "buy" }) do
+            local key = itemID .. way .. tostring(best)
+            if cur[itemID] ~= way and not tried[key] then
+              tried[key] = true
+              local t = Copy(o)
+              t.via = Copy(cur)
+              t.via[itemID] = way
+              local p = Planner:Plan(data, t)
+              if Better(p, best) then best, improved = p, true end
+              See(p)
+              if improved then break end
+            end
+          end
+        end
+      end
+      if not improved then break end
+    end
+    return best
+  end
+
   -- Sin zigzag: donde la ruta alterna recetas en pasos de 1-2 puntos (Light Leather
   -- y Light Armor Kit, punto sí punto no), se prueba a hacer todo el tramo con una
   -- sola y se queda si apenas cuesta más (ver Smooth)
@@ -588,6 +1301,23 @@ function Planner:Plan(data, opts)
         best, o = plan, t
       end
     end
+    -- Receta que puedes hacer con lo tuyo y que te compensa más que vender lo tuyo
+    -- y seguir la ruta (ver BagsAlternative): se mete en su tramo. Si no compensa,
+    -- la ruta no la usa y la UI explica por qué. Varias pasadas: con lo que te
+    -- queda puede salir otra
+    for _ = 1, BAGS_PASSES do
+      local alt = Planner.BagsAlternative(data, best, opts.owned, opts.from, o.excluded, true)
+      if not alt or not Planner.BagsWorth(alt) then break end
+      local t = {}
+      for k, v in pairs(o) do t[k] = v end
+      t.forced = {}
+      for s, id in pairs(best.choice) do t.forced[s] = id end
+      for s = alt.from, alt.to - 1 do t.forced[s] = alt.id end
+      local plan = Planner:Plan(data, t)
+      if plan.reached < best.reached then break end
+      plan.cheapest, plan.craftCostUsed = best.cheapest, best.craftCostUsed
+      best = plan
+    end
     return best
   end
 
@@ -601,6 +1331,11 @@ function Planner:Plan(data, opts)
     base.owned = nil
     local route = Planner:Plan(data, base)
     withBags.forced = route.choice
+    -- Y con lo mismo fabricado o comprado: la ruta se eligió comprando Light Leather;
+    -- si al recorrerla con tus chatarras pasara a fabricarlo, el coste sería de otra
+    -- ruta y la búsqueda de arriba (fabricar ↔ comprar) compararía cosas distintas
+    withBags.via = Copy(route.ctx and route.ctx.via or {})
+    for itemID, way in pairs(opts.via or {}) do withBags.via[itemID] = way end
     local plan = Planner:Plan(data, withBags)
     plan.cheapest, plan.craftCostUsed = route.cheapest, route.craftCostUsed
     return plan
@@ -668,10 +1403,22 @@ function Planner:Plan(data, opts)
     missingPrice = {}, shortSupply = {},
   }
 
-  -- Recetas candidatas y lo que no depende del nivel
+  -- Recetas candidatas y lo que no depende del nivel. Con la ruta entera forzada
+  -- (la fijada, las que recorre el GPS) solo hacen falta las suyas: el resultado es
+  -- el mismo y prepararlas todas era lo que más tardaba
+  local only
+  -- (opts.fullInfo: la ruta que se enseña, con las recetas bloqueadas de cada paso)
+  if opts.forced and not opts.fullInfo then
+    only = {}
+    for s = opts.from, opts.to - 1 do
+      local id = opts.forced[s]
+      if not id then only = nil break end
+      only[id] = true
+    end
+  end
   local info = {}
   for id, r in pairs(data.recipes) do
-    local learn = Planner.LearnSkill(r, opts)
+    local learn = (not only or only[id]) and Planner.LearnSkill(r, opts)
     -- opts.excluded: recetas que el jugador ha quitado de la ruta (p. ej. el pergamino está lejos)
     if learn and learn < opts.to and r.t[4] > opts.from and not (opts.excluded and opts.excluded[id]) then
       local learnCost, learnSource = Planner.LearnCost(ctx, r)
@@ -721,8 +1468,17 @@ function Planner:Plan(data, opts)
             blocked[#blocked + 1] = { id = id, chance = chance, missing = whyR }
           else
             local value = SaleValue(inf.sale, crafts)
+            -- Si fabricarla da dinero (lo que sacas al vendedor supera los materiales),
+            -- ese beneficio no puede crecer con las fabricaciones que pide una receta
+            -- casi gris: Lesser Magic Wand al 8% (13 por punto) "ganaba" a Greater
+            -- Magic Wand al 95% solo por vender más varitas. Para elegir, el beneficio
+            -- cuenta como el de una fabricación (el coste real de la ruta no cambia)
+            -- Y cada fabricación de más por punto pesa CRAFT_COST: si no, una receta
+            -- con beneficio ganaba a cualquiera que costase algo aunque estuviera casi gris
+            local net = cost - value
+            if net < 0 then net = net / crafts + CRAFT_COST * (crafts - 1) end
             -- Coste simbólico de cada fabricación (solo al elegir; ver Plan)
-            local score = cost - value + (opts.craftCost or 0) * crafts
+            local score = net + (opts.craftCost or 0) * crafts
             local span = math.max(1, math.min(r.t[4], opts.to) - s)
             local feeSpan
             if inf.learnCost > 0 and not learned[id] then
@@ -776,6 +1532,12 @@ function Planner:Plan(data, opts)
       end
     end
     for _, a in ipairs(best.actions) do
+      -- Material que se puede fabricar: lo decidido ahora (fabricar o comprar) se
+      -- mantiene en el resto del plan (ver Acquire)
+      if ctx.producers[a.item] and not ctx.via[a.item] then
+        if a.kind == "craft" then ctx.via[a.item] = "craft"
+        elseif a.kind == "ah" or a.kind == "vendor" then ctx.via[a.item] = "buy" end
+      end
       if a.kind == "craft" then
         craftedQty[a.item] = craftedQty[a.item] or { qty = 0, recipe = a.recipe }
         craftedQty[a.item].qty = craftedQty[a.item].qty + a.qty
@@ -992,6 +1754,147 @@ function Planner:Plan(data, opts)
 end
 
 ---------------------------------------------------------------------------
+-- Con lo que llevas: una receta que no está en la ruta y que podrías hacer
+-- durante unos cuantos puntos solo con tus materiales (y lo del vendedor). La
+-- ruta no la elige porque valora lo tuyo a precio de compra (ver Plan); aquí se
+-- cuenta aparte: el oro que ahorrarías y lo que te darían por lo tuyo si lo
+-- vendieras. Si compensa, Plan la mete en la ruta; si no, la UI explica por qué no.
+---------------------------------------------------------------------------
+
+-- Lo que te darían de verdad por `qty` unidades tuyas, con las mismas reglas que lo
+-- fabricado en la vista Profit (SaleAdvice): en la AH al precio realista (el de
+-- referencia si el mínimo está inflado) menos comisión y depósito, todas si el
+-- mercado va bien, unas pocas si es dudoso y ninguna si va mal; el resto, al
+-- vendedor. Y nunca más en la AH de las que hay ahora a la venta: un mercado de 15
+-- Medium Hide no absorbe 34 más a ese precio. Con el último escaneo, no con los
+-- precios de la ruta fijada (esos solo guardan lo que usa la ruta)
+local OWNED_AH_FEW = 5
+local function OwnedSaleTotal(ctx, itemID, qty)
+  local vendor = ES:VendorSellPrice(itemID) or (ES.Data.SellPrices and ES.Data.SellPrices[itemID]) or 0
+  local entry = ScanPrices()[itemID] or ctx.prices[itemID]
+  local fair = entry and entry.minUnit and ES.Market:FairPrice(itemID, entry.minUnit)
+  if not fair then return vendor * qty end
+  local deposit, cut = Planner.AuctionCosts(vendor, ctx.opts)
+  local net = fair.price * (1 - cut) - deposit
+  if net <= vendor then return vendor * qty end
+  local verdict = ES.Market:Signals(itemID).verdict
+  local onAH = verdict == "good" and qty or verdict == "avoid" and 0 or math.min(qty, OWNED_AH_FEW)
+  onAH = math.min(onAH, entry.quantity or onAH)
+  return onAH * net + (qty - onAH) * vendor
+end
+Planner.OwnedValue = OwnedSaleTotal
+
+-- Lo que dejas de ganar al usar `qty` de tus `have`: lo que vale todo lo tuyo
+-- vendido menos lo que vale lo que te queda. No lo que valdrían esos `qty`
+-- vendidos: usando 10 de tus 34 Medium Hide sigues vendiendo en la AH las pocas
+-- que absorbe a buen precio; lo que pierdes son 10 al precio del vendedor
+local function OwnedCost(ctx, itemID, have, qty)
+  qty = math.min(qty, have)
+  if qty <= 0 then return 0 end
+  return OwnedSaleTotal(ctx, itemID, have) - OwnedSaleTotal(ctx, itemID, have - qty)
+end
+Planner.OwnedCost = OwnedCost -- (para Planner.RouteScore)
+
+-- plan: la ruta que se enseña; owned: { [itemID] = cantidad } en bolsas/banco;
+-- from: tu nivel; excluded: recetas quitadas con la ✕ (la ruta fijada no las
+-- guarda). Devuelve la mejor alternativa o nil: la que da más puntos o, con
+-- onlyWorth, la que más gana a vender lo tuyo de entre las que compensan (para
+-- meterla en la ruta: la de más puntos puede no compensar y otra sí):
+-- { id, recipe, from, to, crafts, fee, feeUnknown, spend (oro que pagas), gold (spend
+--   menos lo que sacas vendiendo lo fabricado), value (lo tuyo, vendido), routeCost,
+--   saving (routeCost - gold), use = { { itemID, qty, value } } (de más a menos valor) }
+function Planner.BagsAlternative(data, plan, owned, from, excluded, onlyWorth)
+  local ctx = plan and plan.ctx
+  if not ctx or not owned or not next(owned) then return nil end
+  from = math.max(from or plan.from, plan.from)
+  local to = plan.reached or plan.to
+  if from >= to then return nil end
+  local inRoute = {}
+  for _, st in ipairs(plan.steps) do inRoute[st.id] = true end
+  -- Lo tuyo que ya gasta la ruta no se puede usar dos veces
+  local left = {}
+  for itemID, n in pairs(owned) do left[itemID] = n end
+  for _, it in ipairs(plan.owned or {}) do
+    if left[it.itemID] then left[it.itemID] = left[it.itemID] - it.quantity end
+  end
+  excluded = excluded or ctx.opts.excluded or {}
+  local best
+  for id, r in pairs(data.recipes) do
+    local learn = r.out and not inRoute[id] and not excluded[id] and not r.conversion and not r.intermediate
+      and Planner.LearnSkill(r, ctx.opts)
+    if learn and learn < to and r.t[4] > from then
+      -- Fabricaciones que te dan tus materiales (lo del vendedor se compra)
+      local crafts, mine = math.huge, false
+      for _, rq in ipairs(r.r) do
+        if not ES.Data.VendorPrices[rq[1]] then
+          mine = true
+          crafts = math.min(crafts, math.floor((left[rq[1]] or 0) / rq[2]))
+        end
+      end
+      local start = math.max(from, learn)
+      if mine and crafts >= 1 then
+        -- Puntos que dan (como el plan: 1/probabilidad fabricaciones por punto)
+        local s, used = start, 0
+        while s < to do
+          local chance = Planner.Chance(r.t, s)
+          if chance <= 0 or used + 1 / chance > crafts + EPS then break end
+          used = used + 1 / chance
+          s = s + 1
+        end
+        if s - start >= BAGS_MIN_POINTS then
+          local n = math.ceil(used - 0.001)
+          local fee, source = Planner.LearnCost(ctx, r)
+          local gold, value, use = fee, 0, {}
+          for _, rq in ipairs(r.r) do
+            local vendor = ES.Data.VendorPrices[rq[1]]
+            if vendor then
+              gold = gold + vendor * rq[2] * n
+            else
+              local v = OwnedCost(ctx, rq[1], left[rq[1]] or 0, rq[2] * n)
+              value = value + v
+              use[#use + 1] = { itemID = rq[1], qty = rq[2] * n, value = v }
+            end
+          end
+          local spend = gold -- oro que sale de tu bolsillo (instructor y vendedor)
+          gold = gold - SaleValue(Planner.SaleInfo(ctx, r), n)
+          table.sort(use, function(a, b) return a.value > b.value end)
+          -- Lo que cuesta la ruta en ese tramo; el precio de aprender una receta
+          -- de la ruta solo se ahorra si ya no hace falta en ningún otro punto
+          local outside = {}
+          for _, st in ipairs(plan.steps) do
+            if st.from < start or st.to > s then outside[st.id] = true end
+          end
+          local routeCost = 0
+          for _, st in ipairs(plan.steps) do
+            local a, b = math.max(st.from, start), math.min(st.to, s)
+            if b > a then
+              routeCost = routeCost + (st.total - st.fee) * (b - a) / (st.to - st.from)
+              if not outside[st.id] then routeCost = routeCost + st.fee end
+            end
+          end
+          local saving = routeCost - gold
+          local alt = {
+            id = id, recipe = r, from = start, to = s, crafts = n,
+            fee = fee, feeUnknown = source == "trainer" and r.trainer and not Fee(r) or nil,
+            gold = gold, spend = spend, value = value, routeCost = routeCost, saving = saving, use = use,
+          }
+          local diff = saving - value
+          local better
+          if onlyWorth then
+            better = Planner.BagsWorth(alt) and (not best or diff > best.saving - best.value)
+          else
+            better = not best or alt.to - alt.from > best.to - best.from
+              or (alt.to - alt.from == best.to - best.from and diff > best.saving - best.value)
+          end
+          if saving >= BAGS_MIN_SAVING and better then best = alt end
+        end
+      end
+    end
+  end
+  return best
+end
+
+---------------------------------------------------------------------------
 -- Recetas y AH: cada receta que puedes conseguir ahora (instructor, vendedor,
 -- básica o pergamino anunciado en la AH) con lo que cuesta fabricar 1 y a
 -- cuánto se anuncia lo fabricado. Sin estimar ventas: se compara con el mínimo
@@ -1021,7 +1924,7 @@ function Planner:RecipeMarket(data, opts)
         local deposit, cut = Planner.AuctionCosts(vendor or 0, o)
         local e = {
           id = id, recipe = r, itemID = itemID, qty = qty, cost = cost, reagents = reagents,
-          learn = basic and 1 or r.train or 1, learnCost = learnCost or 0, learnSource = learnSource or (basic and "basic" or "unknown"),
+          learn = basic and 1 or select(2, Fee(r)) or 1, learnCost = learnCost or 0, learnSource = learnSource or (basic and "basic" or "unknown"),
           vendor = vendor or 0, deposit = deposit, cut = cut,
           ahMin = ah and ah.minUnit, ahMedian = ah and (ah.median or ah.minUnit),
           listings = ah and ah.listings or 0, quantity = ah and ah.quantity or 0,

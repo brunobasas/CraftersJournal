@@ -75,6 +75,8 @@ RANK_BIT = {75: 1, 150: 2, 225: 4, 300: 8}
 NPC_FLAG_TRAINER = 16
 FOREVER_NPC_IDS = 200000  # los PNJ nuevos de Forever tienen ID altos (p. ej. 251991)
 OVERRIDES = HERE / "forever" / "trainer_overrides.csv"
+FOREVER_FEES = HERE / "forever" / "trainer_fees.csv"
+FOREVER_SELL = HERE / "forever" / "sell_prices.csv"
 # Recetas que se compran con Merchant's Favor (tools/forever/fetch_merchants_favor.py)
 MERCHANTS_FAVOR = HERE / "forever" / "merchants_favor.csv"
 
@@ -202,7 +204,13 @@ def load_common():
                 trainers[line][npc] = max(trainers[line].get(npc, 0), cap)
             else:
                 if spell not in fees or cost < fees[spell][0]:
-                    fees[spell] = (cost, req)
+                    fees[spell] = (cost, req, False)
+    # Precios y niveles de Forever vistos en el juego o en guías, con su fuente en el
+    # CSV (recetas nuevas o que Forever cobra distinto): mandan sobre CMaNGOS, y su
+    # nivel ya es el de Forever (True: sin desplazar, ver forever_train)
+    with open(FOREVER_FEES, encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            fees[int(r["spell"])] = (int(r["cost"]), int(r["reqskill"]), True)
     return dict(sla=sla, era=era, names=names, reagents=reagents, creates=creates, scrolls=scrolls,
                 item_info=item_info, item_rep=item_rep, item_skill=item_skill, item_class=item_class,
                 item_quality=item_quality, item_bop=item_bop,
@@ -361,6 +369,11 @@ def main():
 
     item_info = c["item_info"]
     sell = {i: info[2] for i, info in item_info.items() if info[2] > 0}
+    # Lo que paga de verdad el vendedor de Forever cuando no coincide con el cliente
+    # (visto en el juego: tools/forever/sell_prices.csv)
+    with open(FOREVER_SELL, encoding="utf-8") as f:
+        for r in csv.DictReader(line for line in f if not line.startswith("#")):
+            sell[int(r["item"])] = int(r["sell"])
     # Precio de compra al vendedor: de los materiales que vende algún PNJ
     reagent_items = {i for reagents, _ in recipes.values() for i, _ in reagents}
     reagent_items |= {i for reagents, _, _, _ in intermediates.values() for i, _ in reagents} | used_tools
@@ -422,15 +435,17 @@ def main():
         name = c["names"].get(sid, str(sid)).replace("\\", "\\\\").replace('"', '\\"')
         parts = [f'name = "{name}"', "t = { %d, %d, %d, %d }" % t]
 
-        def forever_train(classic):
-            return max(1, classic - shift.get(sid, 0))
+        def forever_train(classic, is_forever=False):
+            # Los niveles de Classic se desplazan a los de Forever; los del CSV de
+            # Forever (vistos en el juego) ya lo son
+            return classic if is_forever else max(1, classic - shift.get(sid, 0))
         acquire = sla[sid].get("AcquireMethod")
         if acquire == "1":
             # El cliente de Forever dice que se aprende sola al coger la profesión: manda
             # sobre CMaNGOS (Linen Bag era de instructor en Classic y en Forever no)
             parts.append("basic = true")
         elif sid in fees:
-            parts.append(f"fee = {fees[sid][0]}, train = {forever_train(fees[sid][1])}")
+            parts.append(f"fee = {fees[sid][0]}, train = {forever_train(fees[sid][1], fees[sid][2])}")
         elif sid in scrolls:
             scroll = scrolls[sid]
             # Nivel que pide el pergamino; si no lo dice, amarilla - 10 (el umbral

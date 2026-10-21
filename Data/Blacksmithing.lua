@@ -286,7 +286,7 @@ ES.Data.Blacksmithing = {
     [1224637] = { name = "Scarlet Soldier's Waistguard", t = { 1, 260, 282, 305 }, scroll = 238327, train = 250, sq = 3, r = { { 12811, 1 }, { 12359, 20 } }, tool = 162, out = { 238293, 1 }, oq = 1 },
     [1224638] = { name = "Scarlet Soldier's Legplates", t = { 1, 280, 292, 305 }, scroll = 238328, train = 270, sq = 3, r = { { 12938, 1 }, { 12811, 1 }, { 12359, 20 } }, tool = 162, out = { 238294, 1 }, oq = 1 },
     [1224639] = { name = "Scarlet Soldier's Stompers", t = { 1, 270, 287, 305 }, scroll = 238329, train = 260, sq = 3, r = { { 12811, 1 }, { 12359, 20 } }, tool = 162, out = { 238295, 1 }, oq = 1 },
-    [1230171] = { name = "Sharpening Wheel", t = { 1, 20, 22, 25 }, trainer = true, train = 20, r = { { 2835, 1 }, { 2840, 1 } }, out = { 279944, 1 }, oq = 1 },
+    [1230171] = { name = "Sharpening Wheel", t = { 1, 20, 22, 25 }, fee = 0, train = 20, r = { { 2835, 1 }, { 2840, 1 } }, out = { 279944, 1 }, oq = 1 },
     [1245287] = { name = "Copper Rod", t = { 1, 10, 12, 15 }, basic = true, r = { { 2840, 1 } }, tool = 162, out = { 6217, 1 }, oq = 1 },
     [1252232] = { name = "Sterling Silver Boots", t = { 1, 130, 145, 160 }, scroll = 251335, train = 100, sq = 2, r = { { 2842, 6 }, { 2840, 2 }, { 3478, 2 }, { 2319, 2 } }, tool = 162, out = { 250483, 1 }, oq = 2 },
     [1252233] = { name = "Sterling Silver Leggings", t = { 1, 135, 150, 165 }, scroll = 251336, train = 105, sq = 2, r = { { 2842, 10 }, { 2840, 3 }, { 3478, 3 } }, tool = 162, out = { 250484, 1 }, oq = 2 },

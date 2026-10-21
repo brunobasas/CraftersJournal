@@ -11,20 +11,76 @@ function ES:ClearHomeCache()
   self.homePlanCache = {}
   self.planGen = (self.planGen or 0) + 1 -- descarta las rutas que se estén calculando
 end
--- Cambian tus bolsas o aprendes una receta: las rutas pueden cambiar
+-- Cuándo se rehace una ruta (solo la de esa profesión; se calcula cuando se ve):
+--   cambian tus bolsas: solo las que usan lo de las bolsas y no tienen la ruta fijada
+--   aprendes una receta: solo la profesión cuyas recetas sabidas cambiaron (el
+--     instructor lanza TRAINER_UPDATE al mirar, sin aprender nada)
+--   subes de nivel: nada que borrar (el nivel va en la clave de la caché)
+--   escaneo nuevo: todas las no fijadas (su hora va en la clave; ES:RefreshAllViews)
+-- Las fijadas no se rehacen nunca: tienen sus recetas y precios guardados.
 local BAG_REFRESH_DELAY = 0.8 -- s sin cambios en las bolsas antes de repintar
+local knownCount = {} -- [profesión] = recetas sabidas la última vez que se miró
+
+local function KnownCount(profKey)
+  local n = 0
+  for id in pairs(ES.Data[profKey].recipes) do
+    if ES:IsRecipeKnown(id) then n = n + 1 end
+  end
+  return n
+end
+
+-- Profesiones del personaje cuyas recetas sabidas cambiaron: su ruta se rehace
+local function CheckLearned()
+  local changed = false
+  for _, prof in ipairs(ES.PROFESSIONS) do
+    local data = ES.Data[prof.key]
+    if data and data.recipes and not data.guide and ES:GetProfessionSkill(data.skillLine) then
+      local n = KnownCount(prof.key)
+      if knownCount[prof.key] and knownCount[prof.key] ~= n then
+        ES:InvalidatePlan(prof.key)
+        changed = true
+      end
+      knownCount[prof.key] = n
+    end
+  end
+  return changed
+end
+ES.CheckLearned = CheckLearned -- para pruebas
+
 do
   local f = CreateFrame("Frame")
-  for _, event in ipairs({ "BAG_UPDATE_DELAYED", "NEW_RECIPE_LEARNED", "LEARNED_SPELL_IN_TAB", "SKILL_LINES_CHANGED" }) do
+  for _, event in ipairs({ "PLAYER_LOGIN", "BAG_UPDATE_DELAYED", "NEW_RECIPE_LEARNED", "LEARNED_SPELL_IN_TAB", "TRAINER_UPDATE" }) do
     ES.SafeRegister(f, event)
   end
-  local bagStamp = 0
+  local bagStamp, learnStamp = 0, 0
   f:SetScript("OnEvent", function(_, event)
-    ES:ClearHomeCache()
+    if not ES.db then return end
+    if event == "PLAYER_LOGIN" then
+      CheckLearned() -- lo que ya sabes al entrar (punto de partida)
+      return
+    end
+    -- Aprendes una receta (instructor, pergamino): la profesión abierta lo enseña
+    -- al momento (la fila de aprender queda hecha; sin ruta fijada, se recalcula)
+    if event ~= "BAG_UPDATE_DELAYED" then
+      learnStamp = learnStamp + 1
+      local stamp = learnStamp
+      local function Check()
+        return stamp == learnStamp and CheckLearned() and ES.RefreshAfterLearn and (ES:RefreshAfterLearn() or true)
+      end
+      C_Timer.After(0.3, function()
+        -- (si el juego aún no la da por sabida, otra vez un poco después)
+        if stamp == learnStamp and not Check() then C_Timer.After(2, Check) end
+      end)
+      return
+    end
     -- Compras al vendedor, cosas sacadas del correo, fabricar...: la profesión
     -- abierta se actualiza (la lista de la compra dice cuántos tienes y cuántos
     -- faltan). Llegan en ráfagas (una por objeto): se espera a que paren
-    if event == "BAG_UPDATE_DELAYED" and ES.RefreshAfterBags then
+    for _, prof in ipairs(ES.PROFESSIONS) do
+      local settings = ES.db.prof and ES.db.prof[prof.key]
+      if settings and settings.useBags and not settings.lock then ES:InvalidatePlan(prof.key) end
+    end
+    if ES.RefreshAfterBags then
       bagStamp = bagStamp + 1
       local stamp = bagStamp
       C_Timer.After(BAG_REFRESH_DELAY, function()
@@ -383,24 +439,30 @@ local function ProfessionEntries()
       -- Mismo objetivo que el detalle de la profesión, para que el coste coincida
       local e = { key = prof.key, prof = prof, order = order, rank = rank, learned = rank ~= nil, from = rank or 1,
         target = ES:ProfessionTarget(prof.key) }
+      e.cap = rank and cap or nil
       if data.guide then
         -- Pesca: no hay ruta de fabricación, sino el tramo de la guía en el que estás
         e.guide = ES.FishingStep(data, e.from)
-      elseif e.from < e.target then
-        -- De la caché, o se calcula repartida entre fotogramas: la tarjeta pone
-        -- "Calculando…" y se repinta al acabar
-        e.plan = ES:RequestPlan(prof.key, e.from, e.target, rank and cap or nil, function() ES:RenderHome() end, "home")
-        e.pending = not e.plan
       end
       list[#list + 1] = e
     end
   end
-  -- Primero las que tiene el personaje (de más a menos nivel), luego el resto
-  table.sort(list, function(a, b)
-    if a.learned ~= b.learned then return a.learned end
-    if a.learned and a.rank ~= b.rank then return a.rank > b.rank end
-    return a.order < b.order
-  end)
+  -- Las tuyas primero; en cada sección, el orden fijo (el mismo que en Patterns)
+  ES.SortProfessionCards(list)
+  -- Rutas: de la caché, o repartidas entre fotogramas (la tarjeta pone
+  -- "Calculando…" y se repinta al acabar). Solo las profesiones que tienes: las
+  -- demás (de 1 a 225, las más caras de calcular) se calculan al abrirlas, y la
+  -- tarjeta enseña esa ruta si sigue valiendo
+  for _, e in ipairs(list) do
+    if not e.guide and e.from < e.target then
+      if e.learned then
+        e.plan = ES:RequestPlan(e.key, e.from, e.target, e.cap, function() ES:RenderHome() end, "home")
+        e.pending = not e.plan
+      else
+        e.plan = ES:CachedPlan(e.key, e.from, e.target, e.cap)
+      end
+    end
+  end
   return list
 end
 
@@ -439,6 +501,10 @@ local function ProfessionTooltip(e)
       GameTooltip:AddLine(L["Calculando la ruta…"], 0.6, 0.6, 0.6)
     elseif e.from >= e.target then
       GameTooltip:AddLine(e.from >= ES.MAX_SKILL and L["Ya está al máximo de la beta."] or L["Ya has llegado a tu objetivo."], 0.4, 1, 0.4)
+    elseif not e.learned and not e.guide then
+      -- (las que no tienes no se calculan solas: ver ProfessionEntries)
+      GameTooltip:AddLine(" ")
+      GameTooltip:AddLine(L["Su ruta se calcula al abrirla (solo se calculan solas las profesiones que tienes)."], 0.6, 0.6, 0.6, true)
     end
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(L["Pulsa para ver el plan paso a paso y qué fabricar."], 0.5, 0.8, 1)

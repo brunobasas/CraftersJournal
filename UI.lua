@@ -66,6 +66,19 @@ local function Money(copper)
 end
 ES.Money = Money
 
+-- Dinero dentro de un texto de letra más pequeña (las citas de la ruta): los
+-- iconos del juego quedan altos, así que se bajan `offsetY` píxeles
+function ES.MoneyInline(copper, offsetY)
+  copper = math.floor((copper or 0) + 0.5)
+  local function Icon(name) return string.format("|TInterface\\MoneyFrame\\UI-%sIcon:0:0:2:%d|t", name, offsetY or 0) end
+  local g, s, c = math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100
+  local parts = {}
+  if g > 0 then parts[#parts + 1] = g .. Icon("Gold") end
+  if s > 0 then parts[#parts + 1] = s .. Icon("Silver") end
+  if c > 0 or #parts == 0 then parts[#parts + 1] = c .. Icon("Copper") end
+  return table.concat(parts, " ")
+end
+
 local function TimeAgo(t)
   local d = time() - t
   if d < 60 then return L["hace unos segundos"] end
@@ -383,7 +396,10 @@ local function CreateMainFrame()
   -- Al abrir el panel se vuelve a donde estabas en esta sesión (la última página; en
   -- una profesión, también su vista), salvo que se pida otra. Solo en la sesión: con
   -- otro personaje (o al volver a entrar) se empieza en la portada
+  -- El botón de la estrella sobre una fila (Waypoints.lua) no se queda flotando
+  f:HookScript("OnHide", function() ES.Waypoints.ReleaseHover() end)
   f:SetScript("OnShow", function(self)
+    ES.Jobs.Resume() -- rutas pendientes de cuando estaba cerrada (Jobs.lua)
     ES:RefreshScanButtons()
     ES:SelectPage(self.openPage or ES.sessionPage or "home")
     self.openPage = nil

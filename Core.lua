@@ -91,18 +91,32 @@ ES.MAX_SKILL = 225
 
 -- Profesiones de fabricación (tarjetas de la portada). `key` es el nombre de su
 -- tabla en ES.Data; `icon`, su imagen en el juego.
+-- El orden de esta lista es el orden interno de las tarjetas (la portada y
+-- Patterns, ver ES.SortProfessionCards): las principales y, al final, las
+-- secundarias (Cocina, Primeros auxilios, Pesca)
 local ICONS = "Interface\\Icons\\"
 ES.PROFESSIONS = {
   { key = "Alchemy",        label = "Alquimia",      icon = ICONS .. "Trade_Alchemy" },
   { key = "Blacksmithing",  label = "Herrería",      icon = ICONS .. "Trade_BlackSmithing" },
-  { key = "Cooking",        label = "Cocina",        icon = ICONS .. "INV_Misc_Food_15" },
   { key = "Enchanting",     label = "Encantam.",     icon = ICONS .. "Trade_Engraving", name = "Encantamiento" },
   { key = "Engineering",    label = "Ingeniería",    icon = ICONS .. "Trade_Engineering" },
-  { key = "FirstAid",       label = "Primeros aux.", icon = ICONS .. "Spell_Holy_SealOfSacrifice", name = "Primeros auxilios" },
-  { key = "Fishing",        label = "Pesca",         icon = ICONS .. "Trade_Fishing", dev = true }, -- solo en desarrollo
   { key = "Leatherworking", label = "Peletería",     icon = ICONS .. "INV_Misc_ArmorKit_17" },
   { key = "Tailoring",      label = "Sastrería",     icon = ICONS .. "Trade_Tailoring" },
+  -- Secundarias
+  { key = "Cooking",        label = "Cocina",        icon = ICONS .. "INV_Misc_Food_15" },
+  { key = "FirstAid",       label = "Primeros aux.", icon = ICONS .. "Spell_Holy_SealOfSacrifice", name = "Primeros auxilios" },
+  { key = "Fishing",        label = "Pesca",         icon = ICONS .. "Trade_Fishing", dev = true }, -- solo en desarrollo
 }
+
+-- Orden de las tarjetas de profesión (la portada y Patterns): primero las que
+-- tiene el personaje y luego las demás; dentro de cada sección, el orden de
+-- ES.PROFESSIONS. entries = { { learned, order } } (order: su posición en la lista)
+function ES.SortProfessionCards(entries)
+  table.sort(entries, function(a, b)
+    if a.learned ~= b.learned then return a.learned end
+    return a.order < b.order
+  end)
+end
 
 -- ¿Se ve esta profesión? (las marcadas dev = true, solo en modo desarrollo)
 function ES:ProfessionVisible(prof)
@@ -218,12 +232,13 @@ function ES:LocalizeRecipeNames()
   end
 end
 
--- Cuántas unidades tienes (bolsas + banco) de cada material de una profesión
-local GetItemCountCompat = (C_Item and C_Item.GetItemCount) or GetItemCount
-
--- Unidades de un objeto en bolsas y banco
+-- Cuántas unidades tienes de cada material de una profesión. Solo las bolsas: el
+-- banco (y el correo) no se cuentan, lo que no llevas encima no se puede usar ya
+-- y solo daba malentendidos ("tienes 88" con las chatarras ya convertidas)
+-- Unidades de un objeto en las bolsas
 function ES:ItemCount(itemID)
-  return GetItemCountCompat and GetItemCountCompat(itemID, true) or 0
+  local get = (C_Item and C_Item.GetItemCount) or GetItemCount
+  return get and (get(itemID, false) or 0) or 0
 end
 
 -- ¿El personaje ya sabe esta receta? (las recetas son hechizos del libro de hechizos)
@@ -306,14 +321,14 @@ function ES:GetOwnedReagents(data)
       local itemID = rq[1]
       if not seen[itemID] then
         seen[itemID] = true
-        local count = GetItemCountCompat and GetItemCountCompat(itemID, true) or 0
+        local count = ES:ItemCount(itemID)
         if count and count > 0 then owned[itemID] = count end
       end
     end
   end
   -- Herramientas (bastones rúnicos)
   for _, tool in pairs(ES.Data.Tools or {}) do
-    local count = GetItemCountCompat and GetItemCountCompat(tool.item, true) or 0
+    local count = ES:ItemCount(tool.item)
     if count and count > 0 then owned[tool.item] = count end
   end
   return owned
@@ -412,40 +427,43 @@ function ES.SafeRegister(frame, event)
 end
 -- Lo de cada personaje: las rutas empezadas, los ajustes de cada profesión (objetivo,
 -- opciones, recetas quitadas) y la última profesión vista. Se guarda en
--- ES.db.chars[personaje]; mientras juegas, ES.db.prof y ES.db.lastProf son los suyos.
--- Así otro personaje no ve tu ruta, y al volver con este la recuperas.
+-- ES.db.characters[GUID del personaje]; mientras juegas, ES.db.prof y ES.db.lastProf
+-- son los suyos. Así otro personaje no ve tu ruta, y al volver con este la recuperas.
+-- Por GUID y no por "nombre-reino": en Forever varios personajes de la cuenta
+-- pueden llamarse igual en el mismo reino (Ventura...) y compartían rutas.
+local PENDING = "pending" -- el juego aún no da el GUID (se corrige al entrar al mundo)
+local function CharDataKey()
+  local guid = UnitGUID and UnitGUID("player")
+  return (type(guid) == "string" and guid ~= "") and guid or PENDING
+end
+
 local function LoadCharacterData()
   local db = ES.db
-  local key = ES:CharKey()
-  db.chars = db.chars or {}
-  local c = db.chars[key]
-  if not c then
-    c = {}
-    if not db.charsMigrated then
-      -- Antes había unos para todos los personajes: se los queda el primero que entra
-      c.prof, c.lastProf = db.prof, db.lastProf
-      db.charsMigrated = true
-    end
-    db.chars[key] = c
-  end
+  local key = CharDataKey()
+  -- Lo guardado por nombre (ES.db.chars) o para toda la cuenta no se sabe de qué
+  -- personaje es: no se reparte (cada uno empieza de cero una vez)
+  db.chars, db.charsMigrated = nil, nil
+  db.characters = db.characters or {}
+  local c = db.characters[key] or {}
+  db.characters[key] = c
   c.prof = c.prof or {}
   db.prof, db.lastProf = c.prof, c.lastProf
   ES.charData, ES.charDataKey = c, key
 end
 
--- Al entrar al mundo el nombre del personaje ya es seguro: si al cargar el addon el
--- juego aún no lo daba, lo cargado (con otro nombre) pasa a ser de este personaje
+-- Al entrar al mundo el GUID ya es seguro: si al cargar el addon el juego aún no lo
+-- daba, lo de esta sesión (guardado como pendiente) pasa a ser de este personaje
 local function CheckCharacterData()
-  local key = ES:CharKey()
-  if not ES.charDataKey or ES.charDataKey == key then return end
+  local key = CharDataKey()
+  if not ES.charDataKey or ES.charDataKey == key or key == PENDING then return end
   local db = ES.db
-  local old = db.chars[ES.charDataKey]
-  db.chars[ES.charDataKey] = nil
-  if not db.chars[key] then db.chars[key] = old end
+  local old = db.characters[ES.charDataKey]
+  db.characters[ES.charDataKey] = nil
+  if ES.charDataKey == PENDING and not db.characters[key] then db.characters[key] = old end
   LoadCharacterData()
 end
 
--- Al salir: lo del personaje queda solo en ES.db.chars (sin copias sueltas en ES.db)
+-- Al salir: lo del personaje queda solo en ES.db.characters (sin copias sueltas en ES.db)
 local function SaveCharacterData()
   if not (ES.db and ES.charData) then return end
   ES.charData.lastProf = ES.db.lastProf
@@ -453,6 +471,74 @@ local function SaveCharacterData()
 end
 
 ES.LoadCharacterData, ES.SaveCharacterData = LoadCharacterData, SaveCharacterData -- para pruebas
+
+---------------------------------------------------------------------------
+-- Registro de errores: los errores de Lua de este addon y las acciones que el
+-- juego le bloquea se apuntan en CraftersJournalDB.errorLog (los mismos juntos,
+-- con cuántas veces), para revisarlos después (/cj errores, o el archivo de
+-- SavedVariables). Siguen saliendo como siempre (ventana de errores, BugSack...).
+---------------------------------------------------------------------------
+local MAX_ERRORS = 50
+
+local function AddonVersion()
+  local get = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+  return get and get(ADDON_NAME, "Version") or "?"
+end
+
+function ES:RecordError(kind, msg, stack)
+  if not self.db then return end
+  msg = tostring(msg or "?"):sub(1, 300)
+  self.db.errorLog = self.db.errorLog or {}
+  local log, now = self.db.errorLog, time()
+  for _, e in ipairs(log) do
+    if e.kind == kind and e.msg == msg then
+      e.count, e.last = e.count + 1, now
+      return
+    end
+  end
+  log[#log + 1] = { kind = kind, msg = msg, stack = stack and tostring(stack):sub(1, 1500) or nil, count = 1,
+    first = now, last = now, version = AddonVersion() }
+  while #log > MAX_ERRORS do table.remove(log, 1) end
+end
+
+do
+  -- Errores de Lua: solo los que pasan por los archivos de este addon. Se apunta
+  -- y se pasa al manejador que hubiera (el del juego, BugGrabber...). Si otro addon
+  -- de errores se carga después y pone el suyo, al entrar al mundo se vuelve a
+  -- enganchar delante (busy: por si los dos se llaman entre sí)
+  local previous, busy
+  local function Handler(msg, ...)
+    if busy then return end -- (el otro manejador nos ha vuelto a llamar: se corta aquí)
+    busy = true
+    local stack = debugstack and debugstack(2) or ""
+    if tostring(msg):find(ADDON_NAME, 1, true) or stack:find(ADDON_NAME, 1, true) then
+      pcall(ES.RecordError, ES, "lua", msg, stack)
+    end
+    if previous then pcall(previous, msg, ...) end
+    busy = false
+  end
+  local function Install()
+    if not (geterrorhandler and seterrorhandler) then return end
+    local current = geterrorhandler()
+    if current ~= Handler then
+      previous = current
+      seterrorhandler(Handler)
+    end
+  end
+  Install()
+  -- Acciones bloqueadas por el juego (funciones protegidas)
+  local f = CreateFrame("Frame")
+  ES.SafeRegister(f, "ADDON_ACTION_BLOCKED")
+  ES.SafeRegister(f, "ADDON_ACTION_FORBIDDEN")
+  ES.SafeRegister(f, "PLAYER_ENTERING_WORLD")
+  f:SetScript("OnEvent", function(_, event, addon, func)
+    if event == "PLAYER_ENTERING_WORLD" then Install() return end
+    if addon == ADDON_NAME then
+      ES:RecordError(event == "ADDON_ACTION_FORBIDDEN" and "prohibida" or "bloqueada", tostring(func),
+        debugstack and debugstack(2) or nil)
+    end
+  end)
+end
 
 ES.SafeRegister(events, "ADDON_LOADED")
 ES.SafeRegister(events, "PLAYER_LOGIN")
@@ -470,6 +556,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
     ES.lang = ES.db.lang or ES.DefaultLanguage()
     ES.DEV = ES.DEV_BUILD and not ES.db.userPreview -- vista de jugador guardada (copia de desarrollo)
     ES.db.lastGetAll, ES.db.serverLimit = nil, nil -- claves de versiones anteriores (ver Scanner.lua)
+    ES.db.useGPS = nil -- (/cj gps de las pruebas: el GPS ya es el planificador de todos)
     ES.ApplyLocalization()
     ES:LocalizeRecipeNames()
   elseif event == "PLAYER_LOGOUT" then
@@ -630,6 +717,48 @@ SlashCmdList.CRAFTERSJOURNAL = function(msg)
     -- Se mira a los 3 s: al escribir el comando el ratón no suele estar encima
     ES:Print(L["Pon el ratón sobre el icono: en 3 segundos lo leo."])
     C_Timer.After(3, function() ES:PrintIconUnderMouse() end)
+  elseif msg == "errores" or msg == "errors" or msg == "errores borrar" or msg == "errors clear" then
+    -- Lo apuntado por ES:RecordError (ver arriba)
+    if msg:find(" ") then
+      ES.db.errorLog = nil
+      ES:Print(L["Registro de errores vaciado."])
+      return
+    end
+    local log = ES.db.errorLog or {}
+    if #log == 0 then
+      ES:Print(L["Ningún error registrado."])
+      return
+    end
+    ES:Print(string.format(L["%d errores distintos registrados (el más reciente al final):"], #log))
+    for _, e in ipairs(log) do
+      print(string.format("|cffff6060[%s]|r x%d %s %s%s", e.kind, e.count, date and date("%d/%m %H:%M", e.last) or "",
+        e.msg, ""))
+    end
+    ES:Print(L["Detalle completo en CraftersJournalDB.errorLog (SavedVariables, tras /reload). /cj errores borrar para vaciarlo."])
+  elseif msg == "instructor" or msg == "trainer" then
+    -- Precios vistos en el instructor que no coinciden con los datos: filas para
+    -- tools/forever/trainer_fees.csv (también en el archivo de SavedVariables tras /reload)
+    local rows = ES.Ledger:TrainerDiffs()
+    ES.db.trainerFeesCSV = rows
+    -- Lo comprobado de cada profesión: para tenerlo todo, abre un instructor de cada una
+    for _, c in ipairs(ES.Ledger:TrainerCoverage()) do
+      ES:Print(string.format(L["%s: %d de %d recetas de instructor vistas en el juego, %d distintas de los datos."],
+        ES:ProfLabel(c.prof), c.seen, c.total, c.diff))
+    end
+    -- Recetas que enseñan los instructores y el addon no conoce (nuevas de Forever)
+    for prof, list in pairs(ES.db.trainerUnknown or {}) do
+      for name, s in pairs(list) do
+        ES:Print(string.format(L["%s: el instructor enseña %s (%s, nivel %s) y el addon no la tiene."],
+          ES:ProfLabel(prof), s.link or name, ES.Money(s.cost or 0), tostring(s.skill or "?")))
+      end
+    end
+    if #rows == 0 then
+      ES:Print(L["Lo visto en los instructores coincide con los datos del addon."])
+    else
+      ES:Print(string.format(L["%d precios de instructor distintos de los datos (spell,name,cost,reqskill,source):"], #rows))
+      for _, line in ipairs(rows) do print(line) end
+      ES:Print(L["Haz /reload y cópialos de CraftersJournalDB.trainerFeesCSV en SavedVariables."])
+    end
   elseif msg == "pestaña" or msg == "pestana" or msg == "tab" then
     ES:Print(L["Pon el ratón sobre el icono: en 3 segundos lo leo."])
     C_Timer.After(3, function() ES:DumpFrameUnderMouse() end)

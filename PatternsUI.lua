@@ -58,13 +58,8 @@ function ES:RenderPatterns()
         learned = ES:GetProfessionSkill(data.skillLine) ~= nil }
     end
   end
-  -- Tus profesiones primero (las más completas antes), luego el resto
-  table.sort(entries, function(a, b)
-    if a.learned ~= b.learned then return a.learned end
-    local pa, pb = a.known / math.max(1, a.total), b.known / math.max(1, b.total)
-    if pa ~= pb then return pa > pb end
-    return a.order < b.order
-  end)
+  -- Las tuyas primero; en cada sección, el orden fijo (el mismo que en la portada)
+  ES.SortProfessionCards(entries)
   local cards = {}
   for _, e in ipairs(entries) do
     local key = e.prof.key

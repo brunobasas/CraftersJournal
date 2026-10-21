@@ -210,7 +210,11 @@ end
 ---------------------------------------------------------------------------
 local GetItemInfoCompat = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 
+-- Lo que paga el vendedor: lo visto al vender en el juego (Ledger.lua), si no, los
+-- datos, si no, lo que dice el cliente
 function ES:VendorSellPrice(itemID)
+  local seen = ES.db and ES.db.sellSeen and ES.db.sellSeen[itemID]
+  if seen then return seen.price end
   local price = ES.Data.SellPrices[itemID]
   if price then return price end
   return select(11, GetItemInfoCompat(itemID))

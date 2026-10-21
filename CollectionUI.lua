@@ -9,7 +9,12 @@ local L = ES.L
 -- Sin barras de desplazamiento: la lista y la ficha se mueven con la rueda del ratón.
 
 local GREEN, GREY, ORANGE, GOLD, WHITE = "|cff40ff40", "|cff9d9d9d", "|cffff9933", "|cffffd100", "|cffffffff"
-local ROW_H, ROW_GAP, LIST_W = 36, 3, 372
+-- Filas como las del instructor de Forever: icono grande con marco, nombre dorado,
+-- de dónde sale en blanco pequeño debajo y el nivel arriba a la derecha
+local ROW_H, ROW_GAP, LIST_W = 48, 3, 372
+local ROW_ICON = 36
+local SCROLL_W = 5                   -- indicador de desplazamiento a la derecha de la lista
+local ROW_W = LIST_W - 12 - SCROLL_W - 5 -- filas: dejan sitio al indicador
 local ROW_STEP = ROW_H + ROW_GAP
 local LINE_H = 18
 local MATERIAL_ICON = 24
@@ -248,39 +253,63 @@ end
 ---------------------------------------------------------------------------
 local function CreateRow(parent)
   local row = CreateFrame("Button", nil, parent, "BackdropTemplate")
-  row:SetSize(LIST_W - 12, ROW_H)
+  row:SetSize(ROW_W, ROW_H)
   row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-  row.icon = row:CreateTexture(nil, "ARTWORK")
-  row.icon:SetSize(28, 28)
-  row.icon:SetPoint("LEFT", 5, 0)
-  row.title = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  row.title:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 8, -1)
-  row.title:SetPoint("RIGHT", -46, 0)
+  -- Fondo en degradado (más claro arriba), como las filas del instructor
+  row.bg = row:CreateTexture(nil, "BACKGROUND", nil, 1)
+  row.bg:SetPoint("TOPLEFT", 1, -1)
+  row.bg:SetPoint("BOTTOMRIGHT", -1, 1)
+  row.bg:SetTexture("Interface\\Buttons\\WHITE8X8")
+  -- Icono con marco oscuro de 1 px
+  row.iconFrame = row:CreateTexture(nil, "ARTWORK", nil, 1)
+  row.iconFrame:SetSize(ROW_ICON + 2, ROW_ICON + 2)
+  row.iconFrame:SetPoint("LEFT", 5, 0)
+  row.iconFrame:SetColorTexture(0, 0, 0, 0.9)
+  row.icon = row:CreateTexture(nil, "ARTWORK", nil, 2)
+  row.icon:SetSize(ROW_ICON, ROW_ICON)
+  row.icon:SetPoint("CENTER", row.iconFrame)
+  row.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+  row.title = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  row.title:SetPoint("TOPLEFT", row.iconFrame, "TOPRIGHT", 8, -3)
+  row.title:SetPoint("RIGHT", -52, 0)
   row.title:SetJustifyH("LEFT")
   row.title:SetWordWrap(false)
   row.sub = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  row.sub:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 8, 1)
-  row.sub:SetPoint("RIGHT", -46, 0)
+  row.sub:SetPoint("BOTTOMLEFT", row.iconFrame, "BOTTOMRIGHT", 8, 3)
+  row.sub:SetPoint("RIGHT", -10, 0)
   row.sub:SetJustifyH("LEFT")
   row.sub:SetWordWrap(false)
-  row.level = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  row.level:SetPoint("RIGHT", -8, 0)
+  row.level = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  row.level:SetPoint("TOPRIGHT", -9, -6)
   row.level:SetJustifyH("RIGHT")
   row:SetScript("OnEnter", function(self) if not self.selected then self:SetBackdropBorderColor(1, 0.82, 0.25, 0.6) end end)
   row:SetScript("OnLeave", function(self) ES.UI.StyleCollectionRow(self) end)
   return row
 end
 
--- Colores de la fila: la que tienes, verde apagado; la elegida, borde dorado
+-- Degradado vertical del fondo: `top` arriba, `bottom` abajo ({ r, g, b, a })
+local function Gradient(tex, top, bottom)
+  if tex.SetGradient and CreateColor then
+    tex:SetColorTexture(1, 1, 1, 1)
+    tex:SetGradient("VERTICAL", CreateColor(unpack(bottom)), CreateColor(unpack(top)))
+  else
+    tex:SetColorTexture(unpack(top))
+  end
+end
+
+-- Colores de la fila: rojizo oscuro con borde dorado apagado, como el instructor;
+-- la que tienes, verde apagado; la elegida, borde dorado
+local ROW_TOP, ROW_BOTTOM = { 0.32, 0.12, 0.07, 0.95 }, { 0.17, 0.07, 0.04, 0.95 }
+local KNOWN_TOP, KNOWN_BOTTOM = { 0.14, 0.30, 0.11, 0.75 }, { 0.07, 0.17, 0.06, 0.75 }
 function ES.UI.StyleCollectionRow(row)
   local e = row.entry
+  row:SetBackdropColor(0, 0, 0, 0) -- el fondo es el degradado (row.bg)
   if e and e.known then
-    row:SetBackdropColor(0.12, 0.30, 0.10, 0.55)
+    Gradient(row.bg, KNOWN_TOP, KNOWN_BOTTOM)
     row:SetBackdropBorderColor(0.30, 0.65, 0.25, 0.8)
   else
-    local c = ES.UI.BROWN.row
-    row:SetBackdropColor(c[1], c[2], c[3], c[4])
-    row:SetBackdropBorderColor(0.45, 0.34, 0.16, 0.8)
+    Gradient(row.bg, ROW_TOP, ROW_BOTTOM)
+    row:SetBackdropBorderColor(0.62, 0.47, 0.20, 0.9)
   end
   if row.selected then row:SetBackdropBorderColor(1, 0.82, 0.25, 1) end
 end
@@ -320,12 +349,16 @@ function FillRow(row, e, selected)
   local _, _, texture = ES:GetItemData(e.itemID or 0)
   row.entry = e
   row.selected = selected
-  SetIcon(row.icon, texture or ES.Collection.SOURCE_ICON[e.main])
+  local icon = texture or ES.Collection.SOURCE_ICON[e.main]
+  SetIcon(row.icon, icon)
+  -- Recorta el borde de los iconos de objeto (el de misión es un atlas: tal cual)
+  if icon ~= ES.QUEST_ICON then row.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93) end
   row.icon:SetDesaturated(e.known and true or false)
-  row.title:SetText((e.known and GREY or WHITE) .. (e.recipe.name or "?") .. "|r")
+  -- Nombre dorado, como en el instructor; la que ya tienes, en gris
+  row.title:SetText(e.known and (GREY .. (e.recipe.name or "?") .. "|r") or (e.recipe.name or "?"))
   row.sub:SetText(SourceLine(e))
-  -- Aprendida: solo el check (el nivel ya no importa)
-  row.level:SetText(e.known and CHECK or ((e.learnableNow and ORANGE or GOLD) .. e.level .. "|r"))
+  -- Arriba a la derecha (donde el instructor pone el precio): el nivel; aprendida, el check
+  row.level:SetText(e.known and CHECK or ((e.learnableNow and ORANGE or WHITE) .. e.level .. "|r"))
   ES.UI.StyleCollectionRow(row)
   return texture == nil and e.itemID ~= nil -- el juego aún no ha cargado el objeto
 end
@@ -629,8 +662,9 @@ function ES:CreateCollectionView(frame, profKey)
   scroll:HookScript("OnVerticalScroll", function() PlaceRows(frame) end)
   scroll:HookScript("OnSizeChanged", function() PlaceRows(frame) end)
   frame.content = CreateFrame("Frame", nil, scroll)
-  frame.content:SetSize(LIST_W - 12, 1)
+  frame.content:SetSize(ROW_W, 1)
   scroll:SetScrollChild(frame.content)
+  frame.scrollIndicator = ES.UI.ScrollIndicator(scroll, frame.content, SCROLL_W)
   frame.empty = Label(frame.content, "", "GameFontDisable")
   frame.empty:SetPoint("TOP", 0, -30)
   frame.empty:SetWidth(LIST_W - 50)
@@ -734,6 +768,7 @@ function ES:RenderCollection(frame)
     .. (hidden > 0 and (ORANGE .. string.format(L[" · %d ocultas por los filtros"], hidden) .. "|r") or ""))
   frame.content:SetHeight(math.max(1, #list * ROW_STEP))
   PlaceRows(frame)
+  frame.scrollIndicator:Update()
   frame.empty:SetText(#list == 0 and (res.known == res.total and L["¡Las tienes todas!"] or L["Ninguna receta cumple los filtros."]) or "")
   self:RenderCollectionDetail(frame)
 end

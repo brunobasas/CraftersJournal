@@ -388,21 +388,20 @@ function ES:CreateHeader(f)
     line:SetColorTexture(0.68, 0.52, 0.20, edge[3])
   end
 
-  -- Título y botón de escanear, centrados juntos en la cabecera
-  local SCAN_W, GAP = 120, 12
-  local group = CreateFrame("Frame", nil, f)
-  f.title = group:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  -- Título, centrado en la cabecera
+  local SCAN_W = 120
+  f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   f.title:SetText("Crafter's Journal")
   f.title:SetTextColor(unpack(GOLD))
-  f.title:SetPoint("LEFT", group, "LEFT", 0, 0)
-  group:SetSize(math.ceil(f.title:GetStringWidth()) + GAP + SCAN_W, 24)
-  group:SetPoint("TOP", f, "TOP", 0, -15)
+  f.title:SetPoint("TOP", f, "TOP", 0, -19)
 
-  -- Escanear la AH: desde cualquier pestaña; en gris si la AH está cerrada.
+  -- Escanear la AH: desde cualquier pestaña; en gris si la AH está cerrada. Debajo
+  -- de la cabecera, a la derecha (bajo el idioma), en la franja del título de la
+  -- página, que en todas las pantallas tiene libre ese lado.
   -- Mientras escanea, el botón muestra el % de progreso (ver RefreshScanButtons)
-  local scan = CreateFrame("Button", nil, group, "UIPanelButtonTemplate")
+  local scan = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
   scan:SetSize(SCAN_W, 22)
-  scan:SetPoint("LEFT", f.title, "RIGHT", GAP, 0)
+  scan:SetPoint("TOPRIGHT", f, "TOPRIGHT", -49, -59)
   scan:SetText(L["Escanear"])
   scan:SetMotionScriptsWhileDisabled(true) -- el tooltip explica por qué está gris
   scan:SetScript("OnClick", function() ES.Scanner:Start() end)
@@ -430,11 +429,11 @@ function ES:CreateHeader(f)
   scan:SetEnabled(false)
   f.scanButton = scan
 
-  -- "Último escaneo: hace 3 min", en pequeño junto al botón; se actualiza cada 30 s
+  -- "Último escaneo: hace 3 min", en pequeño a la izquierda del botón; se actualiza cada 30 s
   f.lastScan = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  f.lastScan:SetPoint("LEFT", scan, "RIGHT", 8, 0)
+  f.lastScan:SetPoint("RIGHT", scan, "LEFT", -10, 0)
   f.lastScan:SetWidth(170) -- cabe "Cancelado · último: hace 2 días"
-  f.lastScan:SetJustifyH("LEFT")
+  f.lastScan:SetJustifyH("RIGHT")
   f.lastScan:SetWordWrap(false)
   local ticker = CreateFrame("Frame", nil, f)
   ticker.elapsed = 0
