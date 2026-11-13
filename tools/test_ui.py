@@ -71,7 +71,8 @@ lua.execute(r"""
 LEAKS = {}
 local ALLOWED = { CraftersJournalDB = true, SLASH_CRAFTERSJOURNAL1 = true, SLASH_CRAFTERSJOURNAL2 = true, SLASH_CRAFTERSJOURNAL3 = true,
   CraftersJournal_OnAddonCompartmentClick = true, CraftersJournal = true, CraftersJournalMainFrame = true,
-  CraftersJournalAHButton = true, CraftersJournalMinimapButton = true, CraftersJournalRowMarkButton = true, }
+  CraftersJournalAHButton = true, CraftersJournalMinimapButton = true, CraftersJournalRowMarkButton = true,
+  LibStub = true, } -- (LibStub es global a propósito: así comparten librerías los addons)
 setmetatable(_G, { __newindex = function(t, k, v)
   local info = debug.getinfo(2, "S")
   if info and info.source:match("^@[%w\\/]+%.lua$") and not ALLOWED[k] then LEAKS[#LEAKS + 1] = info.source .. ":" .. tostring(k) end
@@ -114,7 +115,7 @@ end
 -- Simular ADDON_LOADED a mano (el mock no dispara eventos)
 CraftersJournalDB = { scans = {} }
 ES.db = CraftersJournalDB
-ES.db.minimap = { angle = 225 }
+ES.db.minimap = { angle = 200 } -- (formato antiguo: se pasa a minimapPos de LibDBIcon)
 
 local key = ES:RealmKey()
 local S = ES.History
@@ -831,6 +832,31 @@ end)
 step("sin variables globales sueltas", function()
   assert(#LEAKS == 0, "globales: " .. table.concat(LEAKS, ", "))
 end)
+step("botón del minimapa con LibDBIcon", function()
+  -- La librería estándar (Leatrix Plus avisaba de un botón propio); la posición de
+  -- antes (angle) se conserva como minimapPos
+  ES.db.minimap = { angle = 200 }
+  -- (el dibujo del botón es de LibDBIcon y necesita frames reales: aquí solo se
+  -- comprueba que se registra con nuestros datos)
+  local icon = LibStub("LibDBIcon-1.0")
+  local savedReg, registered = icon.Register, nil
+  icon.Register = function(self, name, object, db)
+    registered = { name = name, object = object, db = db }
+    self.objects[name] = CreateFrame("Button")
+  end
+  ES.CreateMinimapButton()
+  icon.Register = savedReg
+  assert(icon:IsRegistered("CraftersJournal") and registered and registered.db == ES.db.minimap
+    and registered.object.icon == ES.ICON and registered.object.OnClick, "no se registró en LibDBIcon con nuestros datos")
+  assert(ES.db.minimap.minimapPos == 200 and ES.db.minimap.angle == nil, "posición antigua: " .. tostring(ES.db.minimap.minimapPos))
+  assert(LibStub("LibDataBroker-1.1"):GetDataObjectByName("CraftersJournal"), "falta el objeto de LibDataBroker")
+  SlashCmdList.CRAFTERSJOURNAL("minimap")
+  assert(ES.db.minimap.hide, "/cj minimap lo oculta")
+  SlashCmdList.CRAFTERSJOURNAL("minimap")
+  assert(not ES.db.minimap.hide, "/cj minimap lo vuelve a enseñar")
+  -- Volver a crearlo (otra carga) no lo registra dos veces
+  ES.CreateMinimapButton()
+end)
 step("idioma inglés", function()
   -- Todas las claves L[...] del código tienen traducción al inglés
   local missing = {}
@@ -1247,12 +1273,15 @@ step("portada: tarjetas de profesiones", function()
     end
     newItems[id] = c
   end
+  -- Ruta empezada sin escaneo nuevo: el botón se ve (que se sepa que existe), al día
+  ES:RenderPlan(page)
+  assert(page.pricesButton._shown ~= false and page.pricesUpToDate, "con la ruta empezada, Actualizar precios siempre a la vista")
   ES.db.scans[scanKey] = { time = oldScan.time + 3600, total = oldScan.total, unique = oldScan.unique, items = newItems }
   ES.lockedPlans = {}
   local frozen = ES:LockedPlan("Leatherworking")
   assert(math.abs(frozen.net - net) < 1, string.format("la ruta fijada cambió de coste con el escaneo nuevo: %d -> %d", net, frozen.net))
   ES:RenderPlan(page)
-  assert(page.pricesButton._shown ~= false, "falta Actualizar precios con un escaneo nuevo")
+  assert(page.pricesButton._shown ~= false and not page.pricesUpToDate, "falta Actualizar precios con un escaneo nuevo")
   page.pricesButton._scripts.OnEnter(page.pricesButton)
   page.pricesButton._scripts.OnClick(page.pricesButton)
   local updated = ES:LockedPlan("Leatherworking")

@@ -1283,11 +1283,14 @@ function ES:CreateProfessionPage(page, profKey)
   end)
   routeButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-  -- Actualizar precios: misma ruta con el último escaneo (solo si hay uno más nuevo)
+  -- Actualizar precios: misma ruta con el último escaneo. Con la ruta empezada siempre
+  -- se ve; solo se puede pulsar si hay un escaneo más nuevo (ver RenderPlan)
   local pricesButton = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
   page.pricesButton = pricesButton
   pricesButton:SetSize(140, STATUS_BUTTON_H)
   pricesButton:SetPoint("RIGHT", routeButton, "LEFT", -6, 0)
+  -- (desactivado también enseña su tooltip: que se sepa por qué)
+  if pricesButton.SetMotionScriptsWhileDisabled then pricesButton:SetMotionScriptsWhileDisabled(true) end
   pricesButton:SetScript("OnClick", function()
     ES:RefreshRoutePrices(profKey)
     ES:CalculatePlan(page)
@@ -1295,6 +1298,12 @@ function ES:CreateProfessionPage(page, profKey)
   pricesButton:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
     GameTooltip:AddLine(L["Actualizar precios"])
+    if page.pricesUpToDate then
+      local scan = ES.db.scans and ES.db.scans[ES:RealmKey()]
+      local mins = scan and math.floor((time() - scan.time) / 60)
+      GameTooltip:AddLine(mins and string.format(L["Tu ruta ya usa tu último escaneo de la AH (de hace %d min). Cuando escanees otra vez, aquí aplicas los precios nuevos."], mins)
+        or L["Tu ruta ya usa tu último escaneo de la AH. Cuando escanees otra vez, aquí aplicas los precios nuevos."], 1, 0.82, 0, true)
+    end
     GameTooltip:AddLine(L["La misma ruta (mismas recetas en cada nivel) con los precios del último escaneo. Lo que llevas gastado y vendido se mantiene."], 0.8, 0.8, 0.8, true)
     GameTooltip:AddLine(L["Si hay una ruta mejor desde tu nivel, te lo dice una fila arriba de la ruta."], 0.6, 0.6, 0.6, true)
     GameTooltip:Show()
@@ -2853,9 +2862,15 @@ function ES:RenderPlan(page)
     status = status .. GREY .. L[" · pulsa Empezar ruta antes de comprar|r"]
   end
   page.routeButton:SetText(lock and (page.leaveAsked and L["¿Seguro? Pulsa otra vez"] or L["Dejar ruta"]) or L["Empezar ruta"])
+  -- Actualizar precios: con la ruta empezada, siempre a la vista (antes solo salía con
+  -- un escaneo nuevo y no se sabía que existía); sin escaneo nuevo, desactivado y el
+  -- tooltip dice por qué. Sin empezar, no hace falta: la ruta ya usa el último escaneo
+  local showPrices = lock ~= nil and plan ~= nil and not lock.completed
   page.pricesButton:SetText(L["Actualizar precios"])
-  page.pricesButton:SetShown(newPrices)
-  page.status:SetPoint("RIGHT", newPrices and page.pricesButton or page.routeButton, "LEFT", -10, 0)
+  page.pricesButton:SetShown(showPrices)
+  page.pricesButton:SetEnabled(newPrices)
+  page.pricesUpToDate = showPrices and not newPrices
+  page.status:SetPoint("RIGHT", showPrices and page.pricesButton or page.routeButton, "LEFT", -10, 0)
   page.routeButton:SetEnabled(lock ~= nil or (plan ~= nil and #plan.steps > 0 and not page.calculating))
   -- Recalculando: se ve la ruta anterior hasta que esté la nueva
   if page.calculating then status = GREY .. L["Calculando la ruta…"] .. "|r" end

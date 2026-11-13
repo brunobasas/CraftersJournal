@@ -58,6 +58,12 @@ local function Mock(name)
     if k == "SetChecked" then return function(self, v) self._checked = v end end
     if k == "AddLine" or k == "AddDoubleLine" then return function(self, a, b)
       TOOLTIP[#TOOLTIP+1] = tostring(a) .. (type(b) == "string" and (" | " .. b) or "") end end
+    -- Como en WoW: lo que se crea dentro de un marco sabe quién es su padre (LibDBIcon
+    -- lo usa: texture:GetParent().dataObject)
+    if k == "CreateTexture" or k == "CreateFontString" or k == "CreateAnimationGroup" or k == "CreateMaskTexture" then
+      return function(self) local m = Mock(k) m._parent = self return m end
+    end
+    if k == "GetParent" then return function(self) return self._parent end end
     -- Como en WoW: los métodos de widget empiezan por mayúscula; los campos propios no existen
     if type(k) ~= "string" or not k:match("^%u") then return nil end
     return function() return Mock(k) end
@@ -68,7 +74,7 @@ TOOLTIP = {}
 -- Eventos que tu cliente no tiene (confirmado por el error en el juego) y los
 -- de la API moderna, que tampoco existen en la clásica
 UNKNOWN_EVENTS = { AUCTION_OWNED_LIST_UPDATE = true, REPLICATE_ITEM_LIST_UPDATE = true }
-CreateFrame = function(_, name) local f = Mock("frame") if name then _G[name] = f end return f end
+CreateFrame = function(_, name, parent) local f = Mock("frame") f._parent = parent if name then _G[name] = f end return f end
 UIParent, Minimap = Mock(), Mock()
 GameTooltip = Mock("tooltip")
 UISpecialFrames, SlashCmdList = {}, {}

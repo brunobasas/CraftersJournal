@@ -104,7 +104,7 @@ function ES:ProfLabel(key)
 end
 
 local DEFAULTS = {
-  minimap = { angle = 225, hide = false },
+  minimap = { minimapPos = 225 }, -- (LibDBIcon: posición en grados y hide)
   scans = {},
 }
 
@@ -418,65 +418,42 @@ function ES:GetOwnedReagents(data)
 end
 
 ---------------------------------------------------------------------------
--- Botón del minimapa
+-- Botón del minimapa: con LibDBIcon (la librería estándar), no un botón propio.
+-- Leatrix Plus avisaba ("This is a custom button. Please ask the addon author to use
+-- the standard LibDBIcon library") y los addons que agrupan botones del minimapa
+-- (MinimapButtonButton...) no lo reconocían. ES.db.minimap = { hide, minimapPos }:
+-- la posición de antes (angle, en grados y con la misma convención) se conserva
 ---------------------------------------------------------------------------
-local function UpdateMinimapPosition(button)
-  local angle = math.rad(ES.db.minimap.angle)
-  local radius = (Minimap:GetWidth() / 2) + 5
-  button:ClearAllPoints()
-  button:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * radius, math.sin(angle) * radius)
-end
+local MINIMAP_NAME = "CraftersJournal"
 
 local function CreateMinimapButton()
-  local b = CreateFrame("Button", "CraftersJournalMinimapButton", Minimap)
-  b:SetSize(31, 31)
-  b:SetFrameStrata("MEDIUM")
-  b:SetFrameLevel(8)
-  b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-  b:RegisterForDrag("LeftButton")
-  b:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+  local db = ES.db.minimap
+  if db.minimapPos == nil and db.angle then db.minimapPos = db.angle % 360 end
+  db.angle = nil
+  local LDB = LibStub and LibStub("LibDataBroker-1.1", true)
+  local icon = LibStub and LibStub("LibDBIcon-1.0", true)
+  if not (LDB and icon) then return end
+  local object = LDB:NewDataObject(MINIMAP_NAME, {
+    type = "launcher",
+    text = "Crafter's Journal",
+    icon = ES.ICON,
+    OnClick = function() ES:ToggleMainFrame() end,
+    OnTooltipShow = function(tt)
+      tt:AddLine("Crafter's Journal")
+      tt:AddLine(L["Clic: abrir/cerrar panel"], 1, 1, 1)
+      tt:AddLine(L["Arrastrar: mover botón"], 1, 1, 1)
+    end,
+  })
+  if not icon:IsRegistered(MINIMAP_NAME) then icon:Register(MINIMAP_NAME, object, db) end
+  ES.minimapIcon = icon
+end
+ES.CreateMinimapButton = CreateMinimapButton -- (pruebas)
 
-  local bg = b:CreateTexture(nil, "BACKGROUND")
-  bg:SetSize(20, 20)
-  bg:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
-  bg:SetPoint("TOPLEFT", 7, -5)
-
-  local icon = b:CreateTexture(nil, "ARTWORK")
-  icon:SetSize(17, 17)
-  icon:SetTexture(ES.ICON)
-  icon:SetPoint("TOPLEFT", 7, -6)
-
-  local border = b:CreateTexture(nil, "OVERLAY")
-  border:SetSize(53, 53)
-  border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
-  border:SetPoint("TOPLEFT")
-
-  b:SetScript("OnClick", function() ES:ToggleMainFrame() end)
-
-  b:SetScript("OnDragStart", function(self)
-    self:SetScript("OnUpdate", function()
-      local mx, my = Minimap:GetCenter()
-      local px, py = GetCursorPosition()
-      local scale = Minimap:GetEffectiveScale()
-      px, py = px / scale, py / scale
-      ES.db.minimap.angle = math.deg(math.atan2(py - my, px - mx))
-      UpdateMinimapPosition(self)
-    end)
-  end)
-  b:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
-
-  b:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:AddLine("Crafter's Journal")
-    GameTooltip:AddLine(L["Clic: abrir/cerrar panel"], 1, 1, 1)
-    GameTooltip:AddLine(L["Arrastrar: mover botón"], 1, 1, 1)
-    GameTooltip:Show()
-  end)
-  b:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-  UpdateMinimapPosition(b)
-  if ES.db.minimap.hide then b:Hide() end
-  ES.minimapButton = b
+-- Enseñar u ocultar el botón (/cj minimap)
+function ES:SetMinimapShown(show)
+  self.db.minimap.hide = not show or nil
+  if not self.minimapIcon then return end
+  if show then self.minimapIcon:Show(MINIMAP_NAME) else self.minimapIcon:Hide(MINIMAP_NAME) end
 end
 
 -- Recalcula todos los apartados que dependen de los datos de la AH activa (tras
@@ -747,8 +724,7 @@ SlashCmdList.CRAFTERSJOURNAL = function(msg)
       ES:Print(L["No hay ningún escaneo en curso."])
     end
   elseif msg == "minimap" then
-    ES.db.minimap.hide = not ES.db.minimap.hide
-    ES.minimapButton:SetShown(not ES.db.minimap.hide)
+    ES:SetMinimapShown(ES.db.minimap.hide and true or false)
   elseif msg == "errores" or msg == "errors" or msg == "errores borrar" or msg == "errors clear" then
     -- Lo apuntado por ES:RecordError (ver arriba)
     if msg:find(" ") then
