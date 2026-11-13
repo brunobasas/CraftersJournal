@@ -2481,6 +2481,72 @@ step("lista de la compra: cuenta lo que hicieron pasos anteriores", function()
   end
   assert(need[item] <= made + 1, string.format("la lista pide %d hechos antes y solo se hicieron %d", need[item], made))
 end)
+step("Working Overtime: se lee del árbol de legado y sube la probabilidad", function()
+  -- Árbol de legado simulado como lo da C_Traits (sistema 45): un nodo con el talento
+  local savedT, savedName, savedGSI, savedPrint = C_Traits, C_Spell, GetSpellInfo, ES.Print
+  local rank = 5
+  C_Traits = {
+    GetConfigIDBySystemID = function(id) return id == 45 and 7 or nil end,
+    GetConfigInfo = function() return { treeIDs = { 1 } } end,
+    GetTreeNodes = function() return { 10, 11 } end,
+    GetNodeInfo = function(_, nodeID) return { entryIDs = { nodeID * 10 }, currentRank = nodeID == 11 and rank or 2 } end,
+    GetEntryInfo = function(_, entryID) return { definitionID = entryID } end,
+    GetDefinitionInfo = function(def) return { spellID = def == 110 and 999001 or 999002 } end,
+  }
+  C_Spell = nil
+  GetSpellInfo = function(id) if id == 999001 then return "Working Overtime" end return "Diplomat" end
+  ES.db.overtimeSpell = nil
+  local r, spell = ES:ReadWorkingOvertime()
+  assert(r == 5 and spell == 999001 and ES.db.overtimeSpell == 999001, "rango y hechizo de Working Overtime: " .. tostring(r))
+  -- Aplicado: +20 puntos en amarillo y verde; naranja 100% y gris 0, como siempre
+  ES.Planner.SKILL_BONUS = 0
+  ES:UpdateSkillUpBonus()
+  local t = { 1, 100, 125, 150 }
+  assert(math.abs(ES.Planner.SKILL_BONUS - 0.20) < 1e-9, "bonus del rango 5: " .. ES.Planner.SKILL_BONUS)
+  assert(math.abs(ES.Planner.Chance(t, 125) - 0.70) < 1e-9, "verde al 50% -> 70%: " .. ES.Planner.Chance(t, 125))
+  assert(ES.Planner.Chance(t, 105) == 1, "no pasa del 100%")
+  assert(ES.Planner.Chance(t, 50) == 1 and ES.Planner.Chance(t, 150) == 0, "naranja y gris sin cambios")
+  -- La ruta se recalcula con el bonus (otra clave de caché) y pide menos fabricaciones
+  local data = ES.Data.Leatherworking
+  local with = ES.Planner:Plan(data, { from = 1, to = 150, hours = 24, ignoreSupply = true })
+  local keyWith = ES:PlanKey("Leatherworking", 1, 150, nil)
+  rank = 0
+  ES:UpdateSkillUpBonus()
+  assert(ES.Planner.SKILL_BONUS == 0 and ES:PlanKey("Leatherworking", 1, 150, nil) ~= keyWith, "sin el talento: otra clave de ruta")
+  local without = ES.Planner:Plan(data, { from = 1, to = 150, hours = 24, ignoreSupply = true })
+  assert(ES.Planner.TotalCrafts(with) < ES.Planner.TotalCrafts(without),
+    string.format("con Working Overtime la ruta pide menos fabricaciones: %d vs %d", ES.Planner.TotalCrafts(with), ES.Planner.TotalCrafts(without)))
+  log[#log+1] = string.format("     peletería 1-150: %d fabricaciones con +20%%, %d sin el talento", ES.Planner.TotalCrafts(with), ES.Planner.TotalCrafts(without))
+  -- Indicador en la cabecera (sin comando: se lee del juego): con rango, icono y
+  -- "Working Overtime +12%" en las páginas de rutas; sin rango, nada
+  local mf = ES:GetMainFrame()
+  rank = 3
+  ES:UpdateSkillUpBonus()
+  ES:SelectPage("home")
+  assert(mf.overtime._shown and tostring(mf.overtime.label._text):find("12"), "indicador con rango 3: " .. tostring(mf.overtime.label._text))
+  ES:SelectPage("inventory")
+  assert(mf.overtime._shown == false, "fuera de las páginas de rutas no sale")
+  ES:SelectPage("Leatherworking")
+  assert(mf.overtime._shown, "en una profesión sale")
+  rank = 0
+  ES:UpdateSkillUpBonus()
+  assert(mf.overtime._shown == false, "sin el talento no sale")
+  ES:SelectPage("home")
+  -- Se reconoce también por su hechizo (1225451) aunque el nombre no cuadre
+  GetSpellInfo = function() return "Otro nombre" end
+  C_Traits.GetDefinitionInfo = function(def) return { spellID = def == 110 and 1225451 or 999002 } end
+  rank = 4
+  ES.db.overtimeSpell = nil
+  local r4, s4 = ES:ReadWorkingOvertime()
+  assert(r4 == 4 and s4 == 1225451, "por su ID de hechizo: " .. tostring(r4))
+  -- Sin C_Traits (cliente sin legado): nada cambia
+  C_Traits = nil
+  assert(ES:ReadWorkingOvertime() == nil, "sin C_Traits no se lee")
+  C_Traits, C_Spell, GetSpellInfo, ES.Print = savedT, savedName, savedGSI, savedPrint
+  ES.Planner.SKILL_BONUS = 0
+  ES.db.overtimeSpell = nil
+  ES:ClearHomeCache()
+end)
 step("materiales de la ruta: fabricaciones enteras", function()
   -- Cada paso redondea sus fabricaciones (14,7 -> 15); lo que la ruta dice que compres
   -- tiene que llegar para esas fabricaciones (Discord: "me pide 98 y hacen falta 100")

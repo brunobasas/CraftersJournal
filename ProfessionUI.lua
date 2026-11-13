@@ -409,7 +409,7 @@ function ES:PlanKey(profKey, from, to, cap)
   local scan = self.db.scans and self.db.scans[self:RealmKey()]
   return table.concat({ profKey, self.planGen .. "." .. (self.planGens[profKey] or 0), scan and scan.time or 0, from, to, tostring(cap), tostring(settings.useBags),
     tostring(settings.useQuests), self:RealmKey(), ExcludedKey(settings), tostring(settings.useFavor),
-    tostring(settings.fewerCrafts) }, ":")
+    tostring(settings.fewerCrafts), tostring(self.Planner.SKILL_BONUS or 0) }, ":") -- (Working Overtime)
 end
 
 -- La ruta ya calculada (fijada, o en la caché y aún válida), sin calcular nada

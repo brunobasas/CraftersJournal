@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Routes count the Working Overtime legacy talent.** The addon reads your rank from your Legacy tree (no setting needed) and adds its bonus to the chance of a skill-up on yellow and green recipes: +4% per rank, +20% at rank 5. Routes need fewer crafts, and their cost and shopping lists shrink to match (Leatherworking 1-150: about 208 crafts instead of 290 at rank 5). When it's active, the professions pages show the talent's icon and "Working Overtime +20%" next to the title.
 - **The shopping list updates as you buy on the AH.** AH purchases arrive by mail in Forever, so they didn't count until you picked them up, and the list kept asking for them. Now each purchase counts as soon as the AH confirms it: the item gets its green check, the progress bar moves, and the row says "5 in the mail". When those items reach your bags they stop counting as "in the mail", so nothing is counted twice. The addon still doesn't read your mailbox; it only notes the purchases the AH confirms.
 - **The shopping list next to the AH is just a list to buy from.** Rows go from edge to edge, with no ✕, no "Buy next" and no "0 of 3 ready" row: click a row to open its purchase. To remove items or see everything, use "Full view". It only shows what you buy on the AH, and its progress bar only counts that.
 - **The vendor window also lists vendor items from your shopping list.** Materials that a calculation or Make money added to your shopping list, like a Leaded Vial, now show up when you open a vendor that sells them, and no longer clutter the AH list.

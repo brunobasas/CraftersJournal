@@ -238,6 +238,107 @@ function ES:HasSpecialization(spec)
 end
 
 ---------------------------------------------------------------------------
+-- Working Overtime (talento de legado de Forever, árbol de Professions): +4% de
+-- probabilidad de subir punto por rango (5 rangos: +20%). El árbol de legado es un
+-- árbol de talentos moderno (C_Traits, sistema 45), y se lee como lo lee Questie su
+-- talento Diplomat: el nodo cuyo hechizo es Working Overtime, y su rango comprado.
+-- Se reconoce por su hechizo (1225451, Warcraft Wiki / Wowhead) o, si cambiara, por
+-- el nombre; el ID encontrado se guarda (ES.db.overtimeSpell).
+-- Se SUMA a la probabilidad (+20 puntos), como "aumenta tu probabilidad" en WoW.
+-- Ninguna fuente dice si suma o multiplica (Wowhead: "Aura #657", valores
+-- 4/8/12/16/20); si se midiera que multiplica, se cambia en Planner.Chance
+---------------------------------------------------------------------------
+local LEGACY_SYSTEM_ID = 45
+local OVERTIME_SPELL = 1225451
+local OVERTIME_NAME = "Working Overtime"
+local OVERTIME_ICON = "Interface\\Icons\\INV_Misc_PocketWatch_03"
+ES.OVERTIME_PER_RANK = 0.04
+
+-- Icono del talento (el del juego; si no lo da, el reloj de bolsillo de su ficha)
+function ES:OvertimeIcon()
+  local spellID = (self.db and self.db.overtimeSpell) or OVERTIME_SPELL
+  if C_Spell and C_Spell.GetSpellTexture then
+    local ok, tex = pcall(C_Spell.GetSpellTexture, spellID)
+    if ok and tex then return tex end
+  end
+  if GetSpellTexture then
+    local ok, tex = pcall(GetSpellTexture, spellID)
+    if ok and tex then return tex end
+  end
+  return OVERTIME_ICON
+end
+
+local function SpellNameOf(spellID)
+  if C_Spell and C_Spell.GetSpellName then
+    local ok, name = pcall(C_Spell.GetSpellName, spellID)
+    if ok and name then return name end
+  end
+  if GetSpellInfo then
+    local ok, name = pcall(GetSpellInfo, spellID)
+    if ok then return name end
+  end
+end
+
+-- Rango de Working Overtime (0-5) y su hechizo, o nil si el juego no deja leerlo
+function ES:ReadWorkingOvertime()
+  local T = C_Traits
+  if not (T and T.GetConfigIDBySystemID and T.GetConfigInfo and T.GetTreeNodes and T.GetNodeInfo
+    and T.GetEntryInfo and T.GetDefinitionInfo) then return nil end
+  local ok, configID = pcall(T.GetConfigIDBySystemID, LEGACY_SYSTEM_ID)
+  if not ok or not configID then return nil end
+  local okInfo, configInfo = pcall(T.GetConfigInfo, configID)
+  if not okInfo or not configInfo or not configInfo.treeIDs then return nil end
+  local known = self.db and self.db.overtimeSpell
+  for _, treeID in ipairs(configInfo.treeIDs) do
+    local okNodes, nodes = pcall(T.GetTreeNodes, treeID)
+    for _, nodeID in ipairs(okNodes and nodes or {}) do
+      local okNode, node = pcall(T.GetNodeInfo, configID, nodeID)
+      for _, entryID in ipairs(okNode and node and node.entryIDs or {}) do
+        local okEntry, entry = pcall(T.GetEntryInfo, configID, entryID)
+        local okDef, def = false, nil
+        if okEntry and entry and entry.definitionID then okDef, def = pcall(T.GetDefinitionInfo, entry.definitionID) end
+        local spellID = okDef and def and def.spellID
+        if spellID and (spellID == OVERTIME_SPELL or spellID == known or SpellNameOf(spellID) == OVERTIME_NAME
+          or def.overrideName == OVERTIME_NAME) then
+          if self.db then self.db.overtimeSpell = spellID end
+          return node.currentRank or node.ranksPurchased or 0, spellID
+        end
+      end
+    end
+  end
+  return 0, nil -- (el árbol se lee, pero no tiene el talento)
+end
+
+-- Lee el rango y, si cambió, lo aplica a las rutas (Planner.SKILL_BONUS) y las rehace
+function ES:UpdateSkillUpBonus()
+  local rank = self:ReadWorkingOvertime()
+  if rank == nil then return end -- (sin datos aún: se queda lo que había)
+  local bonus = rank * ES.OVERTIME_PER_RANK
+  self.overtimeRank = rank
+  if ES.Planner and ES.Planner.SKILL_BONUS ~= bonus then
+    ES.Planner.SKILL_BONUS = bonus
+    if self.ClearHomeCache then self:ClearHomeCache() end
+    if self.RefreshAllViews then pcall(self.RefreshAllViews, self) end
+  end
+  -- (el indicador de la cabecera, si la ventana está creada)
+  if self.RefreshOvertimeBadge then pcall(self.RefreshOvertimeBadge, self) end
+end
+
+do
+  local f = CreateFrame("Frame")
+  -- (con pcall: ES.SafeRegister se define más abajo; un evento que el cliente no tenga, se salta)
+  for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "TRAIT_CONFIG_UPDATED", "TRAIT_NODE_CHANGED", "TRAIT_TREE_CHANGED" }) do
+    pcall(f.RegisterEvent, f, e)
+  end
+  f:SetScript("OnEvent", function()
+    if not ES.db then return end
+    -- (al entrar el árbol puede no estar aún: se mira otra vez un poco después)
+    ES:UpdateSkillUpBonus()
+    if C_Timer then C_Timer.After(3, function() if ES.db then ES:UpdateSkillUpBonus() end end) end
+  end)
+end
+
+---------------------------------------------------------------------------
 -- Reputación (recetas que piden un nivel con una facción: rep = { facción, nivel })
 ---------------------------------------------------------------------------
 -- Nombres por si el juego aún no conoce la facción (no la has descubierto)

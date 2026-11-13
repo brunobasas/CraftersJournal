@@ -358,12 +358,15 @@ end
 local MAX_CRAFT_DEPTH = 3
 local EPS = 1e-6
 
--- Probabilidad clásica de subir punto
+-- Probabilidad clásica de subir punto, más el bonus de Working Overtime (talento de
+-- legado de Forever, ES:UpdateSkillUpBonus): se suma en amarillo y verde (+4% por
+-- rango, hasta +20%). Naranja ya es el 100% y gris sigue sin dar puntos
+Planner.SKILL_BONUS = 0
 function Planner.Chance(t, skill)
   local yellow, grey = t[2], t[4]
   if skill < yellow then return 1 end
   if skill >= grey then return 0 end
-  return (grey - skill) / (grey - yellow)
+  return math.min(1, (grey - skill) / (grey - yellow) + (Planner.SKILL_BONUS or 0))
 end
 
 -- Donde la ruta se para (no hay materiales para un punto entero: Rough Grinding

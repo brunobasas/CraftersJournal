@@ -168,6 +168,29 @@ local function CreateMainFrame()
   f.navTitle = f:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
   f.navTitle:SetJustifyH("LEFT")
 
+  -- Working Overtime activo (talento de legado, ES:UpdateSkillUpBonus): su icono y una
+  -- etiqueta junto al título, en las páginas de rutas. Así se ve que las rutas lo cuentan
+  local ot = CreateFrame("Frame", nil, f)
+  ot:SetSize(200, 22)
+  ot:EnableMouse(true)
+  ot.icon = ot:CreateTexture(nil, "ARTWORK")
+  ot.icon:SetSize(20, 20)
+  ot.icon:SetPoint("LEFT", 0, 0)
+  ot.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+  ot.label = ot:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  ot.label:SetPoint("LEFT", ot.icon, "RIGHT", 6, 0)
+  ot:SetScript("OnEnter", function(self)
+    local rank = ES.overtimeRank or 0
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    GameTooltip:AddLine("Working Overtime", 1, 0.82, 0)
+    GameTooltip:AddLine(string.format(L["Talento de legado, rango %d/5: las rutas suman +%d%% a la probabilidad de subir punto en las recetas amarillas y verdes, y piden menos fabricaciones."],
+      rank, math.floor(rank * ES.OVERTIME_PER_RANK * 100 + 0.5)), 1, 1, 1, true)
+    GameTooltip:Show()
+  end)
+  ot:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  ot:Hide()
+  f.overtime = ot
+
   f.pages, f.pageTitles = {}, {}
   local function AddPage(key, title)
     -- Márgenes negros a los lados y abajo, como el diario de mazmorras
@@ -377,7 +400,31 @@ function ES:SelectPage(key)
     main.navTitle:SetPoint("TOPLEFT", 22, -62)
   end
   main.navTitle:SetText(main.pageTitles[key] or "")
+  self:RefreshOvertimeBadge(key)
   if key == "home" then self:RenderHome() end
+end
+
+-- El indicador de Working Overtime: en la portada de profesiones y en cada profesión
+-- (las páginas con rutas), si tienes al menos un rango
+function ES:RefreshOvertimeBadge(key)
+  if not (main and main.overtime) then return end
+  key = key or self.db.lastPage
+  local ot = main.overtime
+  local rank = self.overtimeRank or 0
+  local routes = key == "home" or (self.Data[key] ~= nil and self.Data[key].recipes ~= nil)
+  if rank <= 0 or not routes then
+    ot:Hide()
+    return
+  end
+  ot.icon:SetTexture(self:OvertimeIcon())
+  ot.label:SetText("|cff40ff40" .. string.format(L["Working Overtime +%d%%"], math.floor(rank * self.OVERTIME_PER_RANK * 100 + 0.5)) .. "|r")
+  ot:ClearAllPoints()
+  -- (a la derecha del título; sin título, de las flechas o del botón Profesiones)
+  local title = main.navTitle:GetText()
+  local anchor = (title and title ~= "") and main.navTitle
+    or (main.nextPage:IsShown() and main.nextPage) or (main.back:IsShown() and main.back) or main.navTitle
+  ot:SetPoint("LEFT", anchor, "RIGHT", 14, 0)
+  ot:Show()
 end
 
 -- Páginas hermanas de una página interior, en el orden de la portada: primero las

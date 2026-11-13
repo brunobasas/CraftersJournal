@@ -46,7 +46,11 @@ end
 ---------------------------------------------------------------------------
 local firstAuctions
 step("A. escaneo completo (AH de facciÃ³n)", function()
+  -- Sin la espera de 15 min de los escaneos reales: si escaneaste en el juego hace
+  -- menos de 15 min, el escaneo de prueba no arrancaba y se comparaba tu escaneo real
+  -- (lastGetAll era el nombre antiguo; ahora es lastFullScan)
   ES.db.lastGetAll = {}
+  ES.db.lastFullScan = {}
   ES.db.track = {}          -- empezar el seguimiento limpio para comprobar nÃºmeros
   ES.db.history = {}
   AUCTIONS = BuildAuctions()
