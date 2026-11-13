@@ -133,8 +133,10 @@ function Vendor:List()
   return list
 end
 
--- Lo que la vista Profit dice que vendas al vendedor y llevas en las bolsas (de las
--- mismas rutas): { { itemID, n, unit, value } }, lo que más da arriba
+-- Lo que vender al vendedor de tus bolsas: lo que la vista Profit dice que vendas al
+-- vendedor (de las mismas rutas) y lo que la pestaña Inventario manda al vendedor
+-- (lo que tus rutas empezadas necesitan ya se guarda allí). De cada objeto, lo más
+-- que diga cualquiera de las dos: { { itemID, n, unit, value } }, lo que más da arriba
 function Vendor:SellList()
   local sell = {}
   if not Ledger() then return {} end
@@ -142,6 +144,12 @@ function Vendor:SellList()
     for _, d in ipairs(p.plan.destinations or {}) do
       local a = ES.Planner.SaleAdvice(d)
       if a.vendor > 0 then sell[d.itemID] = (sell[d.itemID] or 0) + a.vendor end
+    end
+  end
+  if ES.Inventory then
+    local ok, inv = pcall(ES.Inventory.List, ES.Inventory)
+    for _, e in ipairs(ok and inv or {}) do
+      if e.vendorN > 0 then sell[e.itemID] = math.max(sell[e.itemID] or 0, e.vendorN) end
     end
   end
   local list = {}
@@ -368,7 +376,7 @@ local function CreatePanel()
     local list = Vendor:SellList()
     local total = 0
     for _, e in ipairs(list) do total = total + e.value end
-    ES:Print(string.format(L["Vendiendo %d objetos de tus rutas por %s..."], #list, ES.Money(total)))
+    ES:Print(string.format(L["Vendiendo %d objetos por %s..."], #list, ES.Money(total)))
     Vendor:Sell(list)
   end)
   f:Hide()
@@ -406,7 +414,7 @@ function Vendor:Refresh()
     if e.qty > 0 then missing = missing + 1 end
   end
   panel.sub:SetText(self.pumping and L["Comprando…"] or self.selling and L["Vendiendo…"]
-    or #list == 0 and L["Para vender al vendedor, de tus rutas:"]
+    or #list == 0 and L["Para vender al vendedor, de tus bolsas:"]
     or missing > 0 and L["De tu lista de la compra, este vendedor tiene:"]
     or L["Ya tienes todo lo que te hace falta de este vendedor."])
   -- Filas: lo que comprar y, debajo, lo que vender (entre las dos, como mucho MAX_ROWS).
@@ -482,7 +490,9 @@ function Vendor:Refresh()
   if shownSell > 0 then
     panel.sellAll:SetPoint("TOP", panel, "TOP", 0, y - 6)
     y = y - 34
-    panel.sellAll:SetText(string.format(L["Vender todo (%s)"], ES.Money(sellTotal)))
+    -- (con más de las que caben, el botón dice cuántas vende: también las que no se ven)
+    panel.sellAll:SetText(#sell > shownSell and string.format(L["Vender las %d (%s)"], #sell, ES.Money(sellTotal))
+      or string.format(L["Vender todo (%s)"], ES.Money(sellTotal)))
     panel.sellAll:SetEnabled(not self.selling)
   end
   panel:SetHeight(-y + 10)

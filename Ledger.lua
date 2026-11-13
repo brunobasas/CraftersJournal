@@ -385,11 +385,22 @@ end
 do
   local f = CreateFrame("Frame")
   for _, e in ipairs({ "TRAINER_SHOW", "TRAINER_UPDATE", "PLAYER_ENTERING_WORLD", "PLAYER_MONEY",
-    "MERCHANT_SHOW", "MERCHANT_CLOSED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED" }) do
+    "MERCHANT_SHOW", "MERCHANT_CLOSED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED",
+    "AUCTION_HOUSE_THROTTLED_SYSTEM_READY" }) do
     ES.SafeRegister(f, e)
   end
   f:SetScript("OnEvent", function(_, event)
     if not ES.db then return end
+    if event == "AUCTION_HOUSE_THROTTLED_SYSTEM_READY" then
+      -- Se pulsó con la AH ocupada: avisa de que ya se puede (anunciar necesita un clic)
+      local b = Ledger.ahBusy
+      Ledger.ahBusy = nil
+      if b and b.waiting and ES:IsAuctionHouseOpen() then
+        ES:Print(L["La Casa de Subastas ya está lista: vuelve a pulsar."])
+      end
+      return
+    end
+    if event == "AUCTION_HOUSE_CLOSED" then Ledger.ahBusy = nil end
     if event == "PLAYER_MONEY" then
       Ledger.OnMoney()
     elseif event == "MERCHANT_SHOW" or event == "MERCHANT_CLOSED" or event == "AUCTION_HOUSE_SHOW" or event == "AUCTION_HOUSE_CLOSED" then
@@ -456,20 +467,68 @@ function Ledger.PostPrice(unit)
   return math.max(unit - unit % 100, 100)
 end
 
--- Anuncia `n` unidades en la AH abierta a `unit` cobre cada una (24 h). Solo con
--- la AH de Forever (C_AuctionHouse); con la clásica, se anuncia a mano. Los
--- materiales (commodities) van en un solo anuncio; el resto, todos de una vez y,
--- si la AH no lo acepta, de uno en uno. Devuelve cuántos anunció.
-function Ledger:PostOnAH(itemID, n, unit)
+-- AH ocupada: cuánto se espera antes de intentar igual, cada cuánto se repite el
+-- aviso y cuándo se olvida un intento viejo (s)
+local AH_BUSY_GRACE, AH_BUSY_REPRINT, AH_BUSY_RESET = 3, 10, 30
+
+-- Duraciones de la AH, por su índice en C_AuctionHouse (1, 2, 3). Forever tiene
+-- subastas de 2, 8 y 24 h (Planner.DURATIONS); el cliente moderno, de 12, 24 y 48.
+-- Se pregunta al juego: el depósito de la 3 frente al de la 1 es 12 veces (2/8/24)
+-- o 4 (12/24/48). Si no responde (o el depósito mínimo los iguala), 2/8/24.
+local DURATION_SETS = { { 2, 8, 24 }, { 12, 24, 48 } }
+function Ledger.DurationIndex(hours, AH, location, itemID, qty, commodity)
+  if not Ledger.durationHours then
+    local calc = AH and (commodity and AH.CalculateCommodityDeposit or AH.CalculateItemDeposit)
+    if calc then
+      local arg = commodity and itemID or location
+      local ok1, d1 = pcall(calc, arg, 1, qty)
+      local ok3, d3 = pcall(calc, arg, 3, qty)
+      if ok1 and ok3 and type(d1) == "number" and type(d3) == "number" and d1 > 0 then
+        local r = d3 / d1
+        if r > 8 then Ledger.durationHours = DURATION_SETS[1]
+        elseif r > 2.5 then Ledger.durationHours = DURATION_SETS[2] end
+      end
+    end
+  end
+  local set = Ledger.durationHours or DURATION_SETS[1]
+  for i, h in ipairs(set) do
+    if h >= (hours or 24) then return i, h end
+  end
+  return #set, set[#set]
+end
+
+-- Anuncia `n` unidades en la AH abierta a `unit` cobre cada una, en una subasta de
+-- `hours` horas (24 por defecto; ver DurationIndex). Solo con la AH de Forever
+-- (C_AuctionHouse); con la clásica, se anuncia a mano. Los materiales
+-- (commodities) van en un solo anuncio; el resto, todos de una vez y, si la AH no
+-- lo acepta, de uno en uno. Devuelve cuántos anunció.
+function Ledger:PostOnAH(itemID, n, unit, hours)
   local AH = C_AuctionHouse
   if not (ES:IsAuctionHouseOpen() and AH and AH.PostItem and ItemLocation) then
     ES:Print(L["Anúncialo desde la ventana de la Casa de Subastas."])
     return 0
   end
   if AH.IsThrottledMessageSystemReady and not AH.IsThrottledMessageSystemReady() then
-    ES:Print(L["La Casa de Subastas está ocupada: vuelve a pulsar en un momento."])
-    return 0
+    -- Ocupada (otro addon buscando, o la AH aún procesa lo anterior). Se avisa una
+    -- vez, no en cada clic, y cuando el juego dice que está lista. Si sigue "ocupada"
+    -- más de AH_BUSY_GRACE s, se intenta igual: el indicador puede quedarse atascado
+    -- y el servidor ya dice si no puede.
+    local now = GetTime()
+    local b = Ledger.ahBusy
+    if not b or now - b.since > AH_BUSY_RESET then
+      b = { since = now }
+      Ledger.ahBusy = b
+    end
+    if now - b.since < AH_BUSY_GRACE then
+      if not b.printed or now - b.printed > AH_BUSY_REPRINT then
+        ES:Print(L["La Casa de Subastas está ocupada: vuelve a pulsar en un momento."])
+        b.printed = now
+      end
+      b.waiting = true
+      return 0
+    end
   end
+  Ledger.ahBusy = nil
   local slot
   for _, s in ipairs(Slots(itemID)) do
     local locked = C_Container and C_Container.GetContainerItemInfo and (C_Container.GetContainerItemInfo(s.bag, s.slot) or {}).isLocked
@@ -485,20 +544,21 @@ function Ledger:PostOnAH(itemID, n, unit)
     commodity = ok and status == COMMODITY
   end
   local price = Ledger.PostPrice(unit)
+  local duration, postHours = Ledger.DurationIndex(hours, AH, location, itemID, qty, commodity)
   local ok, err
   if commodity and AH.PostCommodity then
-    ok, err = pcall(AH.PostCommodity, location, 2, qty, price)
+    ok, err = pcall(AH.PostCommodity, location, duration, qty, price)
   else
-    ok, err = pcall(AH.PostItem, location, 2, qty, nil, price)
+    ok, err = pcall(AH.PostItem, location, duration, qty, nil, price)
     if not ok and qty > 1 then -- no acepta varios de una vez: uno (el resto, con otro clic)
       qty = 1
-      ok, err = pcall(AH.PostItem, location, 2, 1, nil, price)
+      ok, err = pcall(AH.PostItem, location, duration, 1, nil, price)
     end
   end
   if not ok then
     ES:Print(L["No se pudo anunciar: "] .. tostring(err))
     return 0
   end
-  ES:Print(string.format(L["Anunciados %d de %s a %s cada uno (24 h)."], qty, ES:DataItemName(itemID) or itemID, ES.Money(price)))
+  ES:Print(string.format(L["Anunciados %d de %s a %s cada uno (%d h)."], qty, ES:DataItemName(itemID) or itemID, ES.Money(price), postHours))
   return qty
 end

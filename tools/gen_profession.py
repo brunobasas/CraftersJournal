@@ -385,8 +385,15 @@ def main():
     # de Season of Discovery: Flask of Madness, Obsidian Reaver...): no se pueden hacer.
     # El resultado no se comprueba: a ItemSparse de wago le faltan muchos objetos que sí
     # existen (Rune Edge, Demon Forged Breastplate: los manda el servidor)
+    # Fuera también las que no están en ninguna categoría de la ventana de la profesión
+    # (TradeSkillCategoryID 0): no salen en ella y no se pueden fabricar. El Basic
+    # Campfire antiguo (818, amarilla hasta 75) seguía en el cliente, pero en Forever
+    # solo se ve el Basic Campfire Kit (1229737, gris a 5): la ruta mandaba hacer
+    # 245 hogueras de 5 a 75 que no daban puntos.
     recipes, thresholds, impossible = {}, {}, []
     for spell, r in sla.items():
+        if r.get("TradeSkillCategoryID", "") == "0":
+            continue
         orange, yellow, grey = int(r["MinSkillLineRank"]), int(r["TrivialSkillLineRankLow"]), int(r["TrivialSkillLineRankHigh"])
         if any(i not in c["item_info"] for i, _ in c["reagents"].get(spell, [])):
             impossible.append(spell)

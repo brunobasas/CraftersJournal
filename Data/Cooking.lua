@@ -24,7 +24,6 @@ ES.Data.Cooking = {
   -- { PNJ instructor, rangos que enseña: 1 aprendiz (75), 2 oficial (150), 4 experto (225), 8 artesano (300) }
   trainers = { { 1355, 3 }, { 1382, 3 }, { 1430, 3 }, { 1699, 3 }, { 3026, 3 }, { 3067, 3 }, { 3087, 3 }, { 3399, 3 }, { 4210, 3 }, { 4552, 3 }, { 5159, 3 }, { 5482, 3 }, { 6286, 3 }, { 8306, 3 }, { 251905, 3 }, { 252084, 3 }, { 256655, 3 }, { 257006, 3 }, { 265944, 3 } },
   recipes = {
-    [818] = { name = "Basic Campfire", t = { 1, 25, 50, 75 }, basic = true, r = { { 4470, 1 } } },
     [2538] = { name = "Charred Wolf Meat", t = { 1, 45, 65, 85 }, basic = true, r = { { 2672, 1 } }, out = { 2679, 1 }, oq = 1 },
     [2539] = { name = "Spiced Wolf Meat", t = { 1, 50, 70, 90 }, fee = 50, train = 10, r = { { 2672, 1 }, { 2678, 1 } }, out = { 2680, 1 }, oq = 1 },
     [2540] = { name = "Roasted Boar Meat", t = { 1, 45, 65, 85 }, basic = true, r = { { 769, 1 } }, out = { 2681, 1 }, oq = 1 },

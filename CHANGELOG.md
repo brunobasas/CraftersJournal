@@ -1,5 +1,12 @@
 # Crafter's Journal
 
+## Unreleased
+
+- **Cooking no longer sends you to craft Basic Campfire up to 75.** The old Basic Campfire was still in the game data, but Forever only has the Basic Campfire Kit, which turns grey at 5, so those crafts gave no skill. Recipes that don't appear in the profession window are no longer used.
+- **The window next to the vendor sells everything Inventory sends to the vendor.** Before, it only listed items your routes made. Now it also lists the rest of your bags that the Inventory tab says to sell to the vendor (junk, gear, recipes…), so you can sell with a click there without opening the main window. "Sell all" sells them all, including rows that don't fit, and says how many.
+- **Uncertain items are listed for 8 h, not 24 h.** When the addon doesn't know whether an item sells, Inventory now weighs the AH against the vendor using the 8 h deposit (a third of the 24 h one) and lists it for 8 h. If it expires you lose less, and more items are worth trying on the AH. Items that sell well still go up for 24 h. The chat message says the duration used.
+- **"The Auction House is busy" no longer repeats on every click.** It shows once, then tells you when the AH is ready again. If the AH stays "busy" for more than a few seconds, the next click tries to list anyway.
+
 ## 0.42.1
 
 - **Crafter's Journal only scans when you press Scan.** When another addon (such as one that scans as soon as the Auction House opens) requested a full scan, Crafter's Journal used to read it along, so it looked like it had scanned on its own. Now it only notes the server's 15-minute wait so the countdown is right, and says that another addon used it.

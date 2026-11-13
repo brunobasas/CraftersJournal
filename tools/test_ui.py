@@ -2396,14 +2396,60 @@ step("inventario: qué vender de las bolsas, dónde y qué guardar", function()
   ES.Ledger.PostOnAH = function(_, id, n, price) posted = { id, n, price } end
   for _, row in ipairs(page.rows) do if row.onClick and row.title and tostring(row.title._text):find("3×") then row.onClick() end end
   assert(posted and posted[1] == UP and posted[2] == 3, "el clic con la AH abierta no anunció")
+  -- La ventana junto al vendedor vende también lo que el Inventario manda al vendedor
+  local inSell = {}
+  for _, s in ipairs(ES.VendorShop:SellList()) do inSell[s.itemID] = s.n end
+  assert(inSell[JUNK] == 2 and not inSell[LL], "ventana del vendedor: lo del Inventario para el vendedor (" .. tostring(inSell[JUNK]) .. ")")
   C_Container, ES.db.scans, ES.VendorSellPrice = savedCC, savedScans, savedVendor
   ES.Market.ReferencePrice, ES.Market.Signals, ES.RouteLock, ES.LockedPlan, ES.Planner.NeedFrom = savedRef, savedSig, savedLock, savedLocked, savedNeed
   ES.Ledger.MerchantOpen, ES.Ledger.SellToVendor, ES.Ledger.PostOnAH, ES.IsAuctionHouseOpen = savedMerchant, savedSell, savedPost, savedAH
   ES:SelectPage("home")
 end)
+step("anunciar con la AH ocupada: un aviso, no uno por clic", function()
+  local savedCAH, savedIL, savedAH, savedPrint, savedGT = C_AuctionHouse, ItemLocation, ES.IsAuctionHouseOpen, ES.Print, GetTime
+  local clock, ready, printed, posts = 100, false, {}, 0
+  GetTime = function() return clock end
+  ES.IsAuctionHouseOpen = function() return true end
+  ES.Print = function(_, msg) printed[#printed + 1] = msg end
+  C_AuctionHouse = { IsThrottledMessageSystemReady = function() return ready end,
+    PostItem = function() posts = posts + 1 end }
+  ItemLocation = { CreateFromBagAndSlot = function() return {} end }
+  ES.Ledger.ahBusy = nil
+  for _ = 1, 5 do ES.Ledger:PostOnAH(2318, 1, 500) clock = clock + 0.3 end
+  assert(#printed == 1 and posts == 0, "cinco clics con la AH ocupada: un solo aviso (" .. #printed .. ")")
+  ready = true
+  FireEvent("AUCTION_HOUSE_THROTTLED_SYSTEM_READY")
+  assert(#printed == 2 and (printed[2]:find("ready") or printed[2]:find("lista")),"avisa cuando la AH está lista: " .. tostring(printed[2]))
+  -- Indicador atascado: tras unos segundos se intenta igual
+  ready, printed = false, {}
+  ES.Ledger:PostOnAH(2318, 1, 500)
+  clock = clock + 4
+  ES.Ledger:PostOnAH(2318, 1, 500)
+  assert(#printed == 1, "atascada: el segundo clic ya no avisa de nuevo")
+  assert(ES.Ledger.ahBusy == nil, "atascada: se intenta anunciar igual")
+  FireEvent("AUCTION_HOUSE_THROTTLED_SYSTEM_READY")
+  assert(#printed == 1, "sin clic pendiente, la AH lista no avisa")
+  -- Duración: se pregunta al juego por el depósito de cada índice (Forever 2/8/24 h)
+  local D = ES.Ledger.DurationIndex
+  local function Deposits(a, b, c)
+    ES.Ledger.durationHours = nil
+    return { CalculateItemDeposit = function(_, d) return ({ a, b, c })[d] end }
+  end
+  local i, h = D(24, Deposits(5, 20, 60), {}, 1, 1, false)
+  assert(i == 3 and h == 24, "Forever: 24 h es el índice 3 (" .. tostring(i) .. ")")
+  i, h = D(8, Deposits(5, 20, 60), {}, 1, 1, false)
+  assert(i == 2 and h == 8, "Forever: 8 h es el índice 2")
+  i, h = D(8, Deposits(15, 30, 60), {}, 1, 1, false)
+  assert(i == 1 and h == 12, "cliente moderno: lo más corto que cubra 8 h son 12 h")
+  i, h = D(24, Deposits(100, 100, 100), {}, 1, 1, false) -- depósito mínimo: no se sabe
+  assert(i == 3 and h == 24 and ES.Ledger.durationHours == nil, "sin saberlo: 2/8/24")
+  ES.Ledger.durationHours = nil
+  C_AuctionHouse, ItemLocation, ES.IsAuctionHouseOpen, ES.Print, GetTime = savedCAH, savedIL, savedAH, savedPrint, savedGT
+end)
 step("inventario: sin saber si se vende, el depósito que se pierde cuenta", function()
   -- Crimson Silk Pantaloons: 32s en la AH (30s 39c tras la comisión) frente a 24s 30c del
-  -- vendedor; el depósito de 24 h (14s 58c) se pierde si caduca. Con pocos datos, vendedor
+  -- vendedor. Con pocos datos se anuncia a 8 h y, si caduca, se pierde su depósito
+  -- (4s 86c): 25s 53c no compensa frente a 24s 30c seguros. Con pocos datos, vendedor
   local PANTS = 7062
   local savedCC, savedScans, savedVendor, savedSig, savedRef = C_Container, ES.db.scans, ES.VendorSellPrice, ES.Market.Signals, ES.Market.ReferencePrice
   C_Container = {
@@ -2420,11 +2466,16 @@ step("inventario: sin saber si se vende, el depósito que se pierde cuenta", fun
   ES.Market.Signals = function() return { verdict = "unknown" } end
   local e = Pants()
   assert(e.ahN == 0 and e.vendorN == 5 and e.riskyAH, "con pocos datos, al vendedor (y avisando): ah " .. e.ahN)
-  assert(math.abs(e.depositRisk - 2430 * 0.6) < 1, "riesgo = depósito de 24 h: " .. tostring(e.depositRisk))
-  -- Si se sabe que se vende, a la AH (el depósito se devuelve)
+  assert(e.hours == 8 and math.abs(e.depositRisk - 2430 * 0.2) < 1, "riesgo = depósito de 8 h: " .. tostring(e.depositRisk))
+  -- Con un margen mayor, el depósito de 8 h ya compensa: a la AH, a 8 h
+  ES.db.scans[ES:RealmKey()].items[PANTS].minUnit = 3600
+  e = Pants()
+  assert(e.ahN > 0 and e.hours == 8 and not e.riskyAH, "margen suficiente con el depósito de 8 h: ah " .. e.ahN)
+  ES.db.scans[ES:RealmKey()].items[PANTS].minUnit = 3200
+  -- Si se sabe que se vende, a la AH a 24 h (el depósito se devuelve)
   ES.Market.Signals = function() return { verdict = "good" } end
   e = Pants()
-  assert(e.ahN == 5 and not e.riskyAH, "con buen mercado, a la AH")
+  assert(e.ahN == 5 and not e.riskyAH and e.hours == 24, "con buen mercado, a la AH")
   C_Container, ES.db.scans, ES.VendorSellPrice, ES.Market.Signals, ES.Market.ReferencePrice = savedCC, savedScans, savedVendor, savedSig, savedRef
 end)
 step("inventario: lo que daría desencantar (solo informativo)", function()

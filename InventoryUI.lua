@@ -14,6 +14,10 @@ local RISE = 1.3          -- "ha subido": el mínimo de ahora, un 30% o más sob
 local AH_MIN_GAIN = 5     -- la AH tiene que dejar al menos 5c por unidad más que el vendedor
 local AH_MIN_PCT = 0.15   -- y un 15% más
 local AH_FEW = 5          -- con alertas dudosas, unas pocas a la AH y el resto al vendedor
+-- Duración de la subasta: lo que se vende bien, 24 h (el depósito vuelve igual y está
+-- más tiempo a la vista); lo dudoso, 8 h: si caduca se pierde un tercio del depósito
+-- y se puede volver a probar o bajar el precio
+local AH_HOURS_GOOD, AH_HOURS_RISKY = 24, 8
 local DE_MIN_GAIN = 10    -- se avisa de desencantar si deja al menos 10c más que venderlo
 local DE_MIN_PCT = 0.20   -- y un 20% más (es una media: cada desencantamiento sale al azar)
 
@@ -77,15 +81,15 @@ function Inventory:List()
       local fair = ES.Market:FairPrice(id, entry.minUnit)
       local listPrice = ES.Market.ListPrice(fair)
       -- Lo que te queda es tras la comisión: el depósito se devuelve al venderse
-      local perUnit, cut = ES.Planner.AuctionCosts(vendor, { hours = 24, neutral = ES:IsNeutralAH() })
-      local net = listPrice and listPrice * (1 - cut)
       local verdict = ES.Market:Signals(id).verdict
+      e.hours = verdict == "good" and AH_HOURS_GOOD or AH_HOURS_RISKY
+      local perUnit, cut = ES.Planner.AuctionCosts(vendor, { hours = e.hours, neutral = ES:IsNeutralAH() })
+      local net = listPrice and listPrice * (1 - cut)
       e.fair, e.verdict, e.listPrice, e.ref = fair, verdict, listPrice, fair.ref
       if fair.ref and entry.minUnit >= fair.ref * RISE then e.rise = entry.minUnit / fair.ref - 1 end
       -- ...pero si no sabemos que se venda (pocos datos, ojo), puede caducar y el
-      -- depósito se pierde (60% del vendedor, mínimo 1s por subasta): la AH tiene que
-      -- compensar aunque se pierda una vez. Si no, al vendedor (Crimson Silk Pantaloons:
-      -- 30s en la AH frente a 24s del vendedor, pero 14s de depósito por cada una que caduca)
+      -- depósito se pierde (el de 8 h: 20% del vendedor, mínimo por subasta): la AH
+      -- tiene que compensar aunque se pierda una vez. Si no, al vendedor
       local compare = net
       if net and verdict ~= "good" then
         local stack = ES.Calc.StackSize(id)
@@ -201,6 +205,10 @@ local function Tooltip(e)
       GameTooltip:AddDoubleLine(string.format(L["%d en la AH a %s"], e.ahN, ES.Money(e.listPrice)),
         "+" .. ES.Money(e.ahN * e.ahUnit), 1, 0.82, 0, 1, 1, 1)
       GameTooltip:AddLine(L["(lo que te queda tras la comisión de la AH; el depósito se devuelve al venderse)"], 0.6, 0.6, 0.6, true)
+      if e.hours == AH_HOURS_RISKY and e.depositRisk then
+        GameTooltip:AddLine(string.format(L["Subasta de %d h: no se sabe si se vende y, si caduca, pierdes solo %s de depósito por subasta."],
+          e.hours, ES.Money(e.depositRisk)), 0.6, 0.6, 0.6, true)
+      end
     end
     if e.vendorN > 0 then
       GameTooltip:AddDoubleLine(string.format(L["%d al vendedor a %s"], e.vendorN, ES.Money(e.vendorUnit)),
@@ -249,7 +257,7 @@ end
 -- Clic: con la AH abierta anuncia lo que va a la AH; con el vendedor, vende lo suyo
 local function Act(e)
   if e.ahN > 0 and ES:IsAuctionHouseOpen() then
-    ES.Ledger:PostOnAH(e.itemID, e.ahN, e.listPrice)
+    ES.Ledger:PostOnAH(e.itemID, e.ahN, e.listPrice, e.hours)
   elseif e.vendorN > 0 and ES.Ledger:MerchantOpen() then
     ES.Ledger:SellToVendor(e.itemID, e.vendorN)
   else
