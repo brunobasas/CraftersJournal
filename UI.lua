@@ -452,8 +452,11 @@ function ES:ToggleMainFrame()
   f:SetShown(not f:IsShown())
 end
 
-function ES:OnScanComplete(scan)
-  self:ShowMainFrame()
+-- `followed`: el escaneo lo pidió otro addon (ForeverForge al abrir la AH) y solo se
+-- leyeron sus datos: no se abre la ventana, que si no se abría sola cada vez que
+-- abrías la AH. Con el escaneo que pides tú (botón Escanear), sí, para ver el resultado
+function ES:OnScanComplete(scan, followed)
+  if not followed then self:ShowMainFrame() end
   self:RefreshAllViews() -- precios nuevos: todos los apartados
   self.Collection:AlertScan(scan) -- pergaminos de botín que te faltan, en la AH
 end

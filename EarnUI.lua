@@ -256,6 +256,33 @@ function ES:CreateEarnPage(page)
   self.earnPage = page
 end
 
+-- Secciones plegables: clic en el encabezado (+ / −) la pliega o despliega. Se
+-- recuerda (ES.db.earnCollapsed[key]); plegada, dice cuántas filas tiene.
+-- Añade el encabezado a `lines` y devuelve si hay que pintar sus filas
+local PLUS = "|TInterface\\Buttons\\UI-PlusButton-Up:14:14:0:0|t "
+local MINUS = "|TInterface\\Buttons\\UI-MinusButton-Up:14:14:0:0|t "
+function ES.UI.EarnCollapsed(key)
+  return ES.db.earnCollapsed and ES.db.earnCollapsed[key] or false
+end
+local function Section(lines, key, title, n)
+  local collapsed = ES.UI.EarnCollapsed(key)
+  lines[#lines + 1] = {
+    section = (collapsed and PLUS or MINUS) .. title .. (collapsed and (GREY .. " (" .. n .. ")|r") or ""),
+    onClick = function()
+      ES.db.earnCollapsed = ES.db.earnCollapsed or {}
+      ES.db.earnCollapsed[key] = not collapsed or nil
+      ES:RenderEarn()
+    end,
+    tooltip = function(row)
+      GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+      GameTooltip:AddLine(title, 1, 0.82, 0)
+      GameTooltip:AddLine(collapsed and L["Clic: desplegar"] or L["Clic: plegar"], 0.6, 0.6, 0.6)
+      GameTooltip:Show()
+    end,
+  }
+  return not collapsed
+end
+
 function ES:RenderEarn()
   local page = self.earnPage
   if not page or not page:IsVisible() then return end
@@ -293,17 +320,16 @@ function ES:RenderEarn()
   page.status:SetText(status)
 
   local lines = {}
-  if #res.batch > 0 then
-    lines[#lines + 1] = { section = L["Lote de hoy"] }
+  if #res.batch > 0 and Section(lines, "batch", L["Lote de hoy"], #res.batch) then
     for _, idea in ipairs(res.batch) do lines[#lines + 1] = IdeaLine(idea) end
     lines[#lines + 1] = { total = true, title = L["Total del lote"],
       sub = L["Para comprar sus materiales: Añadir a la lista de compra (arriba)."],
       value = Signed(-res.profit) }
   end
   -- Venta al vendedor: segura, sin límite de ventas, aparte del lote
-  if #res.vendor > 0 then
-    lines[#lines + 1] = { section = L["Venta segura al vendedor"] }
-    for i = 1, math.min(#res.vendor, MORE_IDEAS) do lines[#lines + 1] = IdeaLine(res.vendor[i]) end
+  local nVendor = math.min(#res.vendor, MORE_IDEAS)
+  if nVendor > 0 and Section(lines, "vendor", L["Venta segura al vendedor"], nVendor) then
+    for i = 1, nVendor do lines[#lines + 1] = IdeaLine(res.vendor[i]) end
   end
   -- Las que no entraron en el lote (no siempre las siguientes: una puede quedarse fuera
   -- porque las anteriores ya compran sus materiales, y entonces quizá ya no llegue al mínimo)
@@ -311,14 +337,13 @@ function ES:RenderEarn()
   for _, idea in ipairs(res.ideas) do
     if not idea.inBatch and #more < MORE_IDEAS and ES.Earn.LineValue(idea) >= res.minLine then more[#more + 1] = idea end
   end
-  if #more > 0 then
-    lines[#lines + 1] = { section = L["Más opciones con beneficio"] }
+  if #more > 0 and Section(lines, "more", L["Más opciones con beneficio"], #more) then
     for _, idea in ipairs(more) do lines[#lines + 1] = IdeaLine(idea) end
   end
   -- Recetas que no sabes y darían beneficio: qué merece la pena aprender
-  if #res.learnable > 0 then
-    lines[#lines + 1] = { section = L["Recetas que podrías aprender"] }
-    for i = 1, math.min(#res.learnable, MAX_LEARNABLE) do
+  local nLearn = math.min(#res.learnable, MAX_LEARNABLE)
+  if nLearn > 0 and Section(lines, "learnable", L["Recetas que podrías aprender"], nLearn) then
+    for i = 1, nLearn do
       local idea = res.learnable[i]
       local e = idea.e
       local name, texture = ItemLabel(e.itemID, e.recipe.name)
@@ -334,8 +359,7 @@ function ES:RenderEarn()
   end
   -- Enfriamientos (transmutaciones...) que sabes
   local cds = ES.Earn:Cooldowns()
-  if #cds > 0 then
-    lines[#lines + 1] = { section = L["Enfriamientos"] }
+  if #cds > 0 and Section(lines, "cooldowns", L["Enfriamientos"], #cds) then
     for _, c in ipairs(cds) do
       local name, texture = ItemLabel(c.recipe.out and c.recipe.out[1] or 0, c.recipe.name)
       lines[#lines + 1] = { icon = texture or 134400, title = name or c.recipe.name,
@@ -345,14 +369,14 @@ function ES:RenderEarn()
         item = c.recipe.out and c.recipe.out[1] }
     end
   end
-  if #res.avoided > 0 then
-    lines[#lines + 1] = { section = L["Con beneficio pero las alertas dicen evitar"] }
-    for i = 1, math.min(#res.avoided, MAX_AVOIDED) do lines[#lines + 1] = IdeaLine(res.avoided[i], true) end
+  local nAvoided = math.min(#res.avoided, MAX_AVOIDED)
+  if nAvoided > 0 and Section(lines, "avoided", L["Con beneficio pero las alertas dicen evitar"], nAvoided) then
+    for i = 1, nAvoided do lines[#lines + 1] = IdeaLine(res.avoided[i], true) end
   end
   -- Materiales que llevas y no usa ninguna receta que sabes: para vender
-  if #left > 0 then
-    lines[#lines + 1] = { section = L["Materiales que llevas y no usas (para vender)"] }
-    for i = 1, math.min(#left, 10) do
+  local nLeft = math.min(#left, 10)
+  if nLeft > 0 and Section(lines, "leftovers", L["Materiales que llevas y no usas (para vender)"], nLeft) then
+    for i = 1, nLeft do
       local it = left[i]
       local name, texture = ItemLabel(it.itemID, L["Objeto "] .. it.itemID)
       local where = it.ahPrice and it.ahPrice * 0.95 > it.vendor

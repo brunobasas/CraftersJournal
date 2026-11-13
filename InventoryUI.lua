@@ -53,12 +53,61 @@ local function RouteNeeds()
     local data = ES.Data[prof.key]
     if plan and data then
       local rank = ES:GetProfessionSkill(data.skillLine)
-      for itemID, q in pairs(ES.Planner.NeedFrom(plan, math.max(plan.from, rank or plan.from))) do
-        need[itemID] = (need[itemID] or 0) + math.ceil(q - 0.001)
+      -- (la ruta entera, no solo el tramo: si no, te diría que vendas lo del siguiente)
+      for itemID, n in pairs(ES.Planner.RouteNeed(prof.key, plan, rank, { keep = true })) do
+        need[itemID] = (need[itemID] or 0) + n.need
       end
     end
   end
   return need
+end
+
+-- Lo que no se propone vender nunca:
+--   herramientas de profesión (Blacksmith Hammer, Arclight Spanner, varas de
+--     encantar, pico de minero, cuchillo de desollar, cañas): sin ellas no fabricas
+--     ni recolectas, aunque el vendedor pague 3 cobres (Discord)
+--   lo que marcas tú con clic derecho (ES.db.neverSell[itemID] = true)
+-- ES.db.neverSell[itemID] = false: una herramienta que sí quieres vender
+local GATHER_TOOLS = {
+  [2901] = true,  -- Mining Pick
+  [7005] = true,  -- Skinning Knife
+  [6256] = true, [6365] = true, [6366] = true, [6367] = true, -- cañas de pescar
+  [12225] = true, [19022] = true, [19970] = true,
+}
+local toolItems
+function Inventory.IsTool(itemID)
+  if not toolItems then
+    toolItems = {}
+    for _, t in pairs(ES.Data.Tools or {}) do toolItems[t.item] = true end
+    for id in pairs(GATHER_TOOLS) do toolItems[id] = true end
+  end
+  return toolItems[itemID] or false
+end
+
+-- ¿No se vende? Devuelve "user" (lo marcaste), "tool" (herramienta) o nil
+function Inventory.NeverSell(itemID)
+  local mark = ES.db.neverSell and ES.db.neverSell[itemID]
+  if mark == true then return "user" end
+  if mark ~= false and Inventory.IsTool(itemID) then return "tool" end
+  return nil
+end
+
+-- Marcar o desmarcar "no vender nunca" (clic derecho en una fila)
+function Inventory.SetNeverSell(itemID, on)
+  ES.db.neverSell = ES.db.neverSell or {}
+  if on then
+    ES.db.neverSell[itemID] = true
+  else
+    -- (una herramienta desmarcada se puede vender: false; lo demás vuelve a lo normal)
+    if Inventory.IsTool(itemID) then ES.db.neverSell[itemID] = false else ES.db.neverSell[itemID] = nil end
+  end
+  ES:Print(string.format(on and L["%s: no se propondrá venderlo. Se deshace con clic derecho en \"No se venden\" (pestaña Inventario)."]
+    or L["%s: vuelve a proponerse para vender."], ES:DataItemName(itemID) or ("#" .. itemID)))
+  -- Todas las ventanas que proponen vender (si no, la fila seguía ahí y cada clic
+  -- derecho repetía el aviso)
+  if ES.RenderInventory then ES:RenderInventory() end
+  if ES.VendorShop and ES.VendorShop.Refresh then ES.VendorShop:Refresh() end
+  if ES.AuctionSell and ES.AuctionSell.Refresh then ES.AuctionSell:Refresh() end
 end
 
 -- Qué hacer con cada objeto de tus bolsas:
@@ -69,10 +118,11 @@ function Inventory:List()
   local need = RouteNeeds()
   local list = {}
   for id, it in pairs(BagContents()) do
-    local keep = math.min(it.count, need[id] or 0)
+    local never = Inventory.NeverSell(id)
+    local keep = never and it.count or math.min(it.count, need[id] or 0)
     local n = it.count - keep
     local vendor = not it.noValue and ES:VendorSellPrice(id) or 0
-    local e = { itemID = id, count = it.count, keep = keep, vendorUnit = vendor, vendorN = 0, ahN = 0, value = 0 }
+    local e = { itemID = id, count = it.count, keep = keep, never = never, vendorUnit = vendor, vendorN = 0, ahN = 0, value = 0 }
     local entry = scan and scan.items[id]
     -- Sin precio en la AH no se ha comparado: que se vea (si no, "al vendedor" parece
     -- que la AH paga menos)
@@ -114,6 +164,8 @@ function Inventory:List()
     if de and de.value - sellUnit >= math.max(DE_MIN_GAIN, sellUnit * DE_MIN_PCT) then
       e.de, e.deCan, e.deRank = de, ES.Disenchant:CanDisenchant(de.skill)
     end
+    -- (lo que no se vende sale aparte: herramientas solo si las llevas, que se vea por
+    -- qué no se proponen; lo tuyo, siempre, para poder desmarcarlo)
     if e.value > 0 or keep > 0 then list[#list + 1] = e end
   end
   table.sort(list, function(a, b) return a.value > b.value or (a.value == b.value and a.itemID < b.itemID) end)
@@ -193,7 +245,8 @@ function ES.UI.ListPage(page, title, icon, stats)
   end)
 end
 
-local function Tooltip(e)
+-- noActions: sin las líneas de qué hace el clic (la ventana junto a la AH pone las suyas)
+local function Tooltip(e, noActions)
   return function(row)
     GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
     if GameTooltip.SetItemByID then GameTooltip:SetItemByID(e.itemID) else GameTooltip:AddLine((ItemLabel(e.itemID))) end
@@ -242,17 +295,30 @@ local function Tooltip(e)
     end
     ES.Market.AddFairToTooltip(e.fair)
     if e.ahN > 0 or e.verdict then ES.Market.AddToTooltip(e.itemID) end
+    if noActions then
+      GameTooltip:Show()
+      return
+    end
     GameTooltip:AddLine(" ")
     if e.ahN > 0 and ES:IsAuctionHouseOpen() then
       GameTooltip:AddLine(string.format(L["Clic: anunciar %d en la AH."], e.ahN), 0.5, 0.8, 1)
     elseif e.vendorN > 0 and ES.Ledger:MerchantOpen() then
       GameTooltip:AddLine(string.format(L["Clic: vender %d al vendedor."], e.vendorN), 0.5, 0.8, 1)
-    else
+    elseif not e.never then
       GameTooltip:AddLine(L["Abre el vendedor o la Casa de Subastas para venderlo desde aquí."], 0.6, 0.6, 0.6, true)
+    end
+    if e.never then
+      GameTooltip:AddLine(e.never == "tool" and L["Herramienta de profesión: sin ella no puedes fabricar o recolectar. No se propone venderla."]
+        or L["Lo marcaste para no venderlo."], 0.4, 1, 0.4, true)
+      GameTooltip:AddLine(L["Clic derecho: volver a proponerlo para vender."], 0.6, 0.6, 0.6)
+    elseif e.keep < e.count then
+      GameTooltip:AddLine(L["Clic derecho: no venderlo nunca."], 0.6, 0.6, 0.6)
     end
     GameTooltip:Show()
   end
 end
+
+Inventory.Tooltip = Tooltip -- (también la ventana junto a la AH, AuctionSellUI.lua)
 
 -- Clic: con la AH abierta anuncia lo que va a la AH; con el vendedor, vende lo suyo
 local function Act(e)
@@ -269,7 +335,10 @@ end
 local function Line(e, mode)
   local name, texture = ItemLabel(e.itemID)
   local sub
-  if mode == "keep" then
+  if mode == "never" then
+    sub = GREY .. (e.never == "tool" and L["herramienta de profesión: no se vende"] or L["lo marcaste para no venderlo"])
+      .. " · " .. L["clic derecho: volver a proponerlo"] .. "|r"
+  elseif mode == "keep" then
     sub = GREEN .. string.format(L["guarda %d para tus rutas"], e.keep) .. "|r"
       .. (e.count > e.keep and (GREY .. " · " .. string.format(L["%d de sobra"], e.count - e.keep) .. "|r") or "")
   else
@@ -285,10 +354,13 @@ local function Line(e, mode)
     if e.keep > 0 then parts[#parts + 1] = GREY .. string.format(L["guarda %d para tus rutas"], e.keep) .. "|r" end
     sub = table.concat(parts, " · ")
   end
+  local sells = mode ~= "keep" and mode ~= "never"
   return {
     icon = texture or 134400, title = string.format("%d× %s", e.count, name or ("#" .. e.itemID)), sub = sub,
-    value = mode == "keep" and "" or ES.UI.Signed(-e.value), item = e.itemID,
-    tooltip = Tooltip(e), onClick = mode ~= "keep" and function() Act(e) end or nil,
+    value = sells and ES.UI.Signed(-e.value) or "", item = e.itemID,
+    tooltip = Tooltip(e), onClick = sells and function() Act(e) end or nil,
+    -- Clic derecho: no venderlo nunca (o, en "No se venden", volver a proponerlo)
+    onRightClick = (sells or mode == "never") and function() Inventory.SetNeverSell(e.itemID, mode ~= "never") end or nil,
   }
 end
 
@@ -334,7 +406,7 @@ function ES:RenderInventory()
   if not page or not page:IsVisible() then return end
   local list = Inventory:List()
   local Signed = ES.UI.Signed
-  local rising, ah, vendor, keep = {}, {}, {}, {}
+  local rising, ah, vendor, keep, never = {}, {}, {}, {}, {}
   local tAH, tVendor = 0, 0
   for _, e in ipairs(list) do
     tAH = tAH + e.ahN * (e.ahUnit or 0)
@@ -342,7 +414,8 @@ function ES:RenderInventory()
     if e.value > 0 and e.rise and e.ahN > 0 then rising[#rising + 1] = e
     elseif e.ahN > 0 then ah[#ah + 1] = e
     elseif e.vendorN > 0 then vendor[#vendor + 1] = e end
-    if e.keep > 0 then keep[#keep + 1] = e end
+    if e.never then never[#never + 1] = e
+    elseif e.keep > 0 then keep[#keep + 1] = e end
   end
   page.stats.total:SetText(Signed(-(tAH + tVendor)))
   page.stats.ah:SetText(tAH > 0 and Signed(-tAH) or (GREY .. "—|r"))
@@ -367,8 +440,15 @@ function ES:RenderInventory()
   page.action:SetText(L["Vender al vendedor"])
 
   local lines = {}
+  -- (el clic derecho, a la vista y no solo en el tooltip: en el encabezado de la
+  -- primera sección de vender, encima de las filas a las que se aplica)
+  local hinted = false
   local function Section(title, items, mode)
     if #items == 0 then return end
+    if not mode and not hinted then
+      hinted = true
+      title = title .. GREY .. "  ·  " .. L["Clic derecho en una fila: no venderlo nunca."] .. "|r"
+    end
     lines[#lines + 1] = { section = title }
     for _, e in ipairs(items) do lines[#lines + 1] = Line(e, mode) end
   end
@@ -376,6 +456,7 @@ function ES:RenderInventory()
   Section(L["Vender en la Casa de Subastas"], ah)
   Section(L["Vender al vendedor"], vendor)
   Section(L["Guardar para tus rutas"], keep, "keep")
+  Section(L["No se venden"], never, "never")
   page.empty:SetText(#lines == 0 and L["No llevas nada que se pueda vender."] or "")
   ES.UI.RenderLines(page, lines)
 end

@@ -112,21 +112,16 @@ function Shopping.PhaseList(profKey)
   if not (plan and data) then return nil end
   local level = math.max(plan.from, ES:GetProfessionSkill(data.skillLine) or plan.from)
   local list = { t = 0, kind = "phase", key = profKey, live = true, items = {} }
-  local wanted = {} -- [itemID] = { need, expected }
+  -- (la misma regla que Materiales y la ventana del vendedor: Planner.RouteNeed)
+  local wanted, phase = ES.Planner.RouteNeed(profKey, plan, level) -- [itemID] = { need, expected }
   if Shopping.ByPhase(profKey) then
-    local need, phase = ES.Planner.PhaseNeed(plan, level)
     if not phase then return nil end
     list.phase = phase
     list.title = string.format(L["%s: tramo %d-%d"], ES:ProfLabel(profKey), phase.from, phase.batchTo or phase.to)
       .. (phase.batchTo and L[" · por tandas (en verde)"] or "")
-    for itemID, n in pairs(need) do wanted[itemID] = { need = n.target, expected = n.expected } end
   else
     list.whole = true
     list.title = string.format(L["%s: ruta %d-%d"], ES:ProfLabel(profKey), level, lock.to)
-    for itemID, q in pairs(ES.Planner.NeedFrom(plan, level)) do
-      local n = math.ceil(q - 0.001)
-      if n > 0 then wanted[itemID] = { need = n, expected = q } end
-    end
   end
   for itemID, w in pairs(wanted) do
     local source, unit = SourceOf(plan, itemID)

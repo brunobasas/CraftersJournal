@@ -998,8 +998,14 @@ local function CreateRow(parent)
     if self.tooltip then self.tooltip(self) end
   end)
   row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  -- Filas de instructor o vendedor: clic para marcar el camino al más cercano
-  row:SetScript("OnClick", function(self)
+  -- Filas de instructor o vendedor: clic para marcar el camino al más cercano.
+  -- Clic derecho: lo que diga la línea (line.onRightClick; p. ej. "no venderlo nunca")
+  row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  row:SetScript("OnClick", function(self, button)
+    if button == "RightButton" then
+      if self.onRightClick then self.onRightClick() end
+      return
+    end
     if self.onClick then
       self.onClick()
     elseif self.ahItem and ES:IsAuctionHouseOpen() then
@@ -1123,6 +1129,7 @@ local function StyleRow(row, line)
   row.go = line.go
   row.ahItem = line.ahItem
   row.onClick = line.onClick
+  row.onRightClick = line.onRightClick
   row.onSkip, row.skipTip, row.skipTitle = line.onSkip, line.skipTip, line.skipTitle
   row.skip:SetShown(line.onSkip ~= nil)
   row.value:ClearAllPoints()
@@ -2500,7 +2507,11 @@ local function ShopLines(plan, page)
     if it.source == "ah" then ah[#ah + 1] = it else vendor[#vendor + 1] = it end
     total = total + it.total
   end
-  local need = ES.Planner.NeedFrom(plan, math.max(plan.from, page.from or plan.from))
+  -- Cuánto hace falta: la misma regla que la Lista de compra y la ventana del
+  -- vendedor (Planner.RouteNeed: por tramos solo con la ruta empezada)
+  local routeNeed, phase = ES.Planner.RouteNeed(page.profKey, plan, page.from)
+  local need = {}
+  for itemID, n in pairs(routeNeed) do need[itemID] = n.need end
   -- Lo que tienes: solo las bolsas (ni banco ni correo)
   local function Progress(itemID)
     local have = ES:ItemCount(itemID)
@@ -2556,15 +2567,8 @@ local function ShopLines(plan, page)
   -- que llevabas al empezarla; los totales de la ruta siguen congelados
   if ES:RouteLock(page.profKey) then
     -- Por tramos (por defecto): solo lo del tramo en el que estás, con su margen
-    -- (Planner.PhaseNeed); la Lista de compra lo enseña sola, sin añadirlo
+    -- (ya en `need`, de Planner.RouteNeed); la Lista de compra lo enseña sola
     local byPhase = ES.Shopping.ByPhase(page.profKey)
-    local phase
-    if byPhase then
-      local pn
-      pn, phase = ES.Planner.PhaseNeed(plan, math.max(plan.from, page.from or plan.from))
-      need = {}
-      for itemID, n in pairs(pn) do need[itemID] = n.target end
-    end
     local shopping = {}
     for _, it in ipairs(plan.shopping) do shopping[it.itemID] = it end
     local buyAH, buyVendor, haveAll, left = {}, {}, {}, 0

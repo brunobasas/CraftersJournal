@@ -51,3 +51,4 @@ CalculatorUI.lua
 CollectionUI.lua
 PatternsUI.lua
 VendorUI.lua
+AuctionSellUI.lua

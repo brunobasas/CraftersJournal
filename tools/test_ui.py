@@ -482,8 +482,29 @@ step("ganar dinero (sin correo)", function()
   -- Página y portada
   ES:SelectPage("money")
   ES:RenderEarn()
-  -- Mínimo con el deslizador: escalón a escalón, y la rueda
+  -- Secciones plegables: clic en el encabezado la pliega (con cuántas tiene) y se recuerda
   local page = ES.earnPage
+  local function SectionRow()
+    for _, row in ipairs(page.rows) do
+      if row._shown ~= false and row.onClick and tostring(row.section._text) ~= "" then return row end
+    end
+  end
+  local sec = SectionRow()
+  if sec then
+    local shownBefore = 0
+    for _, row in ipairs(page.rows) do if row._shown ~= false then shownBefore = shownBefore + 1 end end
+    sec._scripts.OnClick(sec)
+    local key = next(ES.db.earnCollapsed or {})
+    assert(key and ES.UI.EarnCollapsed(key), "plegar: no se guardó")
+    local shownAfter = 0
+    for _, row in ipairs(page.rows) do if row._shown ~= false then shownAfter = shownAfter + 1 end end
+    assert(shownAfter < shownBefore, "plegar: siguen las mismas filas (" .. shownBefore .. " -> " .. shownAfter .. ")")
+    assert(tostring(SectionRow().section._text):find("%(%d+%)"), "plegada, dice cuántas tiene: " .. tostring(SectionRow().section._text))
+    SectionRow()._scripts.OnClick(SectionRow())
+    assert(not ES.UI.EarnCollapsed(key), "desplegar")
+    log[#log+1] = "     secciones plegables: " .. key
+  end
+  -- Mínimo con el deslizador: escalón a escalón, y la rueda
   local savedAfter = C_Timer.After
   C_Timer.After = function(_, fn) fn() end
   page.minSlider._scripts.OnValueChanged(page.minSlider, 4)
@@ -1295,17 +1316,75 @@ step("portada: tarjetas de profesiones", function()
   counts[buyItem] = 6
   V:Pump() -- ya está todo
   assert(Bought() == 6 and not V.queue[1], "con todo en las bolsas no debería quedar nada en cola")
-  -- Si de verdad no llega (sin existencias), sí lo vuelve a pedir: tras ver que no cambia
+  -- Si no llega (servidor lento o sin existencias), NUNCA lo vuelve a comprar solo
+  -- (Discord: 14 Fine Thread -> 28): espera, avisa de lo que falta y deja de mirar.
+  -- Mientras espera, pulsar la fila tampoco lo compra otra vez
   V.queue, V.pumping = {}, nil
   bought = {}
   counts[buyItem] = 0
+  local printed = {}
+  local savedPrint = ES.Print
+  ES.Print = function(_, msg) printed[#printed + 1] = msg end
   V:Buy({ itemID = buyItem, qty = 3, batch = 3, price = 300, cost = 300 })
   while V.queue[1] and not V.queue[1].check do V:Pump() end
   V:Pump() -- primer vistazo: espera
-  V:Pump() -- no ha cambiado: vuelve a pedir lo que falta
-  while V.queue[1] and not V.queue[1].check do V:Pump() end
-  assert(Bought() == 6, "lo que no llegó debería pedirse otra vez: " .. Bought())
-  log[#log+1] = "     vendedor: con entrega lenta no compra de más; si no llega, lo vuelve a pedir"
+  V:Buy({ itemID = buyItem, qty = 3, batch = 3, price = 300, cost = 300 }) -- clic en la fila mientras espera
+  for _ = 1, 20 do if V.queue[1] then V:Pump() end end
+  ES.Print = savedPrint
+  assert(Bought() == 3 and not V.queue[1], "lo que no llegó no debería comprarse otra vez: " .. Bought())
+  assert(printed[#printed] and printed[#printed]:find("3"), "debería avisar de lo que falta: " .. tostring(printed[#printed]))
+  log[#log+1] = "     vendedor: con entrega lenta no compra de más; si no llega, avisa y no lo vuelve a comprar"
+  -- Mientras espera a uno que no llega, compra los demás (no los retrasa la espera)
+  V.queue, V.pumping = {}, nil
+  local order = {}
+  local savedBuyFn, savedFind = BuyMerchantItem, GetMerchantItemID
+  local OTHER = buyItem + 1
+  GetMerchantNumItems = function() return 2 end
+  GetMerchantItemID = function(i) return i == 1 and buyItem or OTHER end
+  BuyMerchantItem = function(i) order[#order + 1] = i end
+  counts[buyItem], counts[OTHER] = 0, 0
+  ES.Print = function() end
+  V:Buy({ itemID = buyItem, qty = 3, batch = 3, price = 300, cost = 300 }) -- (arranca la cola: compra el primero)
+  V:Buy({ itemID = OTHER, qty = 3, batch = 3, price = 300, cost = 300 })
+  V:Pump() -- su comprobación: no ha llegado, espera al final
+  assert(V.queue[1] and not V.queue[1].check and V.queue[1].itemID == OTHER, "la espera retrasa el siguiente")
+  for _ = 1, 30 do if V.queue[1] then V:Pump() end end
+  ES.Print = savedPrint
+  assert(#order == 2 and order[2] == 2, "compró los dos, uno tras otro")
+  BuyMerchantItem, GetMerchantItemID = savedBuyFn, savedFind
+  GetMerchantNumItems = function() return 1 end
+  counts[OTHER] = nil
+  V.queue, V.pumping = {}, nil
+  -- Ruta sin empezar: la ventana pide lo de la ruta entera, sin el colchón del tramo
+  -- (como la vista Materiales: Discord, 12 Fine Thread en la ruta y 14 aquí)
+  do
+    local savedLock, savedLast = ES.RouteLock, ES.db.lastProf
+    ES.RouteLock = function() return nil end
+    ES.db.lastProf = page.profKey
+    local rank = ES:GetProfessionSkill(ES.Data[page.profKey].skillLine)
+    local want = ES.Planner.NeedFrom(page.plan, math.max(page.plan.from, rank or page.plan.from))[buyItem]
+    local entry
+    for _, e in ipairs(V:List()) do if e.itemID == buyItem then entry = e end end
+    assert(entry and want and entry.need == math.ceil(want - 0.001),
+      "sin empezar, la ventana del vendedor pide " .. tostring(entry and entry.need) .. " y la ruta " .. tostring(want))
+    -- Y la regla única: sin empezar, aunque "por tramos" esté activado, la ruta entera
+    local savedPhase = ES.db.prof[page.profKey].byPhase
+    ES.db.prof[page.profKey].byPhase = nil
+    local rn, ph = ES.Planner.RouteNeed(page.profKey, page.plan, rank)
+    assert(ph == nil and rn[buyItem] and rn[buyItem].need == entry.need, "RouteNeed sin empezar: ruta entera")
+    -- Empezada y por tramos: el tramo (lo mismo para Materiales, Lista de compra y vendedor)
+    ES.RouteLock = function(_, k) return k == page.profKey and { from = page.plan.from, to = page.plan.to } or nil end
+    local rnP, phP = ES.Planner.RouteNeed(page.profKey, page.plan, rank)
+    local pn = ES.Planner.PhaseNeed(page.plan, math.max(page.plan.from, rank or page.plan.from))
+    assert(phP, "RouteNeed empezada y por tramos: el tramo")
+    for itemID, n in pairs(pn) do assert(rnP[itemID] and rnP[itemID].need == n.target, "RouteNeed por tramos: " .. itemID) end
+    -- Inventario (keep): siempre la ruta entera, aunque vaya por tramos
+    local rnK, phK = ES.Planner.RouteNeed(page.profKey, page.plan, rank, { keep = true })
+    assert(phK == nil and rnK[buyItem] and rnK[buyItem].need == entry.need, "RouteNeed keep: ruta entera")
+    ES.db.prof[page.profKey].byPhase = savedPhase
+    ES.RouteLock, ES.db.lastProf = savedLock, savedLast
+    log[#log+1] = "     vendedor: sin empezar la ruta, pide lo mismo que la ruta (" .. entry.need .. ")"
+  end
   -- Cliente clásico: BuyMerchantItem(i, n) cuenta n en lotes. Pedir 6 de uno que va
   -- de 3 en 3 compraba 18; ahora, de lote en lote (sin cantidad): 6
   V.queue, V.pumping = {}, nil
@@ -2452,10 +2531,93 @@ step("inventario: qué vender de las bolsas, dónde y qué guardar", function()
   ES.Ledger.PostOnAH = function(_, id, n, price) posted = { id, n, price } end
   for _, row in ipairs(page.rows) do if row.onClick and row.title and tostring(row.title._text):find("3×") then row.onClick() end end
   assert(posted and posted[1] == UP and posted[2] == 3, "el clic con la AH abierta no anunció")
+  -- Ventana junto a la AH: lo que el Inventario manda a la AH, con clic para anunciar
+  do
+    local savedMain, savedAHF = CraftersJournalMainFrame, AuctionHouseFrame
+    CraftersJournalMainFrame = nil -- (con la ventana grande al lado de la AH no sale)
+    AuctionHouseFrame = CreateFrame("Frame")
+    ES.AuctionSell.closed = nil
+    -- (un objeto azul, como los da el juego: el nombre sale con el color de su calidad)
+    local savedData, savedQC = ES.GetItemData, ITEM_QUALITY_COLORS[3]
+    ES.GetItemData = function(_, id) if id == UP then return "Blue Thing", 3, 134400 end return savedData(ES, id) end
+    ITEM_QUALITY_COLORS[3] = { r = 0, g = 0.44, b = 0.87, hex = "|cff0070dd" }
+    ES.AuctionSell:Refresh()
+    ES.GetItemData, ITEM_QUALITY_COLORS[3] = savedData, savedQC
+    local sp = CraftersJournalAuctionSellPanel
+    assert(sp and sp._shown == true, "con la AH abierta sale la ventana de vender en la AH")
+    local upRow
+    for _, row in ipairs(sp.rows) do if row._shown ~= false and row.entry and row.entry.itemID == UP then upRow = row end end
+    assert(upRow and upRow.entry.ahN == 3, "la ventana de la AH lista lo que va a la AH")
+    for _, row in ipairs(sp.rows) do assert(not (row._shown ~= false and row.entry and row.entry.itemID == JUNK), "lo del vendedor no va a la ventana de la AH") end
+    assert(tostring(upRow.name._text):find("|cff0070dd", 1, true), "el nombre lleva el color de su calidad: " .. tostring(upRow.name._text))
+    assert(tostring(sp.hint._text):find("derecho"), "a la vista, qué hace el clic derecho")
+    posted = nil
+    -- (el tooltip es el del Inventario; aquí Market.Signals está simulado sin sus cifras)
+    -- Clic: todas las de la fila (como en Inventario); Mayús+clic: solo una
+    local savedShift = IsShiftKeyDown
+    IsShiftKeyDown = function() return false end
+    upRow._scripts.OnClick(upRow, "LeftButton")
+    assert(posted and posted[1] == UP and posted[2] == 3, "clic en la ventana de la AH: anunciar todas (" .. tostring(posted and posted[2]) .. ")")
+    posted = nil
+    IsShiftKeyDown = function() return true end
+    upRow._scripts.OnClick(upRow, "LeftButton")
+    assert(posted and posted[1] == UP and posted[2] == 1, "Mayús+clic en la ventana de la AH: anunciar solo 1")
+    IsShiftKeyDown = savedShift
+    -- Abajo, una línea por acción
+    local hint = tostring(sp.hint._text)
+    assert(hint:find("Clic") and hint:find("Mayús") and hint:find("derecho") and select(2, hint:gsub("\n", "")) >= 2,
+      "la ayuda de abajo, una línea por acción: " .. hint)
+    -- Clic derecho: no venderlo nunca, y la fila desaparece al momento de esta ventana
+    local savedPrint, savedNever = ES.Print, ES.db.neverSell
+    ES.Print = function() end
+    upRow._scripts.OnClick(upRow, "RightButton")
+    for _, row in ipairs(sp.rows) do
+      assert(not (row._shown ~= false and row.entry and row.entry.itemID == UP), "tras el clic derecho sigue en la ventana de la AH")
+    end
+    ES.db.neverSell, ES.Print = savedNever, savedPrint
+    ES.AuctionSell:Refresh()
+    CraftersJournalMainFrame = savedMain
+    ES.AuctionSell:Refresh()
+    assert(sp._shown == false, "con la ventana grande al lado de la AH, la de vender no sale")
+    AuctionHouseFrame = savedAHF
+  end
   -- La ventana junto al vendedor vende también lo que el Inventario manda al vendedor
   local inSell = {}
   for _, s in ipairs(ES.VendorShop:SellList()) do inSell[s.itemID] = s.n end
   assert(inSell[JUNK] == 2 and not inSell[LL], "ventana del vendedor: lo del Inventario para el vendedor (" .. tostring(inSell[JUNK]) .. ")")
+  -- No vender nunca: las herramientas de profesión no se proponen (Blacksmith Hammer:
+  -- 3c al vendedor, pero sin él no hay Herrería); con clic derecho, lo que tú quieras
+  local Inv = ES.Inventory
+  assert(Inv.NeverSell(5956) == "tool" and Inv.NeverSell(2901) == "tool" and not Inv.NeverSell(JUNK), "herramientas")
+  local savedPrint = ES.Print
+  ES.Print = function() end
+  local savedNever = ES.db.neverSell
+  ES.db.neverSell = nil
+  local function Find(id) for _, e in ipairs(Inv:List()) do if e.itemID == id then return e end end end
+  -- Clic derecho en su fila del Inventario: deja de proponerse y pasa a "No se venden"
+  ES:RenderInventory()
+  local junkRow
+  for _, row in ipairs(page.rows) do if row._shown ~= false and row.item == JUNK and row.onRightClick then junkRow = row end end
+  assert(junkRow, "la fila del Inventario tiene clic derecho")
+  junkRow._scripts.OnClick(junkRow, "RightButton")
+  local j = Find(JUNK)
+  assert(Inv.NeverSell(JUNK) == "user" and j and j.never == "user" and j.vendorN == 0 and j.keep == j.count, "marcar: no se vende")
+  for _, s in ipairs(ES.VendorShop:SellList()) do assert(s.itemID ~= JUNK, "la ventana del vendedor lo sigue proponiendo") end
+  local sections = {}
+  for _, row in ipairs(page.rows) do if row._shown ~= false then sections[#sections + 1] = tostring(row.section._text) end end
+  assert(table.concat(sections, "|"):find("No se venden"), "falta la sección No se venden")
+  -- Clic derecho en "No se venden": vuelve a proponerse
+  for _, row in ipairs(page.rows) do
+    if row._shown ~= false and row.item == JUNK and row.onRightClick then junkRow = row end
+  end
+  junkRow._scripts.OnClick(junkRow, "RightButton")
+  assert(not Inv.NeverSell(JUNK) and Find(JUNK).vendorN == 2, "desmarcar: se vuelve a proponer")
+  -- Una herramienta desmarcada sí se puede vender
+  Inv.SetNeverSell(5956, false)
+  assert(not Inv.NeverSell(5956), "herramienta desmarcada")
+  Inv.SetNeverSell(5956, true)
+  assert(Inv.NeverSell(5956) == "user", "herramienta marcada otra vez")
+  ES.db.neverSell, ES.Print = savedNever, savedPrint
   C_Container, ES.db.scans, ES.VendorSellPrice = savedCC, savedScans, savedVendor
   ES.Market.ReferencePrice, ES.Market.Signals, ES.RouteLock, ES.LockedPlan, ES.Planner.NeedFrom = savedRef, savedSig, savedLock, savedLocked, savedNeed
   ES.Ledger.MerchantOpen, ES.Ledger.SellToVendor, ES.Ledger.PostOnAH, ES.IsAuctionHouseOpen = savedMerchant, savedSell, savedPost, savedAH

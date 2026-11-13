@@ -361,7 +361,9 @@ step("H. escaneo con API moderna", function()
   scan = CraftersJournalDB.scans[ES:RealmKey()]
   check(scan.total == #AUCTIONS, "API moderna por tandas: total %d ~= %d", scan.total, #AUCTIONS)
   log("      por tandas: %d de %d subastas", scan.total, #AUCTIONS)
-  -- Otro addon pide el escaneo completo: solo cuenta la barrera, no se escanea por nuestra cuenta
+  -- Otro addon pide el escaneo completo (ForeverForge_Auction, al abrir la AH): cuenta
+  -- la barrera y se leen esos mismos datos, sin pedir otro al servidor. Si no, con un
+  -- addon que siempre se adelanta, Crafter's Journal no escanearía nunca
   hooksecurefunc = hooksecurefunc or function(t, name, post)
     if type(t) == "string" then t, name, post = _G, t, name end
     local orig = t[name]
@@ -370,11 +372,32 @@ step("H. escaneo con API moderna", function()
   NOW = NOW + 3600
   CraftersJournalDB.scans[ES:RealmKey()] = nil
   ES.Scanner:InstallHooks()
+  local requests = 0
+  local replicate = C_AuctionHouse.ReplicateItems
+  C_AuctionHouse.ReplicateItems = function() requests = requests + 1 return replicate() end
+  ES.Scanner:InstallHooks()
+  local main = ES:GetMainFrame()
+  main:Hide()
   C_AuctionHouse.ReplicateItems() -- como ForeverForge_Auction al abrir la AH
-  check(not ES.Scanner:IsBusy(), "empezó a escanear por el escaneo de otro addon")
+  check(ES.Scanner:IsBusy() and ES.Scanner.follow, "no siguió el escaneo de otro addon")
   check(ES.Scanner:SecondsUntilNextScan() > 0, "el escaneo de otro addon no cuenta para la barrera")
   RunTimers()
-  check(CraftersJournalDB.scans[ES:RealmKey()] == nil, "guardó el escaneo de otro addon")
+  check(requests == 1, "pidió otro escaneo al servidor además del del otro addon: %d", requests)
+  local followed = CraftersJournalDB.scans[ES:RealmKey()]
+  check(followed and followed.total == #AUCTIONS, "no guardó el escaneo de otro addon")
+  check(not ES.Scanner.follow and not ES:LastScanFail(), "siguiendo a otro addon quedó un fallo o el modo seguir")
+  check(not main:IsShown(), "leer el escaneo de otro addon abrió la ventana sola")
+  log("      siguiendo a otro addon: %d subastas, sin pedir otro escaneo", followed and followed.total or 0)
+  -- Con la AH cerrada no se sigue (no es para ti): solo cuenta la barrera
+  NOW = NOW + 3600
+  CraftersJournalDB.scans[ES:RealmKey()] = nil
+  FireEvent("AUCTION_HOUSE_CLOSED")
+  RunTimers()
+  AuctionHouseFrame:Hide()
+  ES.ahOpen = false
+  C_AuctionHouse.ReplicateItems()
+  RunTimers()
+  check(not ES.Scanner:IsBusy() and CraftersJournalDB.scans[ES:RealmKey()] == nil, "con la AH cerrada siguió el escaneo de otro addon")
   -- La barrera es de la cuenta: otro personaje no puede escanear hasta pasados 15 min
   CraftersJournalDB.lastFullScan = { ["Alt-Reino"] = NOW }
   check(ES.Scanner:SecondsUntilNextScan() > 0, "la barrera de otro personaje no cuenta")

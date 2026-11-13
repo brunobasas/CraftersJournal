@@ -305,6 +305,34 @@ function Planner.PhaseNeed(plan, level, z)
   return out, phase
 end
 
+-- Cuánto hace falta de cada material de la ruta de `profKey` desde `level`. ÚNICA
+-- regla para todas las vistas (Materiales, Lista de compra, ventana del vendedor,
+-- Inventario), para que no vuelvan a separarse (Discord: la ruta pedía 12 Fine Thread
+-- y la ventana del vendedor 14):
+--   comprar (por defecto): con la ruta empezada y "por tramos" activado, el tramo en
+--     el que estás con su colchón (PhaseNeed); si no, lo que queda de ruta, sin colchón
+--   opts.keep: lo que queda de ruta entera, siempre (Inventario: lo que guardas no
+--     es solo el tramo; si no, te diría que vendas lo del tramo siguiente)
+-- Devuelve { [itemID] = { need (unidades enteras), expected } } y el tramo (o nil)
+function Planner.RouteNeed(profKey, plan, level, opts)
+  local out = {}
+  if not plan then return out, nil end
+  level = math.max(plan.from or level or 1, level or plan.from or 1)
+  local byPhase = not (opts and opts.keep) and ES:RouteLock(profKey) and ES.Shopping and ES.Shopping.ByPhase(profKey)
+  if byPhase then
+    local need, phase = Planner.PhaseNeed(plan, level)
+    for itemID, n in pairs(need) do
+      if n.target > 0 then out[itemID] = { need = n.target, expected = n.expected } end
+    end
+    return out, phase
+  end
+  for itemID, q in pairs(Planner.NeedFrom(plan, level)) do
+    local n = math.ceil(q - 0.001)
+    if n > 0 then out[itemID] = { need = n, expected = q } end
+  end
+  return out, nil
+end
+
 -- Cómo vas en el tramo con lo que llevas (have(itemID) = unidades):
 -- { phase, short = { [itemID] = cuántas faltan para lo esperado }, extra = { [itemID]
 --   = cuántas faltan hasta el colchón }, ok (llega a lo esperado) }

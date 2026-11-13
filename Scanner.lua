@@ -128,39 +128,48 @@ function Scanner:Start()
   self:Begin(api)
 end
 
--- Pide los datos al servidor y empieza a esperarlos
-function Scanner:Begin(api)
+-- Pide los datos al servidor y empieza a esperarlos. Con `follow`, no pide nada:
+-- otro addon acaba de pedir el escaneo completo y se leen los mismos datos cuando
+-- lleguen (ver OnForeignScan)
+function Scanner:Begin(api, follow, before)
   self.api = api
   self.event = api == "legacy" and "AUCTION_ITEM_LIST_UPDATE" or "REPLICATE_ITEM_LIST_UPDATE"
+  self.follow = follow or nil
 
-  ES:ScanLog("pedido, API " .. self.api)
+  ES:ScanLog((follow and "leyendo el escaneo de otro addon, API " or "pedido, API ") .. self.api)
   self.state = "waiting"
   self.scanID = (self.scanID or 0) + 1
   self.key = ES:RealmKey() -- AH en la que empezó el escaneo
   self.requestTime = time()
   self.waited = 0
   self.gotEvent = false
-  -- La barrera cuenta desde la petición: el servidor la cuenta aunque no responda
-  LastFullScan()[ES:CharKey()] = self.requestTime
-
-  self:MuteOthers(self.event)
+  if not follow then
+    -- La barrera cuenta desde la petición: el servidor la cuenta aunque no responda
+    -- (la del otro addon ya la anotó OnForeignScan)
+    LastFullScan()[ES:CharKey()] = self.requestTime
+    -- Siguiendo a otro addon no se silencia a nadie: ese addon necesita su evento
+    self:MuteOthers(self.event)
+  end
   ES.SafeRegister(frame, self.event) -- si no existe, el sondeo de cada segundo detecta los datos igual
   ES:RefreshScanButtons()
   SetProgress(WAIT_PROGRESS)
 
-  local before = self:CountResults()
+  -- (siguiendo a otro addon, lo que había cuando lo pidió: lo anota OnForeignScan)
+  before = before or self:CountResults()
 
-  self.ownRequest = true -- para que el gancho no lo tome por otro addon
-  if self.api == "legacy" then
-    -- Evita un error conocido de la UI clásica con calidad -1
-    if ITEM_QUALITY_COLORS and not ITEM_QUALITY_COLORS[-1] then
-      ITEM_QUALITY_COLORS[-1] = { r = 0, g = 0, b = 0 }
+  if not follow then
+    self.ownRequest = true -- para que el gancho no lo tome por otro addon
+    if self.api == "legacy" then
+      -- Evita un error conocido de la UI clásica con calidad -1
+      if ITEM_QUALITY_COLORS and not ITEM_QUALITY_COLORS[-1] then
+        ITEM_QUALITY_COLORS[-1] = { r = 0, g = 0, b = 0 }
+      end
+      pcall(QueryAuctionItems, "", nil, nil, 0, nil, nil, true, false, nil)
+    else
+      pcall(C_AuctionHouse.ReplicateItems)
     end
-    pcall(QueryAuctionItems, "", nil, nil, 0, nil, nil, true, false, nil)
-  else
-    pcall(C_AuctionHouse.ReplicateItems)
+    self.ownRequest = false
   end
-  self.ownRequest = false
 
   -- Contador visible + sondeo por si el evento no llega
   local id = self.scanID
@@ -205,7 +214,8 @@ function Scanner:Begin(api)
     end
     lastCount = count
 
-    SetStatus(string.format(L["Pidiendo los datos de la AH al servidor... %d s (API %s, /es cancel para cancelar)"], elapsed, apiName))
+    SetStatus(self.follow and string.format(L["Leyendo el escaneo que pidió otro addon... %d s"], elapsed)
+      or string.format(L["Pidiendo los datos de la AH al servidor... %d s (API %s, /es cancel para cancelar)"], elapsed, apiName))
     C_Timer.After(1, Tick)
   end
   Tick()
@@ -224,6 +234,15 @@ function Scanner:Abort(reason)
   self:UnmuteOthers()
   self.state = "idle"
   self.scanID = (self.scanID or 0) + 1 -- invalida lotes pendientes
+  if self.follow then
+    -- Leyendo el escaneo de otro addon: no lo pediste tú, así que ni aviso en el chat
+    -- ni "Cancelado" junto al último escaneo; solo el estado y el registro
+    self.follow = nil
+    ES:ScanLog("no se pudo leer el escaneo de otro addon: " .. tostring(reason))
+    SetStatus(L["No se pudo leer el escaneo de otro addon. Puedes escanear tú cuando el botón lo permita."])
+    ES:RefreshScanButtons()
+    return
+  end
   -- Para avisar junto a "Último escaneo" de que el último intento no acabó
   -- (si no, "hace 2 días" parece un fallo al guardar)
   if type(ES.db.lastScanFail) ~= "table" then ES.db.lastScanFail = {} end
@@ -442,23 +461,47 @@ function Scanner:Finish(items, sigs, total)
   local scans = ES.History:Summary()
 
   local msg = string.format(L["Escaneo completado: %d subastas, %d objetos distintos."], total, unique)
+  local followed = self.follow
+  if followed then msg = msg .. L[" (con el escaneo que pidió otro addon)"] end
+  self.follow = nil
   if scans < 3 then
     msg = msg .. L[" Las alertas de mercado necesitan unos días de escaneos: con 1-2 al día basta."]
   end
   ES:Print(msg)
   SetStatus(msg)
   ES:RefreshScanButtons()
-  ES:OnScanComplete(scan)
+  ES:OnScanComplete(scan, followed)
 end
 
 -- Otro addon (ForeverForge_Auction escanea solo al abrir la AH, Auctionator, TSM...)
--- pide un escaneo completo: gasta los 15 min de la cuenta. Solo se anota la barrera
--- para que el botón muestre la cuenta atrás real: Crafter's Journal escanea únicamente
--- cuando el jugador pulsa Escanear, nunca por su cuenta ni a rebufo de otro addon.
+-- pide un escaneo completo: gasta los 15 min de la cuenta. Se anota la barrera (el
+-- botón muestra la cuenta atrás real) y se leen esos mismos datos cuando lleguen
+-- (Begin con follow): si ese addon se adelanta siempre al abrir la AH, Crafter's
+-- Journal no podría escanear nunca. Sin otro addon, se escanea solo al pulsar
+-- Escanear: Crafter's Journal nunca pide un escaneo por su cuenta.
 function Scanner:OnForeignScan(api)
   if self.ownRequest or not ES.db then return end
   LastFullScan()[OTHER_ADDON] = time()
   ES:ScanLog("otro addon pidió un escaneo completo (API " .. api .. ")")
+  if not self:IsBusy() then
+    -- Lo que hay ahora, antes de que lleguen los datos nuevos (para no tomar por
+    -- nuevas las subastas de un escaneo anterior)
+    local saved = self.api
+    self.api = api
+    local ok, before = pcall(self.CountResults, self)
+    self.api = saved
+    before = ok and before or 0
+    -- (ese addon suele pedirlo al abrirse la AH, quizá antes de que la marquemos
+    -- abierta: se mira otra vez un momento después)
+    local function Follow()
+      if self:IsBusy() then return end
+      if ES:IsAuctionHouseOpen() then self:Begin(api, true, before) end
+    end
+    if ES:IsAuctionHouseOpen() then Follow() return end
+    C_Timer.After(0.3, Follow)
+    SetStatus(string.format(L["Otro addon acaba de pedir un escaneo completo: el servidor no permitirá otro hasta dentro de %s."],
+      ES.Countdown(self:SecondsUntilNextScan())))
+  end
   if not self:IsBusy() then
     SetStatus(string.format(L["Otro addon acaba de pedir un escaneo completo: el servidor no permitirá otro hasta dentro de %s."],
       ES.Countdown(self:SecondsUntilNextScan())))

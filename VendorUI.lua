@@ -11,13 +11,14 @@ local L = ES.L
 -- Comprar en Forever: cada compra pide un número de objetos (como mucho una pila; lo
 -- que se vende por lotes, un lote por compra);
 -- el servidor ignora las compras que llegan muy seguidas, así que van de una en
--- una con BUY_GAP de separación y al final se comprueba lo que ha llegado.
+-- una con BUY_GAP de separación y al final se comprueba lo que ha llegado. Lo que
+-- falte no se vuelve a comprar solo: se avisa y la fila sigue pidiéndolo.
 
 local Vendor = { queue = {} }
 ES.VendorShop = Vendor
 
 local BUY_GAP = 0.35
-local MAX_WAITS = 5 -- comprobaciones (de 1 s) esperando a que llegue lo comprado
+local MAX_WAITS = 8 -- comprobaciones (de 1 s) esperando a que llegue lo comprado (no se vuelve a comprar)
 local ROW_H, MAX_ROWS = 34, 12
 local WIDTH = 300
 local COST_W = 74 -- columna del precio a la derecha de cada fila (hasta "99g 99s 99c")
@@ -64,16 +65,9 @@ local function Needs()
   local need = {}
   for _, p in ipairs(Plans()) do
     local rank = ES:GetProfessionSkill(ES.Data[p.key].skillLine)
-    local level = math.max(p.plan.from, rank or p.plan.from)
-    if ES.Shopping.ByPhase(p.key) then
-      -- Por tramos: solo el tramo en el que estás, con su margen (Planner.PhaseNeed)
-      for itemID, n in pairs(ES.Planner.PhaseNeed(p.plan, level)) do
-        need[itemID] = (need[itemID] or 0) + n.target
-      end
-    else
-      for itemID, q in pairs(ES.Planner.NeedFrom(p.plan, level)) do
-        need[itemID] = (need[itemID] or 0) + q
-      end
+    -- (la misma regla que Materiales y la Lista de compra: Planner.RouteNeed)
+    for itemID, n in pairs(ES.Planner.RouteNeed(p.key, p.plan, rank)) do
+      need[itemID] = (need[itemID] or 0) + n.need
     end
   end
   -- Lo intermedio que ya has fabricado (Bolt of Silk Cloth, Cured Light Hide...) y
@@ -154,6 +148,8 @@ function Vendor:SellList()
   end
   local list = {}
   for itemID, n in pairs(sell) do
+    -- (herramientas de profesión y lo que marcaste para no venderlo: nunca)
+    if ES.Inventory and ES.Inventory.NeverSell(itemID) then n = 0 end
     n = math.min(n, Ledger().BagCount(itemID))
     local unit = ES:VendorSellPrice(itemID) or 0
     if n > 0 and unit > 0 then list[#list + 1] = { itemID = itemID, n = n, unit = unit, value = n * unit } end
@@ -214,15 +210,13 @@ local function PerCall(itemID, batch)
 end
 
 -- Pone en la cola `qty` unidades en compras de como mucho `perCall` (lotes de `batch`)
-local function Enqueue(queue, itemID, qty, batch, at)
+local function Enqueue(queue, itemID, qty, batch)
   local perCall = PerCall(itemID, batch)
-  local calls = {}
   while qty > 0 do
     local n = math.min(qty, perCall)
-    calls[#calls + 1] = { itemID = itemID, n = n, batch = batch }
+    queue[#queue + 1] = { itemID = itemID, n = n, batch = batch }
     qty = qty - n
   end
-  for k = #calls, 1, -1 do table.insert(queue, at or (#queue + 1), calls[k]) end
 end
 
 function Vendor:Pump()
@@ -235,23 +229,19 @@ function Vendor:Pump()
   end
   self.pumping = true
   if q.check then
-    -- Comprobación final: lo que no llegó se vuelve a pedir (hasta 2 veces). Pero solo
-    -- cuando ya no llega nada más: si el servidor tarda en entregar, volver a pedir al
-    -- primer vistazo compraba de más. Se espera (1 s cada vez, hasta MAX_WAITS) mientras
-    -- las bolsas sigan cambiando
+    -- Comprobación final: NUNCA vuelve a comprar sola. Si algo no ha llegado, se
+    -- espera (1 s cada vez, hasta MAX_WAITS) y, si sigue faltando, se avisa: la fila
+    -- sigue diciendo lo que falta y un clic lo pide. Volver a comprar a ciegas compraba
+    -- de más cuando el servidor tardaba en entregar (Discord: 14 Fine Thread -> 28);
+    -- comprar de menos se ve y se arregla con un clic, comprar de más no
     local count = ES:ItemCount(q.itemID)
     local short = q.check - count
-    if short > 0 and count ~= q.lastCount and (q.waits or 0) < MAX_WAITS then
-      table.insert(self.queue, 1, { itemID = q.itemID, check = q.check, tries = q.tries, batch = q.batch,
-        lastCount = count, waits = (q.waits or 0) + 1 })
-    elseif short > 0 and q.tries < 2 then
-      if FindIndex(q.itemID) then
-        short = math.ceil(short / q.batch) * q.batch
-        table.insert(self.queue, 1, { itemID = q.itemID, check = q.check, tries = q.tries + 1, batch = q.batch })
-        Enqueue(self.queue, q.itemID, short, q.batch, 1) -- en tandas, delante de la comprobación
-      end
+    if short > 0 and (q.waits or 0) < MAX_WAITS then
+      -- (al final de la cola: mientras llega, se compra lo demás de "Comprar todo";
+      -- delante, un objeto agotado retrasaba todos los siguientes)
+      self.queue[#self.queue + 1] = { itemID = q.itemID, check = q.check, batch = q.batch, waits = (q.waits or 0) + 1 }
     elseif short > 0 then
-      ES:Print(string.format(L["El vendedor no vendió %d de %s (sin existencias, sin oro o sin sitio en las bolsas)."],
+      ES:Print(string.format(L["Faltan %d de %s: el vendedor no los vendió o aún no han llegado. Si no llegan, pulsa su fila para comprar el resto."],
         short, ES:DataItemName(q.itemID) or q.itemID))
     end
   else
@@ -270,7 +260,7 @@ function Vendor:Buy(entry)
   for _, q in ipairs(self.queue) do if q.itemID == entry.itemID then return end end
   local target = ES:ItemCount(entry.itemID) + entry.qty
   Enqueue(self.queue, entry.itemID, entry.qty, entry.batch)
-  self.queue[#self.queue + 1] = { itemID = entry.itemID, check = target, tries = 0, batch = entry.batch }
+  self.queue[#self.queue + 1] = { itemID = entry.itemID, check = target, batch = entry.batch }
   if not self.pumping then self:Pump() end
 end
 
@@ -295,7 +285,12 @@ local SECTION_H = 20
 local SELL_ROWS = 4 -- filas reservadas para vender (ver Refresh)
 
 -- Tooltip y clic de una fila: comprar lo que falta o vender lo que sobra
-local function RowClick(self)
+local function RowClick(self, button)
+  if button == "RightButton" then
+    -- Clic derecho en una fila de vender: no venderlo nunca (se deshace en Inventario)
+    if self.kind == "sell" and ES.Inventory then ES.Inventory.SetNeverSell(self.entry.itemID, true) end
+    return
+  end
   if self.kind == "buy" and self.entry.qty > 0 then Vendor:Buy(self.entry)
   elseif self.kind == "sell" then Vendor:Sell({ self.entry }) end
 end
@@ -307,6 +302,7 @@ local function RowEnter(self)
   GameTooltip:AddLine(" ")
   if self.kind == "sell" then
     GameTooltip:AddLine(string.format(L["Clic: vender %d por %s."], self.entry.n, ES.Money(self.entry.value)), 0.5, 0.8, 1)
+    GameTooltip:AddLine(L["Clic derecho: no venderlo nunca (se deshace en la pestaña Inventario)."], 0.6, 0.6, 0.6, true)
   elseif self.entry.qty > 0 then
     GameTooltip:AddLine(string.format(L["Clic: comprar %d por %s."], self.entry.qty, ES.Money(self.entry.cost)), 0.5, 0.8, 1)
   else
@@ -362,6 +358,7 @@ local function CreatePanel()
     row.qty:SetPoint("RIGHT", row, "RIGHT", -4, 0)
     row.qty:SetJustifyH("LEFT")
     row.qty:SetWordWrap(false)
+    row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     row:SetScript("OnClick", RowClick)
     row:SetScript("OnEnter", RowEnter)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -389,10 +386,11 @@ local function Icon(row, itemID, grey)
   row.icon:SetDesaturated(grey)
 end
 
+-- Nombre con el color de su calidad (verde, azul...), como en la bolsa
 local function Label(itemID)
-  local name = ES:GetItemData(itemID)
-  return name or ES:DataItemName(itemID) or ("#" .. itemID)
+  return (ES.UI.ItemLabel(itemID, "#" .. itemID))
 end
+Vendor.Label = Label -- (también la ventana junto a la AH, AuctionSellUI)
 
 function Vendor:Refresh()
   if not (MerchantFrame and MerchantFrame:IsShown()) then
@@ -468,6 +466,9 @@ function Vendor:Refresh()
     panel.sellHeader:SetText(L["Vender al vendedor"])
     y = y - SECTION_H - 4
   end
+  -- Debajo de lo que vender, a la vista (no solo en el tooltip): el clic derecho existe
+  panel.sellHint = panel.sellHint or panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  panel.sellHint:SetShown(shownSell > 0)
   for i = 1, shownSell do
     r = r + 1
     local row, e = panel.rows[r], sell[i]
@@ -488,6 +489,12 @@ function Vendor:Refresh()
   panel.sellAll:ClearAllPoints()
   panel.sellAll:SetShown(shownSell > 0)
   if shownSell > 0 then
+    panel.sellHint:ClearAllPoints()
+    panel.sellHint:SetPoint("TOPLEFT", 12, y - 2)
+    panel.sellHint:SetPoint("RIGHT", panel, "RIGHT", -12, 0)
+    panel.sellHint:SetJustifyH("LEFT")
+    panel.sellHint:SetText(L["Clic derecho en una fila: no venderlo nunca."])
+    y = y - 16
     panel.sellAll:SetPoint("TOP", panel, "TOP", 0, y - 6)
     y = y - 34
     -- (con más de las que caben, el botón dice cuántas vende: también las que no se ven)
