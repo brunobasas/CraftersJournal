@@ -70,6 +70,19 @@ local function Needs()
       need[itemID] = (need[itemID] or 0) + n.need
     end
   end
+  -- Y lo de vendedor de las demás listas de la compra (Calculadora, Ganar dinero...):
+  -- junto a la AH solo sale lo de la AH, así que esto se compra aquí (Discord: el
+  -- Leaded Vial de la calculadora salía en el panel de la AH). Las de rutas no: ya
+  -- están arriba
+  for _, list in ipairs(ES.Shopping and ES.Shopping.Lists() or {}) do
+    if list.kind ~= "route" and list.kind ~= "phase" then
+      for _, it in ipairs(list.items or {}) do
+        if it.source == "vendor" and (it.need or 0) > 0 then
+          need[it.itemID] = (need[it.itemID] or 0) + it.need
+        end
+      end
+    end
+  end
   -- Lo intermedio que ya has fabricado (Bolt of Silk Cloth, Cured Light Hide...) y
   -- llevas encima ya no necesita sus materiales: si no, se volvían a comprar (la sal
   -- del cuero curado, por ejemplo)
@@ -92,7 +105,8 @@ local function Needs()
   for itemID, q in pairs(need) do
     local n = math.ceil(q - 0.001)
     if n > 0 then
-      out[itemID] = { need = n, have = ES:ItemCount(itemID) + Vendor:Pending(itemID) }
+      -- (bolsas, lo comprado en la AH aún en el correo y lo que acabas de pedir aquí)
+      out[itemID] = { need = n, have = ES:HaveForShopping(itemID) + Vendor:Pending(itemID) }
     end
   end
   return out

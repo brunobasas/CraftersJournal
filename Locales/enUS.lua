@@ -741,6 +741,7 @@ ES.Locales.en = {
   ["La Casa de Subastas no aceptó %s: %s"] = "The Auction House didn't accept %s: %s",
   ["No compensa venderlo ahora"] = "Not worth selling now",
   ["Lista de compra:"] = "Shopping list:",
+  ["%d en el correo"] = "%d in the mail",
   ["Hasta aquí: unos %d min de fabricar. Más fabricaciones aún darían beneficio, pero no compensa el tiempo."] = "Stops here: about %d min of crafting. More crafts would still make a profit, but it isn't worth the time.",
   ["AH: te quedarían %s, pero si caduca pierdes %s de depósito · el vendedor no lo compra"] = "AH: you'd get %s, but you lose %s deposit if it expires · vendors don't buy it",
   ["Clic"] = "Click",

@@ -144,13 +144,16 @@ end
 
 -- Estado de toda la lista:
 --   { lists = { { list, items = { { it, bought (lo que llevas para ella), left } }, done, total, cost } },
---     done, total (materiales), cost (lo que falta, a los precios de cuando se añadió) }
+--     done, total (materiales), cost (lo que falta, a los precios de cuando se añadió),
+--     bySource = { ah = { done, total, cost }, vendor = { ... } } }
 function Shopping.Status()
-  local res = { lists = {}, done = 0, total = 0, cost = 0 }
-  -- Lo que llevas de cada material, que se va repartiendo entre las listas
+  local res = { lists = {}, done = 0, total = 0, cost = 0,
+    bySource = { ah = { done = 0, total = 0, cost = 0 }, vendor = { done = 0, total = 0, cost = 0 } } }
+  -- Lo que llevas de cada material (y lo comprado en la AH que aún está en el correo),
+  -- que se va repartiendo entre las listas
   local left = {}
   local function Take(itemID, need)
-    if left[itemID] == nil then left[itemID] = ES:ItemCount(itemID) or 0 end
+    if left[itemID] == nil then left[itemID] = ES.HaveForShopping and ES:HaveForShopping(itemID) or ES:ItemCount(itemID) or 0 end
     local n = math.min(left[itemID], need)
     left[itemID] = left[itemID] - n
     return n
@@ -163,6 +166,10 @@ function Shopping.Status()
       s.items[#s.items + 1] = { it = it, bought = have, left = missing }
       s.total = s.total + 1
       if missing == 0 then s.done = s.done + 1 else s.cost = s.cost + missing * (it.unit or 0) end
+      -- (y por dónde se compra: el panel de la AH solo cuenta lo de la AH)
+      local src = res.bySource[it.source == "vendor" and "vendor" or "ah"]
+      src.total = src.total + 1
+      if missing == 0 then src.done = src.done + 1 else src.cost = src.cost + missing * (it.unit or 0) end
     end
     res.lists[#res.lists + 1] = s
     res.done, res.total, res.cost = res.done + s.done, res.total + s.total, res.cost + s.cost

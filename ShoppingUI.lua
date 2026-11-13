@@ -130,7 +130,8 @@ local function BuildLines(st, ahOpen)
       local it = e.it
       local name, texture = ES.UI.ItemLabel(it.itemID, L["Objeto "] .. it.itemID)
       local where = it.source == "ah" and string.format(L["AH ~%s/u"], ES.Money(it.unit or 0)) or string.format(L["vendedor %s/u"], ES.Money(it.unit or 0))
-      local line = { icon = texture or 134400, item = it.itemID, current = it.itemID == selected and e.left > 0 }
+      local line = { icon = texture or 134400, item = it.itemID, current = it.itemID == selected and e.left > 0,
+        source = it.source == "vendor" and "vendor" or "ah" }
       -- (la lista de una ruta empezada se calcula sola: no se quitan materiales a mano)
       if not list.live then
         line.onSkip = function() ES.Shopping.RemoveItem(list, it.itemID) ES:RenderShopping() end
@@ -138,13 +139,16 @@ local function BuildLines(st, ahOpen)
       end
       -- Tramo: lo que cuenta es lo que llevas; en las guardadas, lo comprado desde que la añadiste
       local progress = L["tienes %d de %d"] -- (todas las listas cuentan lo que llevas)
+      -- Lo comprado en la AH que aún está en el correo ya cuenta (Ledger:OnTheWay): se dice
+      local onWay = ES.Ledger and ES.Ledger.OnTheWay and ES.Ledger:OnTheWay(it.itemID) or 0
+      local mail = onWay > 0 and (GREY .. " · " .. string.format(L["%d en el correo"], onWay) .. "|r") or ""
       if e.left == 0 then
         line.title = GREY .. (name or "") .. "|r"
-        line.sub = GREEN .. string.format(progress, e.bought, it.need) .. "|r"
+        line.sub = GREEN .. string.format(progress, e.bought, it.need) .. "|r" .. mail
         line.value = "|TInterface\\RaidFrame\\ReadyCheck-Ready:16|t"
       else
         line.title = string.format("%d× %s", e.left, name or "")
-        line.sub = where .. (e.bought > 0 and (" · " .. string.format(progress, e.bought, it.need)) or "")
+        line.sub = where .. (e.bought > 0 and (" · " .. string.format(progress, e.bought, it.need)) or "") .. mail
         -- Abierta su compra: cuántas hay baratas ahora
         local t = it.source == "ah" and it.itemID == selected and ES.CommodityTiers and ES:CommodityTiers(it.itemID, it.unit)
         if t and t.next and t.cheap < e.left then
@@ -232,9 +236,13 @@ end
 local MINI_W, MINI_H, MINI_ROW, MINI_SECTION = 300, 440, 34, 20
 local mini
 
+-- Junto a la AH solo la lista para comprar con un clic: sin ✕ de quitar ni total (eso,
+-- en la pestaña Lista de compra, "Ver completa"). Las filas, de lado a lado del panel
+local MINI_ROW_W = MINI_W - 20
+
 local function MiniRow(parent)
   local row = CreateFrame("Button", nil, parent)
-  row:SetSize(MINI_W - 44, MINI_ROW)
+  row:SetSize(MINI_ROW_W, MINI_ROW)
   row.bg = row:CreateTexture(nil, "BACKGROUND")
   row.bg:SetAllPoints()
   local hl = row:CreateTexture(nil, "HIGHLIGHT")
@@ -242,25 +250,10 @@ local function MiniRow(parent)
   hl:SetColorTexture(1, 0.82, 0.25, 0.10)
   row.icon = row:CreateTexture(nil, "ARTWORK")
   row.icon:SetSize(24, 24)
-  row.icon:SetPoint("LEFT", 2, 0)
+  row.icon:SetPoint("LEFT", 4, 0)
   row.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-  row.skip = CreateFrame("Button", nil, row)
-  row.skip:SetSize(14, 14)
-  row.skip:SetPoint("RIGHT", -2, 0)
-  row.skip:SetNormalTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
-  row.skip:SetHighlightTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Highlight", "ADD")
-  row.skip:SetScript("OnClick", function() if row.line and row.line.onSkip then row.line.onSkip() end end)
-  row.skip:SetScript("OnEnter", function(self)
-    local line = row.line
-    if not line then return end
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:AddLine(line.skipTitle or L["Quitar de la lista"])
-    if line.skipTip then GameTooltip:AddLine(line.skipTip, 0.8, 0.8, 0.8, true) end
-    GameTooltip:Show()
-  end)
-  row.skip:SetScript("OnLeave", function() GameTooltip:Hide() end)
   row.value = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  row.value:SetPoint("TOPRIGHT", row.skip, "TOPLEFT", -4, 6)
+  row.value:SetPoint("TOPRIGHT", row, "TOPRIGHT", -6, -4)
   row.value:SetJustifyH("RIGHT")
   row.title = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   row.title:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 5, -1)
@@ -269,7 +262,7 @@ local function MiniRow(parent)
   row.title:SetWordWrap(false)
   row.sub = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   row.sub:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 5, 1)
-  row.sub:SetPoint("RIGHT", row.skip, "LEFT", -4, 0)
+  row.sub:SetPoint("RIGHT", row, "RIGHT", -6, 0)
   row.sub:SetJustifyH("LEFT")
   row.sub:SetWordWrap(false)
   row.sub:SetTextColor(0.75, 0.72, 0.65)
@@ -337,33 +330,17 @@ local function CreateMini(ahFrame)
   scroll:SetPoint("TOPLEFT", 10, -MINI_TOP)
   scroll:SetPoint("BOTTOMRIGHT", -10, MINI_BOTTOM)
   p.content = CreateFrame("Frame", nil, scroll)
-  p.content:SetSize(MINI_W - 44, 1)
+  p.content:SetSize(MINI_ROW_W, 1)
   scroll:SetScrollChild(p.content)
   p.rows = {}
   p.empty = p.content:CreateFontString(nil, "OVERLAY", "GameFontDisable")
   p.empty:SetPoint("TOP", 0, -20)
   p.empty:SetWidth(MINI_W - 60)
 
-  p.nextButton = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-  p.nextButton:SetSize(150, 24)
-  p.nextButton:SetPoint("BOTTOMLEFT", 10, 10)
-  p.nextButton:SetText(L["Comprar siguiente"])
-  p.nextButton:SetScript("OnClick", function() ES:ShoppingBuyNext() end)
-  p.nextButton:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine(L["Comprar siguiente"], 1, 1, 1)
-    local itemID, left = ES.Shopping.NextToBuy(ES.Shopping.Status(), selected)
-    if itemID then
-      GameTooltip:AddLine(string.format("%d× %s", left, (ES.UI.ItemLabel(itemID, L["Objeto "] .. itemID))), 1, 0.82, 0)
-    end
-    GameTooltip:AddLine(L["Abre la compra de Blizzard con la cantidad puesta (solo las baratas). Confírmala con su botón Comprar ahora y vuelve a pulsar este para el siguiente."], 0.8, 0.8, 0.8, true)
-    GameTooltip:Show()
-  end)
-  p.nextButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
+  -- Para quitar listas o ver el resto: la pestaña Lista de compra
   local full = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-  full:SetSize(110, 24)
-  full:SetPoint("BOTTOMRIGHT", -10, 10)
+  full:SetSize(MINI_W - 20, 24)
+  full:SetPoint("BOTTOM", 0, 10)
   full:SetText(L["Ver completa"])
   full:SetScript("OnClick", function() ES:OpenShoppingAtAuction(ahFrame) end)
 
@@ -395,12 +372,26 @@ RenderMini = function(st, lines, ahOpen)
     mini:Show()
   end
   if not mini:IsShown() then return end
-  mini.progressText:SetText(st.total > 0 and string.format(L["%d de %d materiales comprados · te falta ~%s"], st.done, st.total, ES.Money(st.cost))
+  -- Junto a la AH, solo lo que se compra en la AH (lo del vendedor sale en la ventana
+  -- del vendedor, VendorUI.lua): la barra y el "N de M" cuentan solo eso
+  local ah = st.bySource and st.bySource.ah or st
+  mini.progressText:SetText(ah.total > 0 and string.format(L["%d de %d materiales comprados · te falta ~%s"], ah.done, ah.total, ES.Money(ah.cost))
     or "")
-  mini.bar:SetShown(st.total > 0)
-  mini.progress = st.total > 0 and st.done / st.total or 0
+  mini.bar:SetShown(ah.total > 0)
+  mini.progress = ah.total > 0 and ah.done / ah.total or 0
   mini.bar:SetValue(mini.progress)
-  mini.nextButton:SetEnabled(ahOpen and ES.Shopping.NextToBuy(st, selected) ~= nil)
+  -- Sin las filas de total de cada lista ("0 de 3 listos", con su ✕: eso, en la
+  -- pestaña), sin las de vendedor y sin el título de una lista que se queda vacía
+  local shown, section = {}, nil
+  for _, line in ipairs(lines) do
+    if line.section then
+      section = line
+    elseif not line.total and line.source ~= "vendor" then
+      if section then shown[#shown + 1] = section section = nil end
+      shown[#shown + 1] = line
+    end
+  end
+  lines = shown
   mini.empty:SetText(#lines == 0 and L["La lista está vacía. Añade materiales con \"Añadir a la lista de compra\" en Ganar dinero, la calculadora o la vista Materiales de una ruta."] or "")
   local y = 0
   for i, line in ipairs(lines) do
@@ -418,7 +409,6 @@ RenderMini = function(st, lines, ahOpen)
     row.title:SetText(not isSection and line.title or "")
     row.sub:SetText(not isSection and line.sub or "")
     row.value:SetText(not isSection and line.value or "")
-    row.skip:SetShown(line.onSkip ~= nil)
     -- (los mismos tonos que las filas de la ruta: total, actual y normal)
     local R = ES.UI.BROWN.row
     if line.total then row.bg:SetColorTexture(0.20, 0.14, 0.06, 0.95)
@@ -436,10 +426,11 @@ RenderMini = function(st, lines, ahOpen)
   if not ES.shopMiniForced and not ES.Shopping.HasPending(st) then mini:Hide() end
 end
 
--- ¿Queda algo por comprar en la lista de compra?
+-- ¿Queda algo por comprar en la lista de compra? (en la AH: lo que sale en su panel)
 function ES.Shopping.HasPending(st)
   st = st or ES.Shopping.Status()
-  return (st.total or 0) > (st.done or 0)
+  local ah = st.bySource and st.bySource.ah or st
+  return (ah.total or 0) > (ah.done or 0)
 end
 
 -- Dónde va el panel de la lista de compra junto a la AH: a la derecha de la ventana de

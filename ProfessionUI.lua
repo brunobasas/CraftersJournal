@@ -2512,9 +2512,11 @@ local function ShopLines(plan, page)
   local routeNeed, phase = ES.Planner.RouteNeed(page.profKey, plan, page.from)
   local need = {}
   for itemID, n in pairs(routeNeed) do need[itemID] = n.need end
-  -- Lo que tienes: solo las bolsas (ni banco ni correo)
+  -- Lo que tienes: las bolsas y lo comprado en la AH que aún está en el correo (ni el
+  -- banco ni el resto del correo; ver Ledger:OnTheWay)
+  local function Have(itemID) return ES.HaveForShopping and ES:HaveForShopping(itemID) or ES:ItemCount(itemID) end
   local function Progress(itemID)
-    local have = ES:ItemCount(itemID)
+    local have = Have(itemID)
     local n = math.ceil((need[itemID] or 0) - 0.001)
     if n <= 0 then return GREEN .. L["Ya no hace falta"] .. "|r" end
     if have >= n then return GREEN .. string.format(L["Tienes %d/%d"], have, n) .. "|r" end
@@ -2535,7 +2537,7 @@ local function ShopLines(plan, page)
     end
     if it.source == "ah" and ES:IsAuctionHouseOpen() then
       -- Abre la compra con lo que falta ya puesto (solo queda "Comprar ahora" de Blizzard)
-      local missing = math.ceil((need[it.itemID] or it.quantity) - 0.001) - ES:ItemCount(it.itemID)
+      local missing = math.ceil((need[it.itemID] or it.quantity) - 0.001) - Have(it.itemID)
       if missing > 0 then
         action = string.format(L["abrir la compra de %d en la AH"], missing)
         onClick = function() ES:OpenAuctionBuy(it.itemID, missing, it.unit) end
@@ -2578,7 +2580,7 @@ local function ShopLines(plan, page)
     for _, itemID in ipairs(ids) do
       local n = math.ceil(need[itemID] - 0.001)
       if n > 0 then
-        local missing = n - ES:ItemCount(itemID)
+        local missing = n - Have(itemID)
         if missing > 0 then
           local planned = shopping[itemID]
           local vendorPrice = ES.Data.VendorPrices and ES.Data.VendorPrices[itemID]

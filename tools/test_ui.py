@@ -304,6 +304,38 @@ step("lista de compra", function()
     string.format("reparto de lo que llevas: %d %d %d", r1[1].bought, r2[1].bought, r2[1].left))
   assert(r1[3].left == 0 and r2[2].left == 0, "lo que llevas cuenta como tenido")
   assert(st.done == 3 and st.total == 5, string.format("progreso %d/%d", st.done, st.total))
+  -- Compras de la AH: cuentan al confirmarlas (llegan por correo), no al recogerlas
+  do
+    local L2 = ES.Ledger
+    local savedOnWay = ES.db.ahOnWay
+    ES.db.ahOnWay = nil
+    L2.buying = { itemID = 2319, qty = 5 } -- (lo apunta el gancho de "Comprar ahora")
+    FireEvent("COMMODITY_PURCHASE_SUCCEEDED")
+    assert(L2:OnTheWay(2319) == 5, "la compra confirmada no se apuntó")
+    local st2 = SH.Status()
+    local r = st2.lists[2].items[2] -- (2319 en la segunda lista)
+    for _, x in ipairs(st2.lists) do for _, it in ipairs(x.items) do if it.it.itemID == 2319 then r = it end end end
+    assert(r.bought >= 5 or r.left == 0, "lo comprado en la AH cuenta como tenido: " .. tostring(r.bought))
+    -- Recoges 3 del correo: entran en las bolsas y se descuentan (no cuentan dos veces)
+    BAGS[2319] = (BAGS[2319] or 0) + 3
+    FireEvent("BAG_UPDATE_DELAYED")
+    assert(L2:OnTheWay(2319) == 2, "al recoger 3 del correo quedan 2 de camino: " .. L2:OnTheWay(2319))
+    -- Las gastas (fabricas): lo de camino no cambia
+    BAGS[2319] = BAGS[2319] - 3
+    FireEvent("BAG_UPDATE_DELAYED")
+    assert(L2:OnTheWay(2319) == 2, "gastar lo que llevas no toca lo de camino")
+    -- Recoges el resto: ya no queda nada de camino
+    BAGS[2319] = BAGS[2319] + 2
+    FireEvent("BAG_UPDATE_DELAYED")
+    assert(L2:OnTheWay(2319) == 0 and not (ES.db.ahOnWay or {})[2319], "todo recogido")
+    -- Compra fallida: no se apunta
+    L2.buying = { itemID = 2319, qty = 4 }
+    FireEvent("COMMODITY_PURCHASE_FAILED")
+    FireEvent("COMMODITY_PURCHASE_SUCCEEDED")
+    assert(L2:OnTheWay(2319) == 0, "una compra fallida no cuenta")
+    BAGS[2319] = BAGS[2319] - 2
+    ES.db.ahOnWay = savedOnWay
+  end
   -- Ruta acabada (la profesión llega a su objetivo): su lista se quita sola
   local savedSkill = ES.GetProfessionSkill
   ES.GetProfessionSkill = function(_, line) if line == ES.Data.Leatherworking.skillLine then return 300, 300 end end
@@ -352,6 +384,17 @@ step("lista de compra", function()
   ES:SetupAuctionPanel(AuctionFrame)
   mf.IsShown = nil
   assert(mini._shown and not ES.shopMiniClosed, "al volver a abrir la AH, con algo por comprar, vuelve a salir")
+  -- Junto a la AH solo lo de la AH: lo de vendedor (Leaded Vial de la calculadora) no
+  local VIAL = 3371
+  SH.Add("calc", "Calc vial", { { itemID = VIAL, quantity = 5, source = "vendor", cost = 180 } }, { key = "vial" })
+  ES:RenderShopping()
+  for _, row in ipairs(mini.rows) do
+    assert(not (row._shown ~= false and row.line and row.line.item == VIAL), "el panel de la AH enseña algo de vendedor")
+  end
+  local stv = SH.Status()
+  assert(stv.bySource.vendor.total >= 1 and stv.bySource.ah.total == stv.total - stv.bySource.vendor.total, "cuentas por origen")
+  for i, l in ipairs(SH.Lists()) do if l.key == "vial" then table.remove(SH.Lists(), i) break end end
+  ES:RenderShopping()
   -- Colocación: a la derecha de la ventana de vender en la AH si se ve; si no, pegado a la AH
   local anchor
   local savedSP, savedSell = mini.SetPoint, CraftersJournalAuctionSellPanel
@@ -1430,6 +1473,16 @@ step("portada: tarjetas de profesiones", function()
     local rnK, phK = ES.Planner.RouteNeed(page.profKey, page.plan, rank, { keep = true })
     assert(phK == nil and rnK[buyItem] and rnK[buyItem].need == entry.need, "RouteNeed keep: ruta entera")
     ES.db.prof[page.profKey].byPhase = savedPhase
+    -- Lo de vendedor de las demás listas de la compra (calculadora, Ganar dinero) también
+    -- sale aquí: junto a la AH ya no sale
+    local savedChar = ES.charData
+    ES.charData = { shopping = { { kind = "calc", title = "Calc", key = "c",
+      items = { { itemID = buyItem, need = 7, unit = 100, source = "vendor" } } } } }
+    local withCalc
+    for _, e in ipairs(V:List()) do if e.itemID == buyItem then withCalc = e end end
+    assert(withCalc and withCalc.need == entry.need + 7, "la ventana del vendedor suma lo de vendedor de la lista de compra: "
+      .. tostring(withCalc and withCalc.need) .. " vs " .. entry.need .. " + 7")
+    ES.charData = savedChar
     ES.RouteLock, ES.db.lastProf = savedLock, savedLast
     log[#log+1] = "     vendedor: sin empezar la ruta, pide lo mismo que la ruta (" .. entry.need .. ")"
   end
