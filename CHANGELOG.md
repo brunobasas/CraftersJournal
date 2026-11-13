@@ -1,6 +1,6 @@
 # Crafter's Journal
 
-## Unreleased
+## 0.44.0
 
 - **New window next to the Auction House: what to sell there.** When you open the AH, a window like the vendor one lists what the Inventory tab says to sell on the AH: how many, at what price, for how long and what you keep after the cut. Click a row to list all the row suggests, as in the Inventory tab, or Shift-click to list just one and test the price (one listing per click, as the AH requires). Right-click a row to never sell that item. The bottom of the window explains the three clicks, one per line. The window sits to the right of the small shopping list, or right next to the AH, and hides when the main window is open there.
 - **Item names in the vendor window use their quality color** (green, blue…), as in your bags.
@@ -9,10 +9,13 @@
 - **"Not for sale" list.** Right-click an item's row in Inventory or in the vendor window and the addon stops offering it for sale. The items go to a new "Not for sale" section in Inventory, and a right-click there offers them again. It works for tools too, if you do want to sell one. Both windows show a line about the right-click above their sell rows, so you don't have to discover it in the tooltip.
 - **Every view asks for the same amount of each material.** The route's Materials view, the Shopping list and the vendor window each worked out how much you need in their own way, and the vendor window added the stage's safety margin to routes you hadn't started (14 Fine Thread instead of 12). They now share one rule: the current stage with its margin once the route is started and "by stage" is on, otherwise what's left of the route. Inventory still keeps everything your started routes need, not just the current stage.
 - **The vendor never buys anything twice on its own.** If bought items didn't reach your bags within a couple of seconds, the addon assumed the purchase had failed and bought again, so a slow server could make it buy double (28 Fine Thread instead of 14). Now it waits for the items and, if some are still missing, tells you. The row keeps showing what's missing, so one click buys the rest.
+- **Make money: every section can be collapsed.** Click a section header (+ / −) to fold it away. A folded section says how many rows it has, and the addon remembers which ones you folded.
+
+## 0.43.0
+
 - **Make money: sure sales to the vendor get their own section, with no limit of 20.** Each one says how many to craft: as many as still make a profit, until the AH runs out of materials or the next craft isn't worth it. Click a row to add its materials to the shopping list. The batch also allows more crafts, since its profit check was too strict. Thanks to Audren.
 - **Make money: the minimum profit is a slider.** Drag it or use the mouse wheel instead of clicking through the values. It has more steps too: none, 10s, 25s, 50s, 1g, 2g 50s, 5g, 10g and 20g.
 - **Make money: recipes you could learn.** A new section lists recipes you don't know yet for your professions that would make money now. Each row shows where to learn the recipe and what it costs, whether your skill is high enough, and the profit per craft. The tooltip says how many crafts pay back the cost of learning it. Recipes you can already learn come first.
-- **Make money: every section can be collapsed.** Click a section header (+ / −) to fold it away. A folded section says how many rows it has, and the addon remembers which ones you folded.
 - **Cooking no longer sends you to craft Basic Campfire up to 75.** The old Basic Campfire was still in the game data, but Forever only has the Basic Campfire Kit, which turns grey at 5, so those crafts gave no skill. Recipes that don't appear in the profession window are no longer used.
 - **The window next to the vendor sells everything Inventory sends to the vendor.** Before, it only listed items your routes made. Now it also lists the rest of your bags that the Inventory tab says to sell to the vendor (junk, gear, recipes…), so you can sell with a click there without opening the main window. "Sell all" sells them all, including rows that don't fit, and says how many.
 - **Uncertain items are listed for 8 h, not 24 h.** When the addon doesn't know whether an item sells, Inventory now weighs the AH against the vendor using the 8 h deposit (a third of the 24 h one) and lists it for 8 h. If it expires you lose less, and more items are worth trying on the AH. Items that sell well still go up for 24 h. The chat message says the duration used.
