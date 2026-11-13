@@ -455,9 +455,47 @@ step("ganar dinero (sin correo)", function()
     ES.ItemCount = real
     ES.Earn:Clear()
   end
+  -- Recetas que no sabes y darían beneficio (Peletería al 150 sabiendo solo las de instructor)
+  for _, idea in ipairs(res.learnable) do
+    assert(idea.learnable and idea.e.learnSource ~= "known" and idea.e.profit > 0, "receta para aprender mal: " .. idea.e.recipe.name)
+    assert(idea.canLearn == (150 >= idea.need), "ya puedes / pide: " .. idea.e.recipe.name)
+  end
+  for i = 2, #res.learnable do
+    local a, b = res.learnable[i - 1], res.learnable[i]
+    assert(a.canLearn or not b.canLearn, "primero las que ya puedes aprender")
+  end
+  -- (directo, con entradas inventadas: los datos de prueba no traen ninguna con beneficio)
+  do
+    local fake = { learnable = {} }
+    local function E(source, profit, learn, cost) return { recipe = { name = source }, itemID = 1, learnSource = source,
+      cost = 1000, profit = profit, learn = learn, learnCost = cost, sellWhere = "vendor", vendor = 1000 + profit } end
+    ES.Earn.AddLearnable(fake, E("trainer", 500, 100, 2000), "Leatherworking", 150, 1000)  -- sí: ya puedes, se paga en 4
+    ES.Earn.AddLearnable(fake, E("vendor", 800, 200, 0), "Leatherworking", 150, 1000)     -- sí: pide 200
+    ES.Earn.AddLearnable(fake, E("trainer", 50, 100, 0), "Leatherworking", 150, 5000)     -- no: 50 x 20 < 5000
+    ES.Earn.AddLearnable(fake, E("trainer", 2, 100, 0), "Leatherworking", 150, 0)         -- no: menos del margen
+    assert(#fake.learnable == 2, "recetas para aprender: " .. #fake.learnable)
+    local t, v = fake.learnable[1], fake.learnable[2]
+    assert(t.canLearn and t.payback == 4 and not v.canLearn and v.payback == nil, "ya puedes / se paga en")
+  end
+  log[#log+1] = string.format("     recetas para aprender con beneficio: %d%s", #res.learnable,
+    res.learnable[1] and (" · la primera " .. res.learnable[1].e.recipe.name .. " +" .. ES.Money(res.learnable[1].e.profit) .. "/u") or "")
   -- Página y portada
   ES:SelectPage("money")
   ES:RenderEarn()
+  -- Mínimo con el deslizador: escalón a escalón, y la rueda
+  local page = ES.earnPage
+  local savedAfter = C_Timer.After
+  C_Timer.After = function(_, fn) fn() end
+  page.minSlider._scripts.OnValueChanged(page.minSlider, 4)
+  assert(ES.Earn.MinLineProfit() == ES.Earn.MIN_LINE_STEPS[4] and ES.Earn.MinLineStep() == 4, "deslizador: escalón 4")
+  assert(tostring(page.minLabel._text):find("50"), "el texto del mínimo: " .. tostring(page.minLabel._text))
+  page.minSlider.SetValue = function(self, v) self._scripts.OnValueChanged(self, v) end
+  page.minSlider._scripts.OnMouseWheel(page.minSlider, -1)
+  assert(ES.Earn.MinLineStep() == 3, "rueda: un escalón menos")
+  page.minSlider._scripts.OnValueChanged(page.minSlider, 1)
+  assert(ES.Earn.MinLineProfit() == 0, "deslizador al principio: sin mínimo")
+  page.minSlider.SetValue = nil
+  C_Timer.After = savedAfter
   -- Añadir el lote a la lista de compra (una lista por día)
   local savedChar = ES.charData
   ES.charData = { shopping = {} }

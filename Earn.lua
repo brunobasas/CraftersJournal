@@ -33,7 +33,7 @@ Earn.OLD_SCAN = OLD_SCAN
 -- Beneficio mínimo de una línea (lo que dejan todas sus fabricaciones juntas, no
 -- cada una): por debajo no compensa el viaje a la AH. Lo elige el jugador en la
 -- cabecera (ES.db.earnMinProfit); por defecto, 10 platas
-Earn.MIN_LINE_STEPS = { 0, 1000, 5000, 10000, 50000, 200000 } -- 0, 10s, 50s, 1g, 5g, 20g
+Earn.MIN_LINE_STEPS = { 0, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 200000 } -- 0, 10s, 25s, 50s, 1g, 2g50s, 5g, 10g, 20g
 Earn.DEFAULT_MIN_LINE = 1000
 function Earn.MinLineProfit()
   local v = ES.db and ES.db.earnMinProfit
@@ -49,6 +49,23 @@ function Earn.StepMinLineProfit(dir)
   ES.db.earnMinProfit = steps[i]
   Earn:Clear()
   return steps[i]
+end
+
+-- Escalón del mínimo (1..#MIN_LINE_STEPS) del valor guardado, y fijarlo por escalón
+-- (el deslizador de la cabecera)
+function Earn.MinLineStep()
+  local steps, cur = Earn.MIN_LINE_STEPS, Earn.MinLineProfit()
+  local i = 1
+  for k, v in ipairs(steps) do if v <= cur then i = k end end
+  return i
+end
+function Earn.SetMinLineStep(i)
+  local steps = Earn.MIN_LINE_STEPS
+  i = math.max(1, math.min(#steps, math.floor((i or 1) + 0.5)))
+  if ES.db.earnMinProfit == steps[i] then return false end
+  ES.db.earnMinProfit = steps[i]
+  Earn:Clear()
+  return true
 end
 
 -- Profesiones del personaje con datos
@@ -224,21 +241,50 @@ function Earn.Shopping(ideas)
   return list
 end
 
+-- Recetas que no sabes pero puedes conseguir (instructor, vendedor, pergamino en la
+-- AH o en tus bolsas, misión, Merchant's Favor) y darían beneficio: para decidir qué
+-- aprender. Las de origen desconocido o con reputación que no tienes, no.
+local LEARNABLE = { trainer = true, vendor = true, scroll = true, ah = true, quest = true, owned = true, favor = true }
+-- Al vendedor no hay tope de ventas (VendorCrafts): para decidir si una receta que no
+-- sabes llega al mínimo se cuentan estas fabricaciones, sin costear la escalera
+local LEARN_VENDOR_CRAFTS = 20
+
+-- Añade `e` (de Planner:RecipeMarket) a res.learnable si da beneficio: el mismo
+-- margen que las que sabes y, con lo más que se fabricaría en una línea (MAX_BATCH;
+-- al vendedor, LEARN_VENDOR_CRAFTS), llega al mínimo. Lo que cuesta aprenderla no se resta:
+-- se dice en cuántas fabricaciones se paga
+function Earn.AddLearnable(res, e, profKey, rank, minLine)
+  if not (e.cost and e.profit and e.profit >= math.max(MIN_PROFIT, e.cost * MIN_MARGIN)) then return end
+  local idea = { e = e, profKey = profKey, itemID = e.itemID, sellWhere = e.sellWhere, learnable = true,
+    need = e.learn or 1, rank = rank }
+  if idea.sellWhere == "ah" then
+    idea.verdict = ES.Market:Signals(e.itemID).verdict
+    if idea.verdict == "avoid" then return end
+  end
+  if e.profit * (idea.sellWhere == "ah" and MAX_BATCH or LEARN_VENDOR_CRAFTS) < minLine then return end
+  idea.canLearn = rank >= idea.need
+  idea.payback = (e.learnCost or 0) > 0 and math.ceil(e.learnCost / e.profit) or nil
+  res.learnable[#res.learnable + 1] = idea
+end
+
 function Earn:Ideas()
   local scan = ES.db.scans and ES.db.scans[ES:RealmKey()]
   local minLine = Earn.MinLineProfit()
   local stamp = table.concat({ scan and scan.time or 0, ES:RealmKey(), ES.repStamp or "", minLine }, ":")
   if cache and cache.stamp == stamp then return cache end
-  local res = { stamp = stamp, ideas = {}, avoided = {}, vendor = {}, scanTime = scan and scan.time, profs = Earn.MyProfessions(), known = 0,
+  local res = { stamp = stamp, ideas = {}, avoided = {}, vendor = {}, learnable = {}, scanTime = scan and scan.time, profs = Earn.MyProfessions(), known = 0,
     minLine = minLine, hidden = 0 }
   for _, profKey in ipairs(res.profs) do
     local data = ES.Data[profKey]
+    local rank = ES:GetProfessionSkill(data.skillLine) or 0
     local entries, ctx = ES.Planner:RecipeMarket(data, {
       hours = 24, neutral = ES:IsNeutralAH(),
       sourcedScrolls = ES.Waypoints.SOURCED_PROFESSIONS[profKey] or nil,
     })
     for _, e in ipairs(entries) do
-      if e.learnSource == "known" then
+      if LEARNABLE[e.learnSource] then
+        Earn.AddLearnable(res, e, profKey, rank, minLine)
+      elseif e.learnSource == "known" then
         res.known = res.known + 1
         if e.cost and e.profit and e.profit >= math.max(MIN_PROFIT, e.cost * MIN_MARGIN) then
           local idea = { e = e, profKey = profKey, itemID = e.itemID, sellWhere = e.sellWhere, unitCost = e.cost }
@@ -277,6 +323,11 @@ function Earn:Ideas()
   end
   table.sort(res.ideas, function(a, b) return a.score > b.score end)
   table.sort(res.avoided, function(a, b) return a.e.profit > b.e.profit end)
+  -- Primero las que ya puedes aprender; luego, de más a menos beneficio por fabricación
+  table.sort(res.learnable, function(a, b)
+    if a.canLearn ~= b.canLearn then return a.canLearn end
+    return a.e.profit > b.e.profit
+  end)
 
   -- Lote de hoy: de mejor a peor, cada receta se vuelve a costear contando lo que
   -- ya compran las anteriores (si dos usan el mismo material, la segunda paga las

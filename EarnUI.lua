@@ -8,6 +8,10 @@ local L = ES.L
 local GREEN, GREY, ORANGE = "|cff40ff40", "|cff999999", "|cffff9933"
 local MORE_IDEAS = 15 -- además del lote
 local MAX_AVOIDED = 8
+local MAX_LEARNABLE = 10
+-- De dónde se aprende (los mismos textos que la ruta, ProfessionUI.lua)
+local LEARN_LABEL = ES.Localize({ trainer = "instructor", vendor = "receta del vendedor", scroll = "pergamino AH", favor = "Merchant's Favor",
+  quest = "misión", ah = "pergamino en la AH", owned = "pergamino en tus bolsas" })
 
 local function ItemLabel(itemID, fallback)
   return ES.UI.ItemLabel(itemID, fallback)
@@ -56,6 +60,17 @@ local function IdeaTooltip(idea)
       if idea.sellWhere == "ah" then
         GameTooltip:AddLine(string.format(e.fair and e.fair.inflated and L["Anúncialos a %s (el precio de los últimos días, algo por encima)."]
           or L["Anúncialos a %s (1 cobre menos que la más barata)."], ES.Money(idea.price)), 0.8, 0.8, 0.8, true)
+      end
+    end
+    if idea.learnable then
+      GameTooltip:AddLine(" ")
+      GameTooltip:AddDoubleLine(string.format(L["Aprender (%s)"], LEARN_LABEL[e.learnSource] or "?"),
+        (e.learnCost or 0) > 0 and ES.Money(e.learnCost) or (GREY .. "?|r"), 1, 0.82, 0, 1, 1, 1)
+      GameTooltip:AddLine(idea.canLearn and string.format(L["Pide %s %d: ya puedes aprenderla."], ES:ProfLabel(idea.profKey), idea.need)
+        or string.format(L["Pide %s %d (tienes %d)."], ES:ProfLabel(idea.profKey), idea.need, idea.rank),
+        idea.canLearn and 0.4 or 1, idea.canLearn and 1 or 0.6, idea.canLearn and 0.4 or 0.2, true)
+      if idea.payback then
+        GameTooltip:AddLine(string.format(L["Lo que cuesta aprenderla se recupera en %d fabricaciones."], idea.payback), 0.8, 0.8, 0.8, true)
       end
     end
     if idea.sellWhere == "ah" then ES.Market.AddToTooltip(e.itemID) end
@@ -114,29 +129,63 @@ function ES:CreateEarnPage(page)
   page.subtitle:SetPoint("RIGHT", -370, 0)
   page.subtitle:SetJustifyH("LEFT")
 
-  -- Beneficio mínimo de cada línea: clic, el siguiente; clic derecho, el anterior
-  local minButton = CreateFrame("Button", nil, head, "UIPanelButtonTemplate")
-  minButton:SetSize(170, 24)
-  minButton:SetPoint("RIGHT", -12, 0)
-  minButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-  minButton:SetScript("OnClick", function(_, button)
-    ES.Earn.StepMinLineProfit(button == "RightButton" and -1 or 1)
-    ES:RenderEarn()
+  -- Beneficio mínimo de cada línea: deslizador por escalones (Earn.MIN_LINE_STEPS),
+  -- con el valor encima. También con la rueda del ratón
+  local minBox = CreateFrame("Frame", nil, head)
+  minBox:SetSize(170, 38)
+  minBox:SetPoint("RIGHT", -12, 0)
+  page.minLabel = Label(minBox, "", "GameFontHighlightSmall")
+  page.minLabel:SetPoint("TOP", 0, 0)
+  local slider = CreateFrame("Slider", nil, minBox, "BackdropTemplate")
+  slider:SetSize(160, 16)
+  slider:SetPoint("BOTTOM", 0, 2)
+  slider:SetOrientation("HORIZONTAL")
+  slider:SetBackdrop({
+    bgFile = "Interface\\Buttons\\UI-SliderBar-Background",
+    edgeFile = "Interface\\Buttons\\UI-SliderBar-Border", edgeSize = 8,
+    insets = { left = 3, right = 3, top = 6, bottom = 6 },
+  })
+  slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+  slider:SetMinMaxValues(1, #ES.Earn.MIN_LINE_STEPS)
+  slider:SetValueStep(1)
+  if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
+  slider:EnableMouseWheel(true)
+  -- (se recalcula al soltar o tras un momento quieto: arrastrar no recalcula en cada paso)
+  local pending, wanted
+  local function Apply()
+    pending = nil
+    if ES.Earn.SetMinLineStep(wanted) then ES:RenderEarn() end
+  end
+  slider:SetScript("OnValueChanged", function(self, value)
+    if page.syncing then return end
+    local steps = ES.Earn.MIN_LINE_STEPS
+    wanted = math.max(1, math.min(#steps, math.floor(value + 0.5)))
+    local v = steps[wanted]
+    page.minLabel:SetText(v > 0 and string.format(L["Mínimo: %s"], ES.Money(v)) or L["Sin mínimo"])
+    if not pending then
+      pending = true
+      C_Timer.After(0.25, Apply)
+    end
   end)
-  minButton:SetScript("OnEnter", function(self)
+  slider:SetScript("OnMouseWheel", function(self, delta)
+    local steps = ES.Earn.MIN_LINE_STEPS
+    local i = math.max(1, math.min(#steps, (wanted or ES.Earn.MinLineStep()) + (delta > 0 and 1 or -1)))
+    self:SetValue(i)
+  end)
+  slider:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
     GameTooltip:AddLine(L["Beneficio mínimo"], 1, 0.82, 0)
     GameTooltip:AddLine(L["No se proponen recetas que, con todas las fabricaciones que tocan, dejen menos que esto (tampoco materiales para vender que valgan menos)."], 1, 1, 1, true)
-    GameTooltip:AddLine(L["Clic: subir · Clic derecho: bajar"], 0.6, 0.6, 0.6)
+    GameTooltip:AddLine(L["Arrastra o usa la rueda del ratón."], 0.6, 0.6, 0.6)
     GameTooltip:Show()
   end)
-  minButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  page.minButton = minButton
+  slider:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  page.minSlider = slider
 
   -- Los materiales del lote de hoy a la Lista de compra (ShoppingUI.lua)
   local addButton = CreateFrame("Button", nil, head, "UIPanelButtonTemplate")
   addButton:SetSize(170, 24)
-  addButton:SetPoint("RIGHT", minButton, "LEFT", -6, 0)
+  addButton:SetPoint("RIGHT", minBox, "LEFT", -6, 0)
   addButton:SetText(L["Añadir a la lista de compra"])
   addButton:SetScript("OnClick", function()
     local res = ES.Earn:Ideas()
@@ -217,7 +266,10 @@ function ES:RenderEarn()
   page.stats.profit:SetText(#res.batch > 0 and Signed(-res.profit) or (GREY .. "—|r"))
   page.stats.count:SetText(tostring(#res.batch))
   page.addButton:SetEnabled(#res.shopping > 0)
-  page.minButton:SetText(res.minLine > 0 and string.format(L["Mínimo: %s"], ES.Money(res.minLine)) or L["Sin mínimo"])
+  page.minLabel:SetText(res.minLine > 0 and string.format(L["Mínimo: %s"], ES.Money(res.minLine)) or L["Sin mínimo"])
+  page.syncing = true -- (pintar el valor guardado no cuenta como moverlo)
+  page.minSlider:SetValue(ES.Earn.MinLineStep())
+  page.syncing = nil
   local left, leftHidden = ES.Earn:Leftovers()
   local hidden = res.hidden + leftHidden
 
@@ -262,6 +314,23 @@ function ES:RenderEarn()
   if #more > 0 then
     lines[#lines + 1] = { section = L["Más opciones con beneficio"] }
     for _, idea in ipairs(more) do lines[#lines + 1] = IdeaLine(idea) end
+  end
+  -- Recetas que no sabes y darían beneficio: qué merece la pena aprender
+  if #res.learnable > 0 then
+    lines[#lines + 1] = { section = L["Recetas que podrías aprender"] }
+    for i = 1, math.min(#res.learnable, MAX_LEARNABLE) do
+      local idea = res.learnable[i]
+      local e = idea.e
+      local name, texture = ItemLabel(e.itemID, e.recipe.name)
+      local learn = (LEARN_LABEL[e.learnSource] or "?") .. ((e.learnCost or 0) > 0 and (" " .. ES.Money(e.learnCost)) or "")
+      local req = idea.canLearn and (GREEN .. L["ya puedes"] .. "|r")
+        or (ORANGE .. string.format(L["pide %d"], idea.need) .. "|r")
+      local where = idea.sellWhere == "ah" and string.format(L["AH %s/u"], ES.Money(e.ahPrice or e.ahMin))
+        or string.format(L["vendedor %s/u"], ES.Money(e.vendor))
+      lines[#lines + 1] = { icon = texture or 134400, title = name or e.recipe.name,
+        sub = string.format("%s · %s · %s · %s", ES:ProfLabel(idea.profKey), learn, req, where),
+        value = GREEN .. "+" .. ES.Money(e.profit) .. "/u|r", item = e.itemID, tooltip = IdeaTooltip(idea) }
+    end
   end
   -- Enfriamientos (transmutaciones...) que sabes
   local cds = ES.Earn:Cooldowns()
