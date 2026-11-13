@@ -2311,7 +2311,43 @@ function Planner:Plan(data, opts)
   plan.ctx = ctx
   plan.net = plan.reagentCost - plan.resale + plan.fees + plan.toolsCost
   plan.reached = reached
+  Planner.WholeCraftShopping(plan)
   return plan
+end
+
+-- Lo que se compra, en fabricaciones enteras: cada paso redondea sus fabricaciones
+-- hacia arriba (14,7 -> 15) y su coste ya las cuenta así, pero la lista sumaba lo
+-- esperado fraccionario (Discord: "me pide 98 de algo y hacen falta 100"; Mageweave
+-- Cloth x516 cuando 15 fabricaciones piden 519, con "Tienes 0/519" en la misma fila).
+-- Se completa cada material hasta lo que piden las fabricaciones enteras (NeedFrom, la
+-- misma regla que la Lista de compra), menos lo que sale de tus bolsas y lo que
+-- fabricas por el camino. Solo se sube, nunca se baja.
+function Planner.WholeCraftShopping(plan)
+  if not (plan and plan.shopping and #plan.shopping > 0 and plan.pointNeed) then return end
+  local whole = Planner.NeedFrom(plan, plan.from or 1)
+  local have = {}
+  for _, o in ipairs(plan.owned or {}) do have[o.itemID] = (have[o.itemID] or 0) + o.quantity end
+  for _, c in ipairs(plan.crafted or {}) do have[c.itemID] = (have[c.itemID] or 0) + c.quantity end
+  local byItem = {}
+  for _, it in ipairs(plan.shopping) do
+    local b = byItem[it.itemID]
+    if not b then b = { qty = 0 } byItem[it.itemID] = b end
+    b.qty = b.qty + it.quantity
+    -- (lo que falta va a la fuente de la que más se compra)
+    if not b.main or it.quantity > b.main.quantity then b.main = it end
+  end
+  local respectSupply = plan.ctx and plan.ctx.opts and not plan.ctx.opts.ignoreSupply
+  for itemID, b in pairs(byItem) do
+    local short = (whole[itemID] or 0) - (have[itemID] or 0) - b.qty
+    -- (mirando existencias: no más de lo que hay a la venta en la AH)
+    if respectSupply and b.main.source == "ah" and b.main.supply then
+      short = math.min(short, b.main.supply - b.main.quantity)
+    end
+    if short > 0 then
+      b.main.quantity = b.main.quantity + short
+      b.main.total = b.main.total + short * (b.main.unit or 0)
+    end
+  end
 end
 
 ---------------------------------------------------------------------------

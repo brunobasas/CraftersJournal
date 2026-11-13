@@ -284,32 +284,48 @@ local function MiniRow(parent)
   return row
 end
 
+local MINI_TOP, MINI_BOTTOM = 76, 42 -- alto de la cabecera (título, subtítulo, barra) y de los botones
+
 local function CreateMini(ahFrame)
-  local G = ES.UI.BROWN.group -- (paleta común: el fondo de Subir profesiones)
-  local p = ES.UI.Panel(ahFrame, G[1], G[2], G[3], 0.99)
+  -- El mismo aspecto que las ventanas de vender junto al vendedor y la AH
+  -- (VendorUI.lua, AuctionSellUI.lua): fondo, borde, "Crafter's Journal" y subtítulo
+  local p = CreateFrame("Frame", "CraftersJournalShoppingMini", ahFrame, "BackdropTemplate")
+  p:SetBackdrop({
+    bgFile = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12,
+    insets = { left = 3, right = 3, top = 3, bottom = 3 },
+  })
+  local G = ES.UI.BROWN.group
+  p:SetBackdropColor(G[1], G[2], G[3], 0.99)
+  p:SetBackdropBorderColor(0.52, 0.38, 0.17, 1)
   p:SetSize(MINI_W, MINI_H)
   p:SetPoint("TOPLEFT", ahFrame, "TOPRIGHT", 2, -12)
   p:SetFrameStrata(ahFrame:GetFrameStrata())
+  if p.SetClampedToScreen then p:SetClampedToScreen(true) end
   p:EnableMouse(true)
 
   local title = p:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   title:SetPoint("TOPLEFT", 12, -10)
-  title:SetText(L["Crafter's Journal · Lista de compra"])
+  title:SetText("Crafter's Journal")
+  local sub = p:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
+  sub:SetText(L["Lista de compra:"])
   local close = CreateFrame("Button", nil, p, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", 2, 2)
   close:SetScript("OnClick", function()
-    ES.db.shopMiniHidden = true
+    -- (cerrada hasta la próxima vez que abras la AH; antes se quedaba cerrada siempre)
+    ES.shopMiniClosed = true
     p:Hide()
   end)
 
-  p.progressText = p:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  p.progressText:SetPoint("TOPLEFT", 12, -32)
+  p.progressText = p:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  p.progressText:SetPoint("TOPLEFT", 12, -44)
   p.progressText:SetPoint("RIGHT", -12, 0)
   p.progressText:SetJustifyH("LEFT")
   p.bar = CreateFrame("StatusBar", nil, p)
-  p.bar:SetPoint("TOPLEFT", 12, -48)
+  p.bar:SetPoint("TOPLEFT", 12, -60)
   p.bar:SetPoint("RIGHT", -12, 0)
-  p.bar:SetHeight(8)
+  p.bar:SetHeight(6)
   p.bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
   p.bar:SetStatusBarColor(0.25, 0.8, 0.25)
   p.bar:SetMinMaxValues(0, 1)
@@ -318,8 +334,8 @@ local function CreateMini(ahFrame)
   barBg:SetColorTexture(0, 0, 0, 0.5)
 
   local scroll = ES.UI.WheelScroll(p)
-  scroll:SetPoint("TOPLEFT", 10, -62)
-  scroll:SetPoint("BOTTOMRIGHT", -10, 40)
+  scroll:SetPoint("TOPLEFT", 10, -MINI_TOP)
+  scroll:SetPoint("BOTTOMRIGHT", -10, MINI_BOTTOM)
   p.content = CreateFrame("Frame", nil, scroll)
   p.content:SetSize(MINI_W - 44, 1)
   scroll:SetScrollChild(p.content)
@@ -369,7 +385,16 @@ local function CreateMini(ahFrame)
 end
 
 RenderMini = function(st, lines, ahOpen)
-  if not mini or not mini:IsShown() then return end
+  if not mini then return end
+  -- Con la AH abierta y algo por comprar, sale (p. ej. si añades materiales con la AH
+  -- abierta), salvo que lo cerraras o la ventana grande esté a su lado
+  local main = CraftersJournalMainFrame
+  if not mini:IsShown() and ahOpen and not ES.shopMiniClosed and not (main and main:IsShown())
+    and ES.Shopping.HasPending(st) then
+    ES:PlaceShoppingMini()
+    mini:Show()
+  end
+  if not mini:IsShown() then return end
   mini.progressText:SetText(st.total > 0 and string.format(L["%d de %d materiales comprados · te falta ~%s"], st.done, st.total, ES.Money(st.cost))
     or "")
   mini.bar:SetShown(st.total > 0)
@@ -405,6 +430,30 @@ RenderMini = function(st, lines, ahOpen)
   end
   for i = #lines + 1, #mini.rows do mini.rows[i]:Hide() end
   mini.content:SetHeight(math.max(1, y))
+  -- Tan alto como su contenido (como las ventanas de vender), hasta MINI_H con scroll
+  mini:SetHeight(math.min(MINI_H, MINI_TOP + math.max(y, 30) + MINI_BOTTOM))
+  -- Sin nada pendiente, fuera (salvo que lo abrieras tú con el botón de la AH)
+  if not ES.shopMiniForced and not ES.Shopping.HasPending(st) then mini:Hide() end
+end
+
+-- ¿Queda algo por comprar en la lista de compra?
+function ES.Shopping.HasPending(st)
+  st = st or ES.Shopping.Status()
+  return (st.total or 0) > (st.done or 0)
+end
+
+-- Dónde va el panel de la lista de compra junto a la AH: a la derecha de la ventana de
+-- vender en la AH si se ve (AuctionSellUI.lua); si no, pegado a la AH
+function ES:PlaceShoppingMini()
+  if not mini then return end
+  local ah = AuctionHouseFrame or AuctionFrame
+  local sell = CraftersJournalAuctionSellPanel
+  mini:ClearAllPoints()
+  if sell and sell:IsShown() then
+    mini:SetPoint("TOPLEFT", sell, "TOPRIGHT", 4, 0)
+  elseif ah then
+    mini:SetPoint("TOPLEFT", ah, "TOPRIGHT", 2, -12)
+  end
 end
 
 -- Al abrir la AH: si tenías la ventana grande abierta, se queda (al lado de la AH) y no
@@ -413,6 +462,10 @@ end
 -- cerraras)
 function ES:SetupShoppingMini(ahFrame)
   if not mini then mini = CreateMini(ahFrame) end
+  -- Cada vez que abres la AH sale si hay algo que comprar (la X lo cierra solo hasta
+  -- la próxima: antes se quedaba cerrado para siempre y no volvía a salir)
+  ES.shopMiniClosed, ES.shopMiniForced = nil, nil
+  ES.db.shopMiniHidden = nil -- (lo de versiones anteriores)
   local main = CraftersJournalMainFrame
   if main and main:IsShown() then
     main:ClearAllPoints()
@@ -421,15 +474,19 @@ function ES:SetupShoppingMini(ahFrame)
     ES:MiniOnMainHide() -- (y al cerrarla, con la AH abierta, sale el panel pequeño)
     return
   end
-  mini:SetShown(not ES.db.shopMiniHidden)
+  ES:PlaceShoppingMini()
+  mini:SetShown(ES.Shopping.HasPending())
   ES:RenderShopping()
 end
 
--- El botón sobre la AH: enseñar u ocultar el panel pequeño
+-- El botón sobre la AH: enseñar u ocultar el panel pequeño (a mano: sale aunque no
+-- quede nada por comprar)
 function ES:ToggleShoppingMini(ahFrame)
   if not mini then return self:SetupShoppingMini(ahFrame) end
   local show = not mini:IsShown()
-  ES.db.shopMiniHidden = not show or nil
+  ES.shopMiniClosed = not show or nil
+  ES.shopMiniForced = show or nil
+  ES:PlaceShoppingMini()
   mini:SetShown(show)
   if show then ES:RenderShopping() end
 end
@@ -449,7 +506,11 @@ function ES:MiniOnMainHide()
   if not main.cjMiniHook then
     main.cjMiniHook = true
     main:HookScript("OnHide", function()
-      if ES:IsAuctionHouseOpen() and mini and not ES.db.shopMiniHidden then mini:Show() ES:RenderShopping() end
+      if ES:IsAuctionHouseOpen() and mini and not ES.shopMiniClosed and ES.Shopping.HasPending() then
+        ES:PlaceShoppingMini()
+        mini:Show()
+        ES:RenderShopping()
+      end
     end)
   end
 end

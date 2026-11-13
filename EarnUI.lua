@@ -52,6 +52,9 @@ local function IdeaTooltip(idea)
         GameTooltip:AddLine(L["Hasta aquí: no quedan más materiales a la venta en la AH."], 0.8, 0.8, 0.8, true)
       elseif idea.limit == "max" then
         GameTooltip:AddLine(string.format(L["Tope de %d fabricaciones: con más aún daría beneficio."], idea.crafts), 0.8, 0.8, 0.8, true)
+      elseif idea.limit == "time" then
+        GameTooltip:AddLine(string.format(L["Hasta aquí: unos %d min de fabricar. Más fabricaciones aún darían beneficio, pero no compensa el tiempo."],
+          math.floor(ES.Earn.VENDOR_TIME_BUDGET / 60)), 0.8, 0.8, 0.8, true)
       end
       if idea.crafts > 0 then
         GameTooltip:AddDoubleLine(L["Inviertes"], ES.Money(idea.invest), unpack(W))
@@ -129,58 +132,73 @@ function ES:CreateEarnPage(page)
   page.subtitle:SetPoint("RIGHT", -370, 0)
   page.subtitle:SetJustifyH("LEFT")
 
-  -- Beneficio mínimo de cada línea: deslizador por escalones (Earn.MIN_LINE_STEPS),
-  -- con el valor encima. También con la rueda del ratón
-  local minBox = CreateFrame("Frame", nil, head)
-  minBox:SetSize(170, 38)
-  minBox:SetPoint("RIGHT", -12, 0)
-  page.minLabel = Label(minBox, "", "GameFontHighlightSmall")
-  page.minLabel:SetPoint("TOP", 0, 0)
-  local slider = CreateFrame("Slider", nil, minBox, "BackdropTemplate")
-  slider:SetSize(160, 16)
-  slider:SetPoint("BOTTOM", 0, 2)
-  slider:SetOrientation("HORIZONTAL")
-  slider:SetBackdrop({
-    bgFile = "Interface\\Buttons\\UI-SliderBar-Background",
-    edgeFile = "Interface\\Buttons\\UI-SliderBar-Border", edgeSize = 8,
-    insets = { left = 3, right = 3, top = 6, bottom = 6 },
-  })
-  slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
-  slider:SetMinMaxValues(1, #ES.Earn.MIN_LINE_STEPS)
-  slider:SetValueStep(1)
-  if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
-  slider:EnableMouseWheel(true)
-  -- (se recalcula al soltar o tras un momento quieto: arrastrar no recalcula en cada paso)
-  local pending, wanted
-  local function Apply()
-    pending = nil
-    if ES.Earn.SetMinLineStep(wanted) then ES:RenderEarn() end
-  end
-  slider:SetScript("OnValueChanged", function(self, value)
-    if page.syncing then return end
-    local steps = ES.Earn.MIN_LINE_STEPS
-    wanted = math.max(1, math.min(#steps, math.floor(value + 0.5)))
-    local v = steps[wanted]
-    page.minLabel:SetText(v > 0 and string.format(L["Mínimo: %s"], ES.Money(v)) or L["Sin mínimo"])
-    if not pending then
-      pending = true
-      C_Timer.After(0.25, Apply)
+  -- Deslizador por escalones con el valor encima (también con la rueda). o = { steps,
+  -- current() -> escalón, set(i) -> cambió?, text(v) -> etiqueta, title, help }
+  local function StepSlider(parent, o)
+    local box = CreateFrame("Frame", nil, parent)
+    box:SetSize(170, 38)
+    box.label = Label(box, "", "GameFontHighlightSmall")
+    box.label:SetPoint("TOP", 0, 0)
+    local slider = CreateFrame("Slider", nil, box, "BackdropTemplate")
+    slider:SetSize(160, 16)
+    slider:SetPoint("BOTTOM", 0, 2)
+    slider:SetOrientation("HORIZONTAL")
+    slider:SetBackdrop({
+      bgFile = "Interface\\Buttons\\UI-SliderBar-Background",
+      edgeFile = "Interface\\Buttons\\UI-SliderBar-Border", edgeSize = 8,
+      insets = { left = 3, right = 3, top = 6, bottom = 6 },
+    })
+    slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+    slider:SetMinMaxValues(1, #o.steps)
+    slider:SetValueStep(1)
+    if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
+    slider:EnableMouseWheel(true)
+    -- (se recalcula al soltar o tras un momento quieto: arrastrar no recalcula en cada paso)
+    local pending, wanted
+    local function Apply()
+      pending = nil
+      if o.set(wanted) then ES:RenderEarn() end
     end
-  end)
-  slider:SetScript("OnMouseWheel", function(self, delta)
-    local steps = ES.Earn.MIN_LINE_STEPS
-    local i = math.max(1, math.min(#steps, (wanted or ES.Earn.MinLineStep()) + (delta > 0 and 1 or -1)))
-    self:SetValue(i)
-  end)
-  slider:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
-    GameTooltip:AddLine(L["Beneficio mínimo"], 1, 0.82, 0)
-    GameTooltip:AddLine(L["No se proponen recetas que, con todas las fabricaciones que tocan, dejen menos que esto (tampoco materiales para vender que valgan menos)."], 1, 1, 1, true)
-    GameTooltip:AddLine(L["Arrastra o usa la rueda del ratón."], 0.6, 0.6, 0.6)
-    GameTooltip:Show()
-  end)
-  slider:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  page.minSlider = slider
+    slider:SetScript("OnValueChanged", function(self, value)
+      if page.syncing then return end
+      wanted = math.max(1, math.min(#o.steps, math.floor(value + 0.5)))
+      box.label:SetText(o.text(o.steps[wanted]))
+      if not pending then
+        pending = true
+        C_Timer.After(0.25, Apply)
+      end
+    end)
+    slider:SetScript("OnMouseWheel", function(self, delta)
+      self:SetValue(math.max(1, math.min(#o.steps, (wanted or o.current()) + (delta > 0 and 1 or -1))))
+    end)
+    slider:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+      GameTooltip:AddLine(o.title, 1, 0.82, 0)
+      GameTooltip:AddLine(o.help, 1, 1, 1, true)
+      GameTooltip:AddLine(L["Arrastra o usa la rueda del ratón."], 0.6, 0.6, 0.6)
+      GameTooltip:Show()
+    end)
+    slider:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    -- Pintar el valor guardado (sin que cuente como moverlo)
+    function box.Sync()
+      box.label:SetText(o.text(o.steps[o.current()]))
+      page.syncing = true
+      slider:SetValue(o.current())
+      page.syncing = nil
+    end
+    box.slider = slider
+    return box
+  end
+
+  -- Beneficio mínimo de cada línea (Earn.MIN_LINE_STEPS)
+  local minBox = StepSlider(head, {
+    steps = ES.Earn.MIN_LINE_STEPS, current = ES.Earn.MinLineStep, set = ES.Earn.SetMinLineStep,
+    text = function(v) return v > 0 and string.format(L["Mínimo: %s"], ES.Money(v)) or L["Sin mínimo"] end,
+    title = L["Beneficio mínimo"],
+    help = L["No se proponen recetas que, con todas las fabricaciones que tocan, dejen menos que esto (tampoco materiales para vender que valgan menos)."],
+  })
+  minBox:SetPoint("RIGHT", -12, 0)
+  page.minBox, page.minLabel, page.minSlider = minBox, minBox.label, minBox.slider
 
   -- Los materiales del lote de hoy a la Lista de compra (ShoppingUI.lua)
   local addButton = CreateFrame("Button", nil, head, "UIPanelButtonTemplate")
@@ -293,10 +311,7 @@ function ES:RenderEarn()
   page.stats.profit:SetText(#res.batch > 0 and Signed(-res.profit) or (GREY .. "—|r"))
   page.stats.count:SetText(tostring(#res.batch))
   page.addButton:SetEnabled(#res.shopping > 0)
-  page.minLabel:SetText(res.minLine > 0 and string.format(L["Mínimo: %s"], ES.Money(res.minLine)) or L["Sin mínimo"])
-  page.syncing = true -- (pintar el valor guardado no cuenta como moverlo)
-  page.minSlider:SetValue(ES.Earn.MinLineStep())
-  page.syncing = nil
+  page.minBox.Sync()
   local left, leftHidden = ES.Earn:Leftovers()
   local hidden = res.hidden + leftHidden
 

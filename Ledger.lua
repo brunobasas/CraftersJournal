@@ -386,11 +386,26 @@ do
   local f = CreateFrame("Frame")
   for _, e in ipairs({ "TRAINER_SHOW", "TRAINER_UPDATE", "PLAYER_ENTERING_WORLD", "PLAYER_MONEY",
     "MERCHANT_SHOW", "MERCHANT_CLOSED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED",
-    "AUCTION_HOUSE_THROTTLED_SYSTEM_READY" }) do
+    "AUCTION_HOUSE_THROTTLED_SYSTEM_READY", "AUCTION_HOUSE_AUCTION_CREATED", "CHAT_MSG_SYSTEM", "UI_ERROR_MESSAGE" }) do
     ES.SafeRegister(f, e)
   end
-  f:SetScript("OnEvent", function(_, event)
+  f:SetScript("OnEvent", function(_, event, ...)
     if not ES.db then return end
+    -- Respuesta de la AH al anuncio pendiente (ver PostOnAH): creada, o un error en rojo
+    if Ledger.pendingPost then
+      if event == "AUCTION_HOUSE_AUCTION_CREATED" then
+        Ledger:ConfirmPost(true)
+        return
+      elseif event == "CHAT_MSG_SYSTEM" and ERR_AUCTION_STARTED and (...) == ERR_AUCTION_STARTED then
+        Ledger:ConfirmPost(true) -- ("Subasta creada.": por si el cliente no tiene el evento)
+        return
+      elseif event == "UI_ERROR_MESSAGE" then
+        local _, message = ...
+        Ledger:ConfirmPost(false, message)
+        return
+      end
+    end
+    if event == "AUCTION_HOUSE_AUCTION_CREATED" or event == "CHAT_MSG_SYSTEM" or event == "UI_ERROR_MESSAGE" then return end
     if event == "AUCTION_HOUSE_THROTTLED_SYSTEM_READY" then
       -- Se pulsó con la AH ocupada: avisa de que ya se puede (anunciar necesita un clic)
       local b = Ledger.ahBusy
@@ -467,9 +482,11 @@ function Ledger.PostPrice(unit)
   return math.max(unit - unit % 100, 100)
 end
 
--- AH ocupada: cuánto se espera antes de intentar igual, cada cuánto se repite el
--- aviso y cuándo se olvida un intento viejo (s)
-local AH_BUSY_GRACE, AH_BUSY_REPRINT, AH_BUSY_RESET = 3, 10, 30
+-- AH ocupada: cada cuánto se repite el aviso y cuándo se olvida un intento viejo (s)
+local AH_BUSY_REPRINT, AH_BUSY_RESET = 10, 30
+-- s que se espera la confirmación de un anuncio (AUCTION_HOUSE_AUCTION_CREATED o el
+-- "Subasta creada." del chat) antes de darlo por hecho
+local POST_CONFIRM_WAIT = 4
 
 -- Duraciones de la AH, por su índice en C_AuctionHouse (1, 2, 3). Forever tiene
 -- subastas de 2, 8 y 24 h (Planner.DURATIONS); el cliente moderno, de 12, 24 y 48.
@@ -509,24 +526,27 @@ function Ledger:PostOnAH(itemID, n, unit, hours)
     return 0
   end
   if AH.IsThrottledMessageSystemReady and not AH.IsThrottledMessageSystemReady() then
-    -- Ocupada (otro addon buscando, o la AH aún procesa lo anterior). Se avisa una
-    -- vez, no en cada clic, y cuando el juego dice que está lista. Si sigue "ocupada"
-    -- más de AH_BUSY_GRACE s, se intenta igual: el indicador puede quedarse atascado
-    -- y el servidor ya dice si no puede.
+    -- Ocupada: tras cada anuncio el servidor tarda un momento en aceptar otro (o otro
+    -- addon está buscando). Se avisa una vez, no en cada clic, y cuando el juego dice
+    -- que está lista. Nunca se anuncia con la AH ocupada: el servidor lo rechazaba en
+    -- silencio y el chat decía "Anunciados" igualmente (antes se intentaba a los 3 s)
     local now = GetTime()
     local b = Ledger.ahBusy
     if not b or now - b.since > AH_BUSY_RESET then
       b = { since = now }
       Ledger.ahBusy = b
     end
-    if now - b.since < AH_BUSY_GRACE then
-      if not b.printed or now - b.printed > AH_BUSY_REPRINT then
-        ES:Print(L["La Casa de Subastas está ocupada: vuelve a pulsar en un momento."])
-        b.printed = now
-      end
-      b.waiting = true
-      return 0
+    if not b.printed or now - b.printed > AH_BUSY_REPRINT then
+      ES:Print(L["La Casa de Subastas está ocupada: vuelve a pulsar en un momento."])
+      b.printed = now
     end
+    b.waiting = true
+    return 0
+  end
+  if Ledger.pendingPost then
+    -- El anuncio anterior aún no está confirmado: uno cada vez
+    ES:Print(L["La Casa de Subastas está ocupada: vuelve a pulsar en un momento."])
+    return 0
   end
   Ledger.ahBusy = nil
   local slot
@@ -559,6 +579,27 @@ function Ledger:PostOnAH(itemID, n, unit, hours)
     ES:Print(L["No se pudo anunciar: "] .. tostring(err))
     return 0
   end
-  ES:Print(string.format(L["Anunciados %d de %s a %s cada uno (%d h)."], qty, ES:DataItemName(itemID) or itemID, ES.Money(price), postHours))
+  -- "Anunciados" solo cuando la AH lo confirma (antes se decía al pedirlo, aunque el
+  -- servidor lo rechazara); si da un error, se dice cuál (ver ConfirmPost)
+  local p = { text = string.format(L["Anunciados %d de %s a %s cada uno (%d h)."], qty, ES:DataItemName(itemID) or itemID, ES.Money(price), postHours),
+    name = ES:DataItemName(itemID) or tostring(itemID) }
+  Ledger.pendingPost = p
+  C_Timer.After(POST_CONFIRM_WAIT, function()
+    -- Sin confirmación ni error (el cliente no avisa): se da por hecho, como antes
+    if Ledger.pendingPost == p then Ledger:ConfirmPost(true) end
+  end)
   return qty
+end
+
+-- Respuesta de la AH al último anuncio: ok (creado) o el mensaje de error
+function Ledger:ConfirmPost(ok, message)
+  local p = Ledger.pendingPost
+  if not p then return end
+  Ledger.pendingPost = nil
+  if ok then
+    ES:Print(p.text)
+  else
+    ES:Print(string.format(L["La Casa de Subastas no aceptó %s: %s"], p.name, tostring(message or "?")))
+  end
+  if ES.AuctionSell then ES.AuctionSell:Refresh() end
 end

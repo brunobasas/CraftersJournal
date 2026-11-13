@@ -127,32 +127,18 @@ function Vendor:List()
   return list
 end
 
--- Lo que vender al vendedor de tus bolsas: lo que la vista Profit dice que vendas al
--- vendedor (de las mismas rutas) y lo que la pestaña Inventario manda al vendedor
--- (lo que tus rutas empezadas necesitan ya se guarda allí). De cada objeto, lo más
--- que diga cualquiera de las dos: { { itemID, n, unit, value } }, lo que más da arriba
+-- Lo que vender al vendedor: EXACTAMENTE la sección "Vender al vendedor" de la pestaña
+-- Inventario (Inventory:Sections), ni más ni menos. Antes esta ventana hacía su propia
+-- lista (lo de la vista Profit de las rutas y el resto "vendedor: N" de objetos que
+-- la pestaña pone en la AH) y proponía cosas que la pestaña no: Discord, 2 Bolt of
+-- Woolen Cloth al vendedor que la pestaña tenía en "Vender en la AH".
+-- { { itemID, n, unit, value } }, lo que más da arriba
 function Vendor:SellList()
-  local sell = {}
-  if not Ledger() then return {} end
-  for _, p in ipairs(Plans()) do
-    for _, d in ipairs(p.plan.destinations or {}) do
-      local a = ES.Planner.SaleAdvice(d)
-      if a.vendor > 0 then sell[d.itemID] = (sell[d.itemID] or 0) + a.vendor end
-    end
-  end
-  if ES.Inventory then
-    local ok, inv = pcall(ES.Inventory.List, ES.Inventory)
-    for _, e in ipairs(ok and inv or {}) do
-      if e.vendorN > 0 then sell[e.itemID] = math.max(sell[e.itemID] or 0, e.vendorN) end
-    end
-  end
   local list = {}
-  for itemID, n in pairs(sell) do
-    -- (herramientas de profesión y lo que marcaste para no venderlo: nunca)
-    if ES.Inventory and ES.Inventory.NeverSell(itemID) then n = 0 end
-    n = math.min(n, Ledger().BagCount(itemID))
-    local unit = ES:VendorSellPrice(itemID) or 0
-    if n > 0 and unit > 0 then list[#list + 1] = { itemID = itemID, n = n, unit = unit, value = n * unit } end
+  if not (Ledger() and ES.Inventory) then return list end
+  local ok, sec = pcall(ES.Inventory.Sections, ES.Inventory)
+  for _, e in ipairs(ok and sec.vendor or {}) do
+    list[#list + 1] = { itemID = e.itemID, n = e.vendorN, unit = e.vendorUnit, value = e.vendorN * e.vendorUnit }
   end
   table.sort(list, function(a, b) return a.value > b.value or (a.value == b.value and a.itemID < b.itemID) end)
   return list

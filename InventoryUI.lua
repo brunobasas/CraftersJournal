@@ -165,8 +165,10 @@ function Inventory:List()
       e.de, e.deCan, e.deRank = de, ES.Disenchant:CanDisenchant(de.skill)
     end
     -- (lo que no se vende sale aparte: herramientas solo si las llevas, que se vea por
-    -- qué no se proponen; lo tuyo, siempre, para poder desmarcarlo)
-    if e.value > 0 or keep > 0 then list[#list + 1] = e end
+    -- qué no se proponen; lo tuyo, siempre, para poder desmarcarlo. Y lo que en la AH
+    -- no compensa y el vendedor no compra, para que se sepa por qué no se propone:
+    -- Basic Campfire Kit a 50c con 3.278 a la venta y 1s de depósito si caduca)
+    if e.value > 0 or keep > 0 or e.riskyAH then list[#list + 1] = e end
   end
   table.sort(list, function(a, b) return a.value > b.value or (a.value == b.value and a.itemID < b.itemID) end)
   return list
@@ -335,7 +337,12 @@ end
 local function Line(e, mode)
   local name, texture = ItemLabel(e.itemID)
   local sub
-  if mode == "never" then
+  if mode == "notworth" then
+    -- En la AH te quedaría algo, pero si caduca el depósito se lo come, y el vendedor
+    -- no lo compra: por eso no se propone (antes desaparecía sin decir por qué)
+    sub = GREY .. string.format(L["AH: te quedarían %s, pero si caduca pierdes %s de depósito · el vendedor no lo compra"],
+      ES.Money(e.ahNet or 0), ES.Money(e.depositRisk or 0)) .. "|r"
+  elseif mode == "never" then
     sub = GREY .. (e.never == "tool" and L["herramienta de profesión: no se vende"] or L["lo marcaste para no venderlo"])
       .. " · " .. L["clic derecho: volver a proponerlo"] .. "|r"
   elseif mode == "keep" then
@@ -354,7 +361,7 @@ local function Line(e, mode)
     if e.keep > 0 then parts[#parts + 1] = GREY .. string.format(L["guarda %d para tus rutas"], e.keep) .. "|r" end
     sub = table.concat(parts, " · ")
   end
-  local sells = mode ~= "keep" and mode ~= "never"
+  local sells = mode ~= "keep" and mode ~= "never" and mode ~= "notworth"
   return {
     icon = texture or 134400, title = string.format("%d× %s", e.count, name or ("#" .. e.itemID)), sub = sub,
     value = sells and ES.UI.Signed(-e.value) or "", item = e.itemID,
@@ -401,21 +408,36 @@ function ES:CreateInventoryPage(page)
   self.inventoryPage = page
 end
 
+-- Las secciones de la pestaña: ÚNICO reparto, que usan también las ventanas junto al
+-- vendedor (la sección "vendor") y junto a la AH ("rising" y "ah"). Así enseñan
+-- exactamente lo mismo que la pestaña (antes la del vendedor hacía su propia lista y
+-- proponía el resto "vendedor: 2" de objetos que la pestaña pone en la AH)
+-- { rising, ah, vendor, keep, never } de Inventory:List()
+function Inventory:Sections(list)
+  list = list or self:List()
+  local s = { rising = {}, ah = {}, vendor = {}, keep = {}, never = {}, notWorth = {} }
+  for _, e in ipairs(list) do
+    if e.value > 0 and e.rise and e.ahN > 0 then s.rising[#s.rising + 1] = e
+    elseif e.ahN > 0 then s.ah[#s.ah + 1] = e
+    elseif e.vendorN > 0 then s.vendor[#s.vendor + 1] = e
+    elseif e.riskyAH and not e.never and e.count > e.keep then s.notWorth[#s.notWorth + 1] = e end
+    if e.never then s.never[#s.never + 1] = e
+    elseif e.keep > 0 then s.keep[#s.keep + 1] = e end
+  end
+  return s
+end
+
 function ES:RenderInventory()
   local page = self.inventoryPage
   if not page or not page:IsVisible() then return end
   local list = Inventory:List()
   local Signed = ES.UI.Signed
-  local rising, ah, vendor, keep, never = {}, {}, {}, {}, {}
+  local sec = Inventory:Sections(list)
+  local rising, ah, vendor, keep, never = sec.rising, sec.ah, sec.vendor, sec.keep, sec.never
   local tAH, tVendor = 0, 0
   for _, e in ipairs(list) do
     tAH = tAH + e.ahN * (e.ahUnit or 0)
     tVendor = tVendor + e.vendorN * e.vendorUnit
-    if e.value > 0 and e.rise and e.ahN > 0 then rising[#rising + 1] = e
-    elseif e.ahN > 0 then ah[#ah + 1] = e
-    elseif e.vendorN > 0 then vendor[#vendor + 1] = e end
-    if e.never then never[#never + 1] = e
-    elseif e.keep > 0 then keep[#keep + 1] = e end
   end
   page.stats.total:SetText(Signed(-(tAH + tVendor)))
   page.stats.ah:SetText(tAH > 0 and Signed(-tAH) or (GREY .. "—|r"))
@@ -456,6 +478,7 @@ function ES:RenderInventory()
   Section(L["Vender en la Casa de Subastas"], ah)
   Section(L["Vender al vendedor"], vendor)
   Section(L["Guardar para tus rutas"], keep, "keep")
+  Section(L["No compensa venderlo ahora"], sec.notWorth, "notworth")
   Section(L["No se venden"], never, "never")
   page.empty:SetText(#lines == 0 and L["No llevas nada que se pueda vender."] or "")
   ES.UI.RenderLines(page, lines)

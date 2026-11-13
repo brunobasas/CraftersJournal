@@ -340,12 +340,30 @@ step("lista de compra", function()
   -- "Ver completa": la pestaña grande en su lugar del pequeño
   ES:OpenShoppingAtAuction(AuctionFrame)
   assert(mini._shown == false and ES.db.lastPage == "shopping", "Ver completa: la grande en lugar del pequeño")
-  -- El botón de la AH lo oculta (y se recuerda al volver a abrir la AH)
+  -- El botón de la AH (o su X) lo oculta solo hasta la próxima vez que abras la AH:
+  -- antes se quedaba cerrado para siempre y la lista no volvía a salir
   ES:ToggleShoppingMini(AuctionFrame)
-  assert(mini._shown == false and ES.db.shopMiniHidden, "ocultar el panel pequeño")
+  assert(mini._shown == false and ES.shopMiniClosed, "ocultar el panel pequeño")
+  ES:RenderShopping()
+  assert(mini._shown == false, "cerrado, no vuelve a salir mientras sigas en la AH")
+  -- (con la ventana grande cerrada: abierta a su lado, el panel pequeño no sale)
+  mf.IsShown = function(self) return self._shown ~= false end
+  ES:HideMainFrame()
   ES:SetupAuctionPanel(AuctionFrame)
-  assert(mini._shown == false, "cerrado, no vuelve a salir al abrir la AH")
-  ES.db.shopMiniHidden = nil
+  mf.IsShown = nil
+  assert(mini._shown and not ES.shopMiniClosed, "al volver a abrir la AH, con algo por comprar, vuelve a salir")
+  -- Colocación: a la derecha de la ventana de vender en la AH si se ve; si no, pegado a la AH
+  local anchor
+  local savedSP, savedSell = mini.SetPoint, CraftersJournalAuctionSellPanel
+  mini.SetPoint = function(_, _, rel) anchor = rel end
+  local fakeSell = { IsShown = function() return true end }
+  CraftersJournalAuctionSellPanel = fakeSell
+  ES:PlaceShoppingMini()
+  assert(anchor == fakeSell, "con la ventana de vender, la lista de compra va a su derecha")
+  CraftersJournalAuctionSellPanel = nil
+  ES:PlaceShoppingMini()
+  assert(anchor == (AuctionHouseFrame or AuctionFrame), "sin ella, pegada a la AH")
+  mini.SetPoint, CraftersJournalAuctionSellPanel = savedSP, savedSell
   local page = ES.shoppingPage
   assert(page and page:IsVisible(), "la pestaña no se abrió")
   local opened
@@ -401,9 +419,38 @@ step("ganar dinero (sin correo)", function()
   ES:RenderEarn()
   ES:SelectPage("home")
   ES.db.earnMinProfit = 0
+  -- (los datos de prueba dejan pocos cobres: sin el mínimo interno de oro por hora del
+  -- vendedor no habría líneas que comprobar)
+  local savedVGPH = ES.Earn.VENDOR_MIN_GPH
+  ES.Earn.VENDOR_MIN_GPH = 0
   ES.Earn:Clear()
   local res = ES.Earn:Ideas()
   assert(res.known > 0, "no detecta recetas conocidas")
+  -- Tiempo: las líneas del vendedor no pasan de VENDOR_TIME_BUDGET (577 Linen Bag eran ~40 min)
+  for _, idea in ipairs(res.vendor) do
+    assert(idea.seconds and idea.seconds > 0, "línea del vendedor sin tiempo: " .. idea.e.recipe.name)
+    assert(idea.crafts * idea.craftSecs <= ES.Earn.VENDOR_TIME_BUDGET + idea.craftSecs,
+      string.format("%s: %d fabricaciones pasan del tope de tiempo", idea.e.recipe.name, idea.crafts))
+  end
+  local savedGSI = GetSpellInfo
+  GetSpellInfo = function(id) return "x", nil, 0, 5000 end -- lanzamiento de 5 s
+  assert(math.abs(ES.Earn.CraftSeconds(1) - 5.5) < 0.01, "segundos por fabricación: lanzamiento + margen")
+  GetSpellInfo = function() return "x", nil, 0, 0 end -- instantánea: al menos el tiempo global
+  assert(ES.Earn.CraftSeconds(1) >= 2, "instantánea: el tiempo global cuenta")
+  GetSpellInfo = savedGSI
+  -- Con el mínimo interno, lo del vendedor que no compensa el tiempo no se propone
+  -- (577 Linen Bag: ~5g en ~40 min); las de la AH no se filtran por tiempo
+  ES.Earn.VENDOR_MIN_GPH = 500000
+  ES.Earn:Clear()
+  local fast = ES.Earn:Ideas()
+  for _, idea in ipairs(fast.vendor) do
+    assert(idea.gph and idea.gph >= 500000, "venta al vendedor que no compensa el tiempo: " .. idea.e.recipe.name)
+  end
+  assert(#fast.ideas == #res.ideas, "las de la AH no se filtran por tiempo")
+  log[#log+1] = string.format("     vendedor: %d líneas sin mínimo de oro por hora, %d con 50g/h", #res.vendor, #fast.vendor)
+  ES.Earn.VENDOR_MIN_GPH = 0
+  ES.Earn:Clear()
+  res = ES.Earn:Ideas()
   -- Venta al vendedor: aparte del lote, sin tope de 20, cada una hasta que la siguiente no compense
   for _, idea in ipairs(res.batch) do assert(idea.sellWhere ~= "vendor", "el lote no debería llevar ventas al vendedor") end
   for _, idea in ipairs(res.vendor) do
@@ -530,6 +577,7 @@ step("ganar dinero (sin correo)", function()
   ES:SelectPage("home")
   ES.GetProfessionSkill, ES.IsRecipeKnown = realSkill, realKnown
   ES.db.earnMinProfit = nil
+  ES.Earn.VENDOR_MIN_GPH = savedVGPH
   ES.Earn:Clear()
 end)
 step("sin contabilidad: el cobro de una venta enseña el precio del vendedor", function()
@@ -2380,6 +2428,25 @@ step("lista de la compra: cuenta lo que hicieron pasos anteriores", function()
   end
   assert(need[item] <= made + 1, string.format("la lista pide %d hechos antes y solo se hicieron %d", need[item], made))
 end)
+step("materiales de la ruta: fabricaciones enteras", function()
+  -- Cada paso redondea sus fabricaciones (14,7 -> 15); lo que la ruta dice que compres
+  -- tiene que llegar para esas fabricaciones (Discord: "me pide 98 y hacen falta 100")
+  local data = ES.Data.Leatherworking
+  local plan = ES.Planner:Plan(data, { from = 1, to = 225, hours = 24, ignoreSupply = true })
+  local need = ES.Planner.NeedFrom(plan, 1)
+  local bought = {}
+  for _, it in ipairs(plan.shopping) do bought[it.itemID] = (bought[it.itemID] or 0) + it.quantity end
+  local checked = 0
+  for itemID, q in pairs(bought) do
+    if need[itemID] then
+      checked = checked + 1
+      assert(q >= need[itemID], string.format("%s: la ruta compra %d y las fabricaciones enteras piden %d",
+        ES:DataItemName(itemID) or itemID, q, need[itemID]))
+    end
+  end
+  assert(checked > 0, "no se comprobó ningún material")
+  log[#log+1] = string.format("     %d materiales: lo que se compra llega para las fabricaciones enteras", checked)
+end)
 step("lista por tramos: fabricaciones enteras", function()
   -- (15 Light Leather no dan para 2 Light Leather Pants, que piden 10: la lista pide 20)
   -- En todas las profesiones, por tramos y con la ruta entera: un material que solo gasta
@@ -2638,15 +2705,41 @@ step("anunciar con la AH ocupada: un aviso, no uno por clic", function()
   ready = true
   FireEvent("AUCTION_HOUSE_THROTTLED_SYSTEM_READY")
   assert(#printed == 2 and (printed[2]:find("ready") or printed[2]:find("lista")),"avisa cuando la AH está lista: " .. tostring(printed[2]))
-  -- Indicador atascado: tras unos segundos se intenta igual
-  ready, printed = false, {}
+  -- Ocupada aunque pasen segundos: nunca se anuncia con la AH ocupada (el servidor lo
+  -- rechazaba en silencio y el chat decía "Anunciados" igual)
+  ready, printed, posts = false, {}, 0
   ES.Ledger:PostOnAH(2318, 1, 500)
   clock = clock + 4
   ES.Ledger:PostOnAH(2318, 1, 500)
-  assert(#printed == 1, "atascada: el segundo clic ya no avisa de nuevo")
-  assert(ES.Ledger.ahBusy == nil, "atascada: se intenta anunciar igual")
+  assert(#printed == 1 and posts == 0, "ocupada: ni se anuncia ni se repite el aviso")
+  ready = true
   FireEvent("AUCTION_HOUSE_THROTTLED_SYSTEM_READY")
-  assert(#printed == 1, "sin clic pendiente, la AH lista no avisa")
+  printed = {}
+  FireEvent("AUCTION_HOUSE_THROTTLED_SYSTEM_READY")
+  assert(#printed == 0, "sin clic pendiente, la AH lista no avisa")
+  -- "Anunciados" solo cuando la AH confirma; si da error, se dice cuál
+  local savedCC = C_Container
+  C_Container = {
+    GetContainerNumSlots = function(bag) return bag == 0 and 1 or 0 end,
+    GetContainerItemID = function(bag, slot) return 2318 end,
+    GetContainerItemInfo = function() return { stackCount = 5 } end,
+  }
+  ES.Ledger.pendingPost = nil
+  printed, posts = {}, 0
+  local n = ES.Ledger:PostOnAH(2318, 2, 500)
+  assert(n == 2 and posts == 1 and #printed == 0, "al pedir el anuncio aún no se dice Anunciados (" .. #printed .. ")")
+  FireEvent("AUCTION_HOUSE_AUCTION_CREATED")
+  assert(#printed == 1 and (printed[1]:find("Posted") or printed[1]:find("Anunciados")), "confirmado: " .. tostring(printed[1]))
+  printed = {}
+  ES.Ledger:PostOnAH(2318, 2, 500)
+  ES.Ledger:PostOnAH(2318, 2, 500) -- (sin confirmar el anterior: uno cada vez)
+  assert(posts == 2, "con un anuncio sin confirmar no se pide otro: " .. posts)
+  FireEvent("UI_ERROR_MESSAGE", 1, "Not enough money")
+  assert(printed[#printed]:find("Not enough money", 1, true), "error de la AH: " .. tostring(printed[#printed]))
+  assert(ES.Ledger.pendingPost == nil, "tras el error ya no hay anuncio pendiente")
+  FireEvent("UI_ERROR_MESSAGE", 1, "Out of range")
+  assert(not printed[#printed]:find("Out of range", 1, true), "sin anuncio pendiente, los errores no son del addon")
+  C_Container = savedCC
   -- Duración: se pregunta al juego por el depósito de cada índice (Forever 2/8/24 h)
   local D = ES.Ledger.DurationIndex
   local function Deposits(a, b, c)
@@ -2689,6 +2782,35 @@ step("inventario: sin saber si se vende, el depósito que se pierde cuenta", fun
   ES.db.scans[ES:RealmKey()].items[PANTS].minUnit = 3600
   e = Pants()
   assert(e.ahN > 0 and e.hours == 8 and not e.riskyAH, "margen suficiente con el depósito de 8 h: ah " .. e.ahN)
+  -- Las ventanas junto al vendedor y la AH enseñan EXACTAMENTE las secciones de la
+  -- pestaña: con mercado dudoso, 5 a la AH y "vendedor: 3" en la misma fila, que la
+  -- pestaña tiene en "Vender en la AH". La ventana del vendedor no lo propone
+  -- (Discord: 2 Bolt of Woolen Cloth al vendedor) y la de la AH sí
+  local getInfo = C_Container.GetContainerItemInfo
+  C_Container.GetContainerItemInfo = function() return { stackCount = 8 } end
+  e = Pants()
+  assert(e.ahN == 5 and e.vendorN == 3, string.format("con mercado dudoso: ah %d, vendedor %d", e.ahN, e.vendorN))
+  local sec = ES.Inventory:Sections()
+  local inAHSection = false
+  for _, x in ipairs(sec.ah) do if x.itemID == PANTS then inAHSection = true end end
+  assert(inAHSection, "la pestaña lo tiene en Vender en la AH")
+  for _, s in ipairs(ES.VendorShop:SellList()) do assert(s.itemID ~= PANTS, "la ventana del vendedor propone algo que la pestaña tiene en la AH") end
+  local inAHWindow = false
+  for _, x in ipairs(ES.AuctionSell:List()) do if x.itemID == PANTS then inAHWindow = true end end
+  assert(inAHWindow, "la ventana de la AH no lo lista")
+  C_Container.GetContainerItemInfo = getInfo
+  -- Lo que el vendedor no compra y en la AH no compensa (Basic Campfire Kit: 50c con
+  -- miles a la venta y 1s de depósito si caduca): no se propone, pero sale explicado
+  local savedVSP = ES.VendorSellPrice
+  ES.VendorSellPrice = function(_, id) return id == PANTS and 0 or 1 end
+  ES.db.scans[ES:RealmKey()].items[PANTS].minUnit = 50
+  e = Pants()
+  assert(e and e.riskyAH and e.ahN == 0 and e.vendorN == 0, "no compensa: ni AH ni vendedor")
+  local nw = false
+  for _, x in ipairs(ES.Inventory:Sections().notWorth) do if x.itemID == PANTS then nw = true end end
+  assert(nw, "sale en No compensa venderlo ahora")
+  ES.VendorSellPrice = savedVSP
+  ES.db.scans[ES:RealmKey()].items[PANTS].minUnit = 3200
   ES.db.scans[ES:RealmKey()].items[PANTS].minUnit = 3200
   -- Si se sabe que se vende, a la AH a 24 h (el depósito se devuelve)
   ES.Market.Signals = function() return { verdict = "good" } end

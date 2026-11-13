@@ -68,6 +68,57 @@ function Earn.SetMinLineStep(i)
   return true
 end
 
+---------------------------------------------------------------------------
+-- Tiempo: fabricar también cuesta. 577 Linen Bag al vendedor dejan ~5g, pero son
+-- ~40 min de fabricar: farmeando se saca más (Discord). Las líneas de venta al
+-- vendedor (las que pueden ser cientos de fabricaciones) se cortan a
+-- VENDOR_TIME_BUDGET y no se proponen si dejan menos de VENDOR_MIN_GPH por hora.
+-- Es un criterio interno: no se enseña ni se ajusta (un deslizador y una cifra de
+-- oro por hora complicaban la página más de lo que ayudaban)
+---------------------------------------------------------------------------
+local DEFAULT_CAST = 3        -- s por fabricación si el juego no dice el lanzamiento
+local MIN_CAST = 1.5          -- (las instantáneas igual esperan el tiempo global)
+local CRAFT_OVERHEAD = 0.5    -- s de más por fabricación (latencia, cola)
+Earn.VENDOR_TIME_BUDGET = 20 * 60 -- s de fabricar como mucho en una línea de vendedor
+
+-- Segundos por fabricación de una receta (su lanzamiento en el juego + margen)
+function Earn.CraftSeconds(recipeID)
+  local ms
+  if C_Spell and C_Spell.GetSpellInfo then
+    local ok, info = pcall(C_Spell.GetSpellInfo, recipeID)
+    if ok and type(info) == "table" then ms = info.castTime end
+  end
+  if not ms and GetSpellInfo then
+    local ok, _, _, _, castTime = pcall(GetSpellInfo, recipeID)
+    if ok then ms = castTime end
+  end
+  local s = (type(ms) == "number" and ms > 0) and ms / 1000 or DEFAULT_CAST
+  return math.max(MIN_CAST, s) + CRAFT_OVERHEAD
+end
+
+-- Tiempo de fabricar una idea (sus fabricaciones y las de lo intermedio que haces
+-- por el camino) y el oro por hora que deja: idea.seconds, idea.gph (cobre/h)
+function Earn.Timing(idea)
+  local secs = idea.craftSecs or Earn.CraftSeconds(idea.e.id)
+  idea.craftSecs = secs
+  local crafts = idea.crafts or 0
+  for _, a in ipairs(idea.actions or {}) do
+    if a.kind == "craft" and a.item ~= idea.itemID then crafts = crafts + (a.qty or 0) end
+  end
+  idea.seconds = crafts * secs
+  idea.gph = idea.seconds > 0 and (idea.profit or 0) * 3600 / idea.seconds or nil
+end
+
+-- Venta al vendedor: lo mínimo que tiene que dejar por hora de fabricar (cobre/h)
+Earn.VENDOR_MIN_GPH = 100000 -- 10g/h
+
+-- ¿Compensa el tiempo? Solo se mira en la venta al vendedor (las de la AH son pocas
+-- fabricaciones); las que no hay que fabricar, sí
+function Earn.FastEnough(idea)
+  if idea.sellWhere ~= "vendor" or not idea.gph then return true end
+  return idea.gph >= Earn.VENDOR_MIN_GPH
+end
+
 -- Profesiones del personaje con datos
 function Earn.MyProfessions()
   local list = {}
@@ -138,8 +189,10 @@ local function VendorCrafts(idea)
   end
   local ok, why = Fits(1)
   if not ok then return 0, why, { cost = 0 } end
-  if Fits(VENDOR_MAX) then return VENDOR_MAX, "max", At(VENDOR_MAX) end
-  local lo, hi = 1, VENDOR_MAX
+  -- Tope: lo que cabe en VENDOR_TIME_BUDGET de fabricar (577 Linen Bag eran ~40 min)
+  local max = math.min(VENDOR_MAX, math.max(1, math.floor(Earn.VENDOR_TIME_BUDGET / (idea.craftSecs or DEFAULT_CAST))))
+  if Fits(max) then return max, max < VENDOR_MAX and "time" or "max", At(max) end
+  local lo, hi = 1, max
   while hi - lo > 1 do
     local mid = math.floor((lo + hi) / 2)
     if Fits(mid) then lo = mid else hi = mid end
@@ -154,6 +207,7 @@ end
 function Earn.CostIdea(idea)
   local e = idea.e
   idea.have = ES:ItemCount(e.itemID)
+  idea.craftSecs = idea.craftSecs or Earn.CraftSeconds(e.id)
   if idea.sellWhere == "vendor" then
     -- Lo que ya llevas también se lo vendes: no quita fabricaciones
     local n, limit, at = VendorCrafts(idea)
@@ -161,6 +215,7 @@ function Earn.CostIdea(idea)
     idea.invest = at.cost or 0
     idea.profit = idea.sale * n - idea.invest
     idea.reagents, idea.extra, idea.actions = at.reagents or {}, at.extra or {}, at.actions
+    Earn.Timing(idea)
     return
   end
   local haveCrafts = math.floor(idea.have / math.max(1, e.qty))
@@ -168,6 +223,7 @@ function Earn.CostIdea(idea)
   idea.why2 = haveCrafts > 0 and string.format(L["Ya tienes %d: se fabrican solo las que faltan."], idea.have) or nil
   if n == 0 then
     idea.crafts, idea.invest, idea.profit, idea.reagents, idea.extra = 0, 0, 0, {}, {}
+    idea.seconds, idea.gph = 0, nil
     return
   end
   local cost, reagents, extra, actions = ES.Planner.RecipeCost(idea.ctx, e.recipe, n, {})
@@ -185,6 +241,7 @@ function Earn.CostIdea(idea)
   -- Lo que de verdad se compra: también los materiales de lo que fabricas tú por el
   -- camino (Bolt of Mageweave -> su Mageweave Cloth), no solo los de la receta
   idea.actions = actions
+  Earn.Timing(idea)
 end
 
 -- Lo que deja una línea del lote: el beneficio de sus fabricaciones; si ya las
@@ -363,7 +420,7 @@ function Earn:Ideas()
   res.vendor = {}
   for _, idea in ipairs(vendor) do
     Earn.CostIdea(idea)
-    if idea.crafts > 0 and Earn.LineValue(idea) >= minLine then
+    if idea.crafts > 0 and Earn.LineValue(idea) >= minLine and Earn.FastEnough(idea) then
       idea.shopping = Earn.Shopping({ idea })
       res.vendor[#res.vendor + 1] = idea
     else

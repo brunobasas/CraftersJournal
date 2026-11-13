@@ -218,13 +218,22 @@ step("D. barrido de planes (3 profesiones, con y sin existencias)", function()
         end
         check(not bad(sh.total), "%s: NaN en compra", tag)
       end
-      -- coste de materiales de los pasos ~ total de la lista de la compra
+      -- Total de la lista de la compra: entre el coste de lo esperado (fabricaciones
+      -- fraccionarias) y el de las fabricaciones enteras de cada paso, que es lo que
+      -- cuenta el neto. La lista se completa a fabricaciones enteras (Discord: "me pide
+      -- 98 y hacen falta 100"), redondeando una vez por receta: puede quedar por debajo
+      -- de redondear paso a paso, nunca por debajo de lo esperado
       local shopTotal = 0
       for _, sh in ipairs(plan.shopping) do shopTotal = shopTotal + sh.total end
-      local expectedCost = 0
-      for _, st in ipairs(plan.steps) do expectedCost = expectedCost + st.costSum end
-      expectedCost = expectedCost - plan.stockValue + plan.toolsCost -- inventario no se compra; herramientas sí
-      check(math.abs(shopTotal - expectedCost) < 1 + expectedCost * 0.001, "%s: lista de la compra %.0f ~= materiales esperados %.0f", tag, shopTotal, expectedCost)
+      local expectedCost, wholeCost = 0, 0
+      for _, st in ipairs(plan.steps) do
+        expectedCost = expectedCost + st.costSum
+        wholeCost = wholeCost + st.crafts * st.unitCost
+      end
+      local extra = plan.toolsCost - plan.stockValue -- inventario no se compra; herramientas sí
+      expectedCost, wholeCost = expectedCost + extra, wholeCost + extra
+      check(shopTotal >= expectedCost - 1 - expectedCost * 0.001 and shopTotal <= wholeCost + 1 + wholeCost * 0.01,
+        "%s: lista de la compra %.0f fuera de [esperado %.0f, fabricaciones enteras %.0f]", tag, shopTotal, expectedCost, wholeCost)
       log("      %-24s neto %10.0f  llega %3d  pasos %2d  compra %2d  herram %d  %.2fs%s", tag, plan.net, plan.reached, #plan.steps, #plan.shopping, #plan.tools, dt,
         plan.stoppedAt and "  (parado)" or "")
       check(dt < 1.0, "%s: el cálculo tarda %.2fs (congelaría el juego)", tag, dt)

@@ -5,8 +5,8 @@ local L = ES.L
 -- VendorUI.lua) con lo que la pestaña Inventario dice que vendas en la AH: cuántos,
 -- a cuánto y lo que te queda tras la comisión. Clic en una fila: anuncia todas las
 -- de la fila; Mayús+clic, solo una (un anuncio por clic: la AH pide un clic del
--- jugador para cada uno). Clic derecho: no venderlo nunca. Va a la derecha de la lista de compra pequeña si está abierta; si
--- no, pegada a la AH. Con la ventana grande al lado de la AH no sale (ya tienes el
+-- jugador para cada uno). Clic derecho: no venderlo nunca. Va pegada a la AH, y la
+-- lista de compra pequeña, si sale, a su derecha. Con la ventana grande al lado de la AH no sale (ya tienes el
 -- Inventario ahí).
 
 local Sell = {}
@@ -19,14 +19,15 @@ local GREEN, GREY = "|cff40ff40", "|cff999999"
 
 local panel
 
--- Lo que el Inventario manda a la AH (lo que más deja arriba): { e de Inventory:List }
+-- EXACTAMENTE las secciones de AH de la pestaña Inventario ("Ha subido" y "Vender en
+-- la Casa de Subastas", Inventory:Sections), lo que más deja arriba: { e de Inventory:List }
 function Sell:List()
   local list = {}
   if not ES.Inventory then return list end
-  local ok, inv = pcall(ES.Inventory.List, ES.Inventory)
-  for _, e in ipairs(ok and inv or {}) do
-    if e.ahN > 0 then list[#list + 1] = e end
-  end
+  local ok, sec = pcall(ES.Inventory.Sections, ES.Inventory)
+  if not ok then return list end
+  for _, e in ipairs(sec.rising) do list[#list + 1] = e end
+  for _, e in ipairs(sec.ah) do list[#list + 1] = e end
   table.sort(list, function(a, b)
     local va, vb = a.ahN * (a.ahUnit or 0), b.ahN * (b.ahUnit or 0)
     return va > vb or (va == vb and a.itemID < b.itemID)
@@ -90,6 +91,7 @@ local function CreatePanel(parent)
     -- (cerrada, no vuelve a salir hasta /reload o hasta abrir otra vez la AH)
     Sell.closed = true
     f:Hide()
+    PlaceShopping()
   end)
   f.sub = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   f.sub:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -3)
@@ -132,15 +134,16 @@ local function CreatePanel(parent)
   return f
 end
 
--- Dónde va: a la derecha de la lista de compra pequeña si se ve; si no, de la AH
+-- Dónde va: pegada a la AH; la lista de compra pequeña, si sale, a su derecha
+-- (ES:PlaceShoppingMini, ShoppingUI.lua)
 local function Place(ah)
-  local mini = ES.ShoppingMini and ES.ShoppingMini()
   panel:ClearAllPoints()
-  if mini and mini:IsShown() then
-    panel:SetPoint("TOPLEFT", mini, "TOPRIGHT", 4, 0)
-  else
-    panel:SetPoint("TOPLEFT", ah, "TOPRIGHT", 2, -12)
-  end
+  panel:SetPoint("TOPLEFT", ah, "TOPRIGHT", 2, -12)
+end
+
+-- La lista de compra se coloca según si esta ventana se ve
+local function PlaceShopping()
+  if ES.PlaceShoppingMini then ES:PlaceShoppingMini() end
 end
 
 function Sell:Refresh()
@@ -149,11 +152,13 @@ function Sell:Refresh()
   local main = CraftersJournalMainFrame
   if not (ah and ES:IsAuctionHouseOpen()) or self.closed or (main and main:IsShown()) then
     if panel then panel:Hide() end
+    PlaceShopping()
     return
   end
   local list = self:List()
   if #list == 0 then
     if panel then panel:Hide() end
+    PlaceShopping()
     return
   end
   panel = panel or CreatePanel(ah)
@@ -200,6 +205,7 @@ function Sell:Refresh()
   y = y - 4 - math.max(14, math.min(tonumber(panel.hint:GetStringHeight()) or 0, 70))
   panel:SetHeight(-y + 10)
   panel:Show()
+  PlaceShopping() -- (la lista de compra, a la derecha de esta)
 end
 
 do
@@ -227,14 +233,8 @@ do
   end)
 end
 
--- La lista de compra pequeña o la ventana grande aparecen o se van: se recoloca
+-- La ventana grande aparece o se va (con ella al lado de la AH, esta no sale)
 function Sell:HookPanels()
-  local mini = ES.ShoppingMini and ES.ShoppingMini()
-  if mini and not mini.cjSellHook then
-    mini.cjSellHook = true
-    mini:HookScript("OnShow", function() Sell:Refresh() end)
-    mini:HookScript("OnHide", function() Sell:Refresh() end)
-  end
   local main = CraftersJournalMainFrame
   if main and not main.cjSellHook then
     main.cjSellHook = true
