@@ -3,7 +3,6 @@
 ## 0.47.0
 
 - **A route that stops for lack of prices now says to scan.** Without an Auction House scan, every material sold only on the AH has no price, and routes stopped with "X materials without price (not on the AH)". It now says you don't have an AH scan yet and to open it and press Scan. At the neutral AH, whose prices are kept apart, it says to scan it or open your faction's AH.
-
 - **"To the vendor" at the top of Inventory matches the Sell button.** It used to also count the leftover units of AH rows ("AH: 5 · vendor: 2"), which no button sells, so it promised gold you couldn't get. It now adds up only the "To the vendor" section.
 - **The small shopping list next to the AH no longer says "empty" when your list only has vendor items.** It now says there's nothing to buy on the AH and that those items show in the vendor's window.
 - **Gear you don't craft is no longer suggested for selling.** "Sell all" next to a vendor could sell spare weapons, armor, bags or ammo from your bags with one careless click. Gear that doesn't come from a profession recipe now goes under "Not for sale", like profession tools. What you craft with your professions and grey items are still sold. Right-click one under "Not for sale" to allow it, or turn the protection off in the options.
