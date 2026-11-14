@@ -72,7 +72,8 @@ end
 -- Tiempo: fabricar también cuesta. 577 Linen Bag al vendedor dejan ~5g, pero son
 -- ~40 min de fabricar: farmeando se saca más (Discord). Las líneas de venta al
 -- vendedor (las que pueden ser cientos de fabricaciones) se cortan a
--- VENDOR_TIME_BUDGET y no se proponen si dejan menos de VENDOR_MIN_GPH por hora.
+-- VENDOR_TIME_BUDGET y no se proponen si dejan menos por hora que Earn.VendorMinGPH
+-- (según tu nivel).
 -- Es un criterio interno: no se enseña ni se ajusta (un deslizador y una cifra de
 -- oro por hora complicaban la página más de lo que ayudaban)
 ---------------------------------------------------------------------------
@@ -109,14 +110,23 @@ function Earn.Timing(idea)
   idea.gph = idea.seconds > 0 and (idea.profit or 0) * 3600 / idea.seconds or nil
 end
 
--- Venta al vendedor: lo mínimo que tiene que dejar por hora de fabricar (cobre/h)
-Earn.VENDOR_MIN_GPH = 100000 -- 10g/h
+-- Venta al vendedor: lo mínimo que tiene que dejar por hora de fabricar (cobre/h),
+-- según el nivel del personaje: lo que sacarías farmeando crece con el nivel. Con
+-- 10g/h fijos, a nivel bajo no quedaba ninguna línea (revisión del 14/11). 20s/h por
+-- nivel: nivel 10, 2g/h; nivel 37, ~7g/h (las 577 Linen Bag no salen); nivel 60, 12g/h
+Earn.VENDOR_GPH_PER_LEVEL = 2000
+function Earn.VendorMinGPH()
+  if Earn.VENDOR_MIN_GPH then return Earn.VENDOR_MIN_GPH end -- (pruebas: fijo)
+  local level = UnitLevel and UnitLevel("player") or 30
+  if type(level) ~= "number" or level < 1 then level = 30 end
+  return level * Earn.VENDOR_GPH_PER_LEVEL
+end
 
 -- ¿Compensa el tiempo? Solo se mira en la venta al vendedor (las de la AH son pocas
 -- fabricaciones); las que no hay que fabricar, sí
 function Earn.FastEnough(idea)
   if idea.sellWhere ~= "vendor" or not idea.gph then return true end
-  return idea.gph >= Earn.VENDOR_MIN_GPH
+  return idea.gph >= Earn.VendorMinGPH()
 end
 
 -- Profesiones del personaje con datos
@@ -423,6 +433,10 @@ function Earn:Ideas()
     if idea.crafts > 0 and Earn.LineValue(idea) >= minLine and Earn.FastEnough(idea) then
       idea.shopping = Earn.Shopping({ idea })
       res.vendor[#res.vendor + 1] = idea
+    elseif idea.crafts > 0 and Earn.LineValue(idea) >= minLine then
+      -- (no compensa el tiempo: no se cuenta en "por debajo del mínimo", que habla
+      -- del beneficio mínimo de la cabecera)
+      res.slow = (res.slow or 0) + 1
     else
       res.hidden = res.hidden + 1
     end

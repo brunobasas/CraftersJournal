@@ -177,9 +177,15 @@ function Collection:Progress(profKey)
 end
 
 -- Tras un escaneo: pergaminos de botín o reputación que te faltan y están en la AH
--- (los de vendedor se pueden comprar cuando quieras: no se avisa)
+-- (los de vendedor se pueden comprar cuando quieras: no se avisa). Cada receta se
+-- avisa como mucho una vez cada ALERT_AGAIN: ahora hay un escaneo cada vez que abres
+-- la AH (el de otro addon) y el mismo aviso se repetía en cada visita
+local ALERT_AGAIN = 24 * 3600
 function Collection:AlertScan(scan)
-  if not scan or not scan.items then return end
+  if not scan or not scan.items or ES.db.noChatAlerts then return end -- (opción: Options.lua)
+  if type(ES.db.scrollAlerts) ~= "table" then ES.db.scrollAlerts = {} end
+  local alerted, now = ES.db.scrollAlerts, time()
+  for id, t in pairs(alerted) do if now - t > ALERT_AGAIN then alerted[id] = nil end end
   local found = {}
   for _, p in ipairs(ES.PROFESSIONS) do
     local data = ES.Data[p.key]
@@ -187,14 +193,15 @@ function Collection:AlertScan(scan)
       ES.Planner.Annotate(data)
       for id, r in pairs(data.recipes) do
         local ah = r.scroll and scan.items[r.scroll]
-        if ah and ah.minUnit and not ES:IsRecipeKnown(id) and #(ES.Waypoints.Vendors(r.scroll) or {}) == 0
+        if ah and ah.minUnit and not ES:IsRecipeKnown(id) and not alerted[id] and #(ES.Waypoints.Vendors(r.scroll) or {}) == 0
           and #(ES.Waypoints.QuestsFor(r.scroll) or {}) == 0 then
-          found[#found + 1] = { name = r.name, price = ah.minUnit, prof = ES:ProfLabel(p.key) }
+          found[#found + 1] = { id = id, name = r.name, price = ah.minUnit, prof = ES:ProfLabel(p.key) }
         end
       end
     end
   end
   if #found == 0 then return end
+  for _, f in ipairs(found) do alerted[f.id] = now end
   table.sort(found, function(a, b) return a.price < b.price end)
   local parts = {}
   for i = 1, math.min(5, #found) do

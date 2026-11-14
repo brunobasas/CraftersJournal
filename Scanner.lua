@@ -464,10 +464,12 @@ function Scanner:Finish(items, sigs, total)
   local followed = self.follow
   if followed then msg = msg .. L[" (con el escaneo que pidió otro addon)"] end
   self.follow = nil
-  if scans < 3 then
+  if scans < 3 and not followed then
     msg = msg .. L[" Las alertas de mercado necesitan unos días de escaneos: con 1-2 al día basta."]
   end
-  ES:Print(msg)
+  -- El escaneo de otro addon (ForeverForge, cada vez que abres la AH) no escribe en el
+  -- chat: se repetía en cada visita. Se ve en "Último escaneo: hace 0 min" y el estado
+  if not followed then ES:Print(msg) end
   SetStatus(msg)
   ES:RefreshScanButtons()
   ES:OnScanComplete(scan, followed)

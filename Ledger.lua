@@ -414,9 +414,13 @@ do
         Ledger:ConfirmPost(true) -- ("Subasta creada.": por si el cliente no tiene el evento)
         return
       elseif event == "UI_ERROR_MESSAGE" then
+        -- Solo un error de la AH (o sin dinero para el depósito) rechaza el anuncio:
+        -- un "Out of range" o "Not enough mana" a la vez no tiene que ver con él
         local _, message = ...
-        Ledger:ConfirmPost(false, message)
-        return
+        if Ledger.IsAuctionError(message) then
+          Ledger:ConfirmPost(false, message)
+          return
+        end
       end
     end
     if event == "AUCTION_HOUSE_AUCTION_CREATED" or event == "CHAT_MSG_SYSTEM" or event == "UI_ERROR_MESSAGE" then return end
@@ -678,6 +682,21 @@ function Ledger:PostOnAH(itemID, n, unit, hours)
     if Ledger.pendingPost == p then Ledger:ConfirmPost(true) end
   end)
   return qty
+end
+
+-- ¿Es `message` un error de la AH? Los textos del juego ERR_AUCTION_* (en el idioma
+-- del cliente) y el de no tener dinero (el depósito). Se leen una vez de _G
+local auctionErrors
+function Ledger.IsAuctionError(message)
+  if type(message) ~= "string" then return false end
+  if not auctionErrors then
+    auctionErrors = {}
+    for k, v in pairs(_G) do
+      if type(k) == "string" and type(v) == "string" and k:find("^ERR_AUCTION") then auctionErrors[v] = true end
+    end
+    if type(ERR_NOT_ENOUGH_MONEY) == "string" then auctionErrors[ERR_NOT_ENOUGH_MONEY] = true end
+  end
+  return auctionErrors[message] == true
 end
 
 -- Respuesta de la AH al último anuncio: ok (creado) o el mensaje de error

@@ -391,6 +391,7 @@ step("H. escaneo con API moderna", function()
   ES.Scanner:InstallHooks()
   local main = ES:GetMainFrame()
   main:Hide()
+  local printsBefore = #PRINTS
   C_AuctionHouse.ReplicateItems() -- como ForeverForge_Auction al abrir la AH
   check(ES.Scanner:IsBusy() and ES.Scanner.follow, "no siguió el escaneo de otro addon")
   check(ES.Scanner:SecondsUntilNextScan() > 0, "el escaneo de otro addon no cuenta para la barrera")
@@ -400,6 +401,11 @@ step("H. escaneo con API moderna", function()
   check(followed and followed.total == #AUCTIONS, "no guardó el escaneo de otro addon")
   check(not ES.Scanner.follow and not ES:LastScanFail(), "siguiendo a otro addon quedó un fallo o el modo seguir")
   check(not main:IsShown(), "leer el escaneo de otro addon abrió la ventana sola")
+  -- Ni escribe en el chat: pasa en cada visita a la AH (con ForeverForge)
+  for i = printsBefore + 1, #PRINTS do
+    check(not PRINTS[i]:find("Escaneo completado") and not PRINTS[i]:find("Scan complete"),
+      "leer el escaneo de otro addon escribió en el chat: %s", PRINTS[i])
+  end
   log("      siguiendo a otro addon: %d subastas, sin pedir otro escaneo", followed and followed.total or 0)
   -- Con la AH cerrada no se sigue (no es para ti): solo cuenta la barrera
   NOW = NOW + 3600

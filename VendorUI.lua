@@ -376,6 +376,15 @@ local function CreatePanel()
     ES:Print(string.format(L["Vendiendo %d objetos por %s..."], #list, ES.Money(total)))
     Vendor:Sell(list)
   end)
+  -- Qué vende y cómo quitar la ventana (a quien le parece arriesgado tener el botón)
+  f.sellAll:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(L["Vender todo"])
+    GameTooltip:AddLine(L["Vende todo lo de esta lista: lo de tus bolsas que el vendedor compra, salvo lo que necesitan tus rutas empezadas, las herramientas, el equipo que no fabricas y lo que marques con clic derecho (no venderlo nunca). Mira la lista antes de pulsar."], 0.8, 0.8, 0.8, true)
+    GameTooltip:AddLine(L["Para que esta ventana no salga: /cj opciones (o Opciones > AddOns > Crafter's Journal)."], 0.6, 0.6, 0.6, true)
+    GameTooltip:Show()
+  end)
+  f.sellAll:SetScript("OnLeave", function() GameTooltip:Hide() end)
   f:Hide()
   return f
 end
@@ -393,7 +402,8 @@ end
 Vendor.Label = Label -- (también la ventana junto a la AH, AuctionSellUI)
 
 function Vendor:Refresh()
-  if not (MerchantFrame and MerchantFrame:IsShown()) then
+  -- (desactivada en las opciones: Options.lua)
+  if not (MerchantFrame and MerchantFrame:IsShown()) or not ES:VendorWindowOn() then
     if panel then panel:Hide() end
     return
   end

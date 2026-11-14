@@ -723,6 +723,8 @@ SlashCmdList.CRAFTERSJOURNAL = function(msg)
     else
       ES:Print(L["No hay ningún escaneo en curso."])
     end
+  elseif msg == "opciones" or msg == "options" or msg == "config" then
+    ES:OpenOptions()
   elseif msg == "minimap" then
     ES:SetMinimapShown(ES.db.minimap.hide and true or false)
   elseif msg == "errores" or msg == "errors" or msg == "errores borrar" or msg == "errors clear" then

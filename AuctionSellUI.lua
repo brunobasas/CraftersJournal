@@ -150,7 +150,7 @@ function Sell:Refresh()
   self:HookPanels()
   local ah = AHFrame()
   local main = CraftersJournalMainFrame
-  if not (ah and ES:IsAuctionHouseOpen()) or self.closed or (main and main:IsShown()) then
+  if not (ah and ES:IsAuctionHouseOpen()) or self.closed or (main and main:IsShown()) or not ES:AuctionWindowsOn() then
     if panel then panel:Hide() end
     PlaceShopping()
     return

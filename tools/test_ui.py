@@ -491,6 +491,18 @@ step("ganar dinero (sin correo)", function()
     assert(idea.gph and idea.gph >= 500000, "venta al vendedor que no compensa el tiempo: " .. idea.e.recipe.name)
   end
   assert(#fast.ideas == #res.ideas, "las de la AH no se filtran por tiempo")
+  -- Las escondidas por tiempo no cuentan en "por debajo del mínimo" (habla del beneficio)
+  assert(fast.hidden == res.hidden, "las escondidas por tiempo se suman a las del mínimo: " .. fast.hidden .. " vs " .. res.hidden)
+  assert((fast.slow or 0) == #res.vendor - #fast.vendor, "cuenta aparte de las que no compensan el tiempo")
+  -- El mínimo depende del nivel: a nivel bajo, mucho menos que a nivel alto
+  ES.Earn.VENDOR_MIN_GPH = nil
+  local savedLevel = UnitLevel
+  UnitLevel = function() return 10 end
+  local low = ES.Earn.VendorMinGPH()
+  UnitLevel = function() return 60 end
+  local high = ES.Earn.VendorMinGPH()
+  UnitLevel = savedLevel
+  assert(low == 20000 and high == 120000, string.format("mínimo por nivel: %d y %d", low, high))
   log[#log+1] = string.format("     vendedor: %d líneas sin mínimo de oro por hora, %d con 50g/h", #res.vendor, #fast.vendor)
   ES.Earn.VENDOR_MIN_GPH = 0
   ES.Earn:Clear()
@@ -831,6 +843,115 @@ step("instructores por rango (Forever)", function()
 end)
 step("sin variables globales sueltas", function()
   assert(#LEAKS == 0, "globales: " .. table.concat(LEAKS, ", "))
+end)
+step("aviso de recetas de botín en la AH: una vez al día por receta", function()
+  -- Ahora hay un escaneo en cada visita a la AH (el de otro addon): el mismo aviso
+  -- no tiene que repetirse cada vez
+  local savedSkill, savedKnown, savedPrint, savedAlerts = ES.GetProfessionSkill, ES.IsRecipeKnown, ES.Print, ES.db.scrollAlerts
+  ES.GetProfessionSkill = function(_, line) if line == ES.Data.Leatherworking.skillLine then return 150, 225 end end
+  ES.IsRecipeKnown = function() return false end
+  local printed = {}
+  ES.Print = function(_, msg) printed[#printed + 1] = msg end
+  ES.db.scrollAlerts = nil
+  local items = {}
+  for _, r in pairs(ES.Data.Leatherworking.recipes) do
+    if r.scroll then items[r.scroll] = { minUnit = 5000, quantity = 1 } end
+  end
+  local scan = { items = items }
+  ES.Collection:AlertScan(scan)
+  local first = #printed
+  ES.Collection:AlertScan(scan)
+  ES.GetProfessionSkill, ES.IsRecipeKnown, ES.Print = savedSkill, savedKnown, savedPrint
+  if first > 0 then
+    assert(#printed == first, "el aviso de recetas de botín se repitió en el siguiente escaneo")
+    log[#log+1] = "     aviso de recetas de botín: " .. tostring(printed[1]):sub(1, 90)
+  else
+    log[#log+1] = "     (ninguna receta de botín sin vendedor ni misión en los datos de prueba)"
+  end
+  ES.db.scrollAlerts = savedAlerts
+end)
+step("recetas de vendedor con stock limitado (lim)", function()
+  -- Raptor Hide Harness: solo la vende Tunkk, 1 y repone con el tiempo
+  local src = ES.Data.ItemSources
+  assert(src[13287] and src[13287].lim == true, "Raptor Hide Harness debería marcarse con stock limitado")
+  -- Hilo y tintes de los vendedores de materiales: siempre hay
+  assert(src[2320] and not src[2320].lim, "Coarse Thread no tiene stock limitado")
+  -- Solo se marca lo que tiene vendedor
+  local n = 0
+  for id, s in pairs(src) do
+    if s.lim then
+      n = n + 1
+      assert(s.v and #s.v > 0, "lim sin vendedor: " .. id)
+    end
+  end
+  log[#log+1] = "     " .. n .. " objetos con stock limitado en todos sus vendedores"
+end)
+step("equipo que no fabricas: no se propone vender (opción)", function()
+  local INV = ES.Inventory
+  local crafted
+  for _, r in pairs(ES.Data.Leatherworking.recipes) do if r.out then crafted = r.out[1] break end end
+  local LOOT, GREYGEAR, MAT = 990001, 990002, 2318
+  local savedInstant, savedData, savedNever, savedGear = GetItemInfoInstant, ES.GetItemData, ES.db.neverSell, ES.db.sellGear
+  GetItemInfoInstant = function(id)
+    if id == LOOT or id == GREYGEAR or id == crafted then return id, "Armor", "Leather", "INVTYPE_CHEST" end
+    return id, "Trade Goods", "Leather", ""
+  end
+  ES.GetItemData = function(_, id) if id == GREYGEAR then return "Grey", 0, 1 end if id == LOOT then return "Green", 2, 1 end return savedData(ES, id) end
+  ES.db.neverSell, ES.db.sellGear = {}, nil
+  assert(INV.NeverSell(LOOT) == "gear", "el equipo de botín no se propone vender")
+  assert(INV.NeverSell(crafted) == nil, "lo que fabricas sí se vende")
+  assert(INV.NeverSell(GREYGEAR) == nil, "el equipo gris sí se vende")
+  assert(INV.NeverSell(MAT) == nil, "los materiales sí se venden")
+  -- Clic derecho en No se venden: ese sí se puede vender
+  local savedPrint = ES.Print
+  ES.Print = function() end
+  INV.SetNeverSell(LOOT, false)
+  assert(INV.NeverSell(LOOT) == nil and ES.db.neverSell[LOOT] == false, "con clic derecho se puede permitir uno")
+  ES.db.neverSell = {}
+  -- La casilla: desmarcada, el equipo se propone como lo demás
+  local op = ES:OptionsPanel()
+  op._scripts.OnShow(op)
+  local gcb, ccb, mcb
+  for _, cb in ipairs(op.checks) do
+    if cb.option.key == "sellGear" then gcb = cb elseif cb.option.key == "noChatAlerts" then ccb = cb elseif cb.option.key == "minimap" then mcb = cb end
+  end
+  assert(gcb and gcb:GetChecked(), "la casilla del equipo sale marcada por defecto")
+  gcb:SetChecked(false)
+  gcb._scripts.OnClick(gcb)
+  assert(ES.db.sellGear == true and INV.NeverSell(LOOT) == nil, "desmarcada, el equipo de botín se propone vender")
+  gcb:SetChecked(true)
+  gcb._scripts.OnClick(gcb)
+  assert(ES.db.sellGear == nil and INV.NeverSell(LOOT) == "gear", "marcada otra vez, el equipo vuelve a protegerse")
+  -- Avisos del chat: desmarcados, el de recetas de botín no sale
+  assert(ccb and ccb:GetChecked(), "los avisos del chat salen activados por defecto")
+  ccb:SetChecked(false)
+  ccb._scripts.OnClick(ccb)
+  local said = 0
+  ES.Print = function() said = said + 1 end
+  local items = {}
+  for _, r in pairs(ES.Data.Leatherworking.recipes) do if r.scroll then items[r.scroll] = { minUnit = 5000, quantity = 1 } end end
+  local savedAlerts = ES.db.scrollAlerts
+  ES.db.scrollAlerts = nil
+  ES.Collection:AlertScan({ items = items })
+  ES:AnnounceRouteDrift()
+  assert(said == 0, "con los avisos desactivados sale algo en el chat")
+  ccb:SetChecked(true)
+  ccb._scripts.OnClick(ccb)
+  assert(ES.db.noChatAlerts == nil, "los avisos no se vuelven a activar")
+  ES.db.scrollAlerts = savedAlerts
+  -- Botón del minimapa: la casilla usa el mismo sitio que /cj minimap
+  ES.db.minimap = ES.db.minimap or {}
+  local savedHide = ES.db.minimap.hide
+  ES.db.minimap.hide = nil
+  op._scripts.OnShow(op)
+  assert(mcb and mcb:GetChecked(), "el botón del minimapa sale marcado")
+  mcb:SetChecked(false)
+  mcb._scripts.OnClick(mcb)
+  assert(ES.db.minimap.hide == true, "desmarcada, el botón del minimapa se esconde")
+  ES.db.minimap.hide = savedHide
+  ES.Print = savedPrint
+  GetItemInfoInstant, ES.GetItemData, ES.db.neverSell, ES.db.sellGear = savedInstant, savedData, savedNever, savedGear
+  log[#log+1] = "     equipo de botín protegido; fabricado, gris y materiales se venden; avisos y minimapa con su casilla"
 end)
 step("botón del minimapa con LibDBIcon", function()
   -- La librería estándar (Leatrix Plus avisaba de un botón propio); la posición de
@@ -1282,6 +1403,23 @@ step("portada: tarjetas de profesiones", function()
   assert(math.abs(frozen.net - net) < 1, string.format("la ruta fijada cambió de coste con el escaneo nuevo: %d -> %d", net, frozen.net))
   ES:RenderPlan(page)
   assert(page.pricesButton._shown ~= false and not page.pricesUpToDate, "falta Actualizar precios con un escaneo nuevo")
+  -- Con los precios ×3, lo que queda cuesta bastante más: se dice en la ruta y una
+  -- sola vez en el chat (otro escaneo con los mismos precios de ruta no lo repite)
+  assert(page.drift and page.drift.new > page.drift.old, "falta comparar lo que queda con los precios nuevos")
+  assert(tostring(page.status._text):find("más"), "la ruta no dice cuánto más cuesta: " .. tostring(page.status._text))
+  local savedPrint, said = ES.Print, {}
+  ES.Print = function(_, msg) said[#said + 1] = msg end
+  ES:AnnounceRouteDrift()
+  ES.db.scans[scanKey].time = ES.db.scans[scanKey].time + 60
+  ES:AnnounceRouteDrift()
+  ES.Print = savedPrint
+  local drift = 0
+  for _, m in ipairs(said) do if tostring(m):find("Actualizar precios") then drift = drift + 1 end end
+  assert(drift == 1, "el aviso del chat de precios nuevos salió " .. drift .. " veces")
+  log[#log+1] = "     " .. tostring(page.status._text):gsub("|T[^|]+|t", "")
+  -- Cambio pequeño: no se avisa
+  assert(not ES.DriftMatters({ old = 100000, new = 110000 }) and ES.DriftMatters({ old = 100000, new = 130000 })
+    and not ES.DriftMatters({ old = 1000, new = 5000 }), "umbral del aviso de precios nuevos")
   page.pricesButton._scripts.OnEnter(page.pricesButton)
   page.pricesButton._scripts.OnClick(page.pricesButton)
   local updated = ES:LockedPlan("Leatherworking")
@@ -1407,6 +1545,21 @@ step("portada: tarjetas de profesiones", function()
   local vp = CraftersJournalVendorPanel
   assert(vp and vp._shown == true and vp.rows[1].entry, "con MERCHANT_SHOW antes de abrirse el vendedor, la ventana no sale")
   log[#log+1] = "     vendedor: la ventana sale aunque MERCHANT_SHOW llegue antes de abrirse el vendedor"
+  -- Opciones: la casilla quita la ventana del vendedor al momento, y vuelve al marcarla
+  local op = ES:OptionsPanel()
+  op._scripts.OnShow(op)
+  local vcb = op.checks[1]
+  assert(vcb.option.key == "noVendorWindow" and vcb:GetChecked(), "la casilla del vendedor sale marcada por defecto")
+  vcb:SetChecked(false)
+  vcb._scripts.OnClick(vcb)
+  assert(ES.db.noVendorWindow == true and vp._shown == false, "desmarcada, la ventana del vendedor no sale")
+  ES.VendorShop:Refresh()
+  assert(vp._shown == false, "desmarcada, la ventana del vendedor vuelve a salir al refrescar")
+  vcb:SetChecked(true)
+  vcb._scripts.OnClick(vcb)
+  assert(ES.db.noVendorWindow == nil and vp._shown == true, "marcada otra vez, la ventana del vendedor sale")
+  log[#log+1] = "     opciones: la ventana del vendedor se quita y vuelve con su casilla"
+  vp.sellAll._scripts.OnEnter(vp.sellAll)
   ES.VendorShop:Refresh()
   assert(vp and vp.rows[1].entry and vp.rows[1].entry.itemID == buyItem, "la ventana del vendedor no lista lo que falta")
   assert(vp.rows[1].entry.qty % 3 == 0, "se compra en los lotes del vendedor: " .. vp.rows[1].entry.qty)
@@ -2791,6 +2944,15 @@ step("inventario: qué vender de las bolsas, dónde y qué guardar", function()
     end
     ES.db.neverSell, ES.Print = savedNever, savedPrint
     ES.AuctionSell:Refresh()
+    -- Opciones: sin las ventanas de la AH, la de vender no sale (ni la lista de compra)
+    local wasShown = sp._shown
+    ES:SetOption("noAuctionWindows", false)
+    assert(sp._shown == false, "con las ventanas de la AH desactivadas, la de vender no sale")
+    local mini = ES.ShoppingMini()
+    assert(not mini or mini._shown == false, "con las ventanas de la AH desactivadas, la lista de compra no sale sola")
+    ES:SetOption("noAuctionWindows", true)
+    assert(sp._shown == wasShown and ES.db.noAuctionWindows == nil, "activadas otra vez, la de vender vuelve")
+    log[#log+1] = "     opciones: las ventanas de la AH se quitan y vuelven con su casilla"
     CraftersJournalMainFrame = savedMain
     ES.AuctionSell:Refresh()
     assert(sp._shown == false, "con la ventana grande al lado de la AH, la de vender no sale")
@@ -2882,6 +3044,10 @@ step("anunciar con la AH ocupada: un aviso, no uno por clic", function()
   ES.Ledger:PostOnAH(2318, 2, 500)
   ES.Ledger:PostOnAH(2318, 2, 500) -- (sin confirmar el anterior: uno cada vez)
   assert(posts == 2, "con un anuncio sin confirmar no se pide otro: " .. posts)
+  -- Un error en rojo que no es de la AH no rechaza el anuncio (antes: "no aceptó X: Out of range")
+  ERR_NOT_ENOUGH_MONEY = "Not enough money" -- (el texto del juego; se lee al primer error)
+  FireEvent("UI_ERROR_MESSAGE", 1, "Out of range")
+  assert(ES.Ledger.pendingPost, "un error que no es de la AH rechazó el anuncio")
   FireEvent("UI_ERROR_MESSAGE", 1, "Not enough money")
   assert(printed[#printed]:find("Not enough money", 1, true), "error de la AH: " .. tostring(printed[#printed]))
   assert(ES.Ledger.pendingPost == nil, "tras el error ya no hay anuncio pendiente")

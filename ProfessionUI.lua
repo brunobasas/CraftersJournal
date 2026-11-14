@@ -1303,6 +1303,9 @@ function ES:CreateProfessionPage(page, profKey)
       local mins = scan and math.floor((time() - scan.time) / 60)
       GameTooltip:AddLine(mins and string.format(L["Tu ruta ya usa tu último escaneo de la AH (de hace %d min). Cuando escanees otra vez, aquí aplicas los precios nuevos."], mins)
         or L["Tu ruta ya usa tu último escaneo de la AH. Cuando escanees otra vez, aquí aplicas los precios nuevos."], 1, 0.82, 0, true)
+    elseif page.drift then
+      GameTooltip:AddLine(string.format(L["Con el último escaneo, lo que te queda cuesta %s (con los precios de tu ruta, %s)."],
+        ES.Money(page.drift.new), ES.Money(page.drift.old)), 1, 0.6, 0.2, true)
     end
     GameTooltip:AddLine(L["La misma ruta (mismas recetas en cada nivel) con los precios del último escaneo. Lo que llevas gastado y vendido se mantiene."], 0.8, 0.8, 0.8, true)
     GameTooltip:AddLine(L["Si hay una ruta mejor desde tu nivel, te lo dice una fila arriba de la ruta."], 0.6, 0.6, 0.6, true)
@@ -1850,6 +1853,10 @@ local function SourcedLearnLine(r, st, profName, plan)
   if not best then return nil end
   local title = L["Conseguir receta: "] .. r.name
   local also = src.ah and best.kind ~= "ah" and (L[" · también en la AH: "] .. ES.Money(src.ah.price)) or ""
+  -- Todos sus vendedores venden pocos y reponen con el tiempo (Data/Sources.lua, lim):
+  -- puede no haber. Se avisa; quien no quiera esperar la quita con la ✕
+  local itemSrc = r.scroll and ES.Data.ItemSources and ES.Data.ItemSources[r.scroll]
+  local limited = itemSrc and itemSrc.lim and src.vendors[1] ~= nil
   local icon, sub, pick, label
   local useItem
   if best.kind == "owned" then
@@ -1862,7 +1869,7 @@ local function SourcedLearnLine(r, st, profName, plan)
     pick = function() return WP.Nearest(best.quest.starters) end
   elseif best.kind == "vendor" then
     icon, label = RECIPE_ICON, L["Vendedor más cercano"]
-    sub = L["Vendedor de recetas"] .. also
+    sub = L["Vendedor de recetas"] .. (limited and (ORANGE .. L[" · stock limitado"] .. "|r") or "") .. also
     pick = function() return WP.Nearest(src.vendors) end
   else
     -- En la AH: clic al subastador más cercano; con la AH abierta, la busca
@@ -1899,6 +1906,10 @@ local function SourcedLearnLine(r, st, profName, plan)
       local v = WP.Nearest(src.vendors)
       local npc = v and WP.NPC(v)
       if npc then GameTooltip:AddDoubleLine(" ", npc.name .. " · " .. WP.LocationText(npc), 1, 1, 1, 0.6, 0.6, 0.6) end
+      if limited then
+        GameTooltip:AddLine(L["Stock limitado: venden pocas y reponen con el tiempo, y a veces otros jugadores las compran para revenderlas. Si no está, quítala con la X de la fila y la ruta busca otra receta."],
+          1, 0.6, 0.2, true)
+      end
     end
     if src.ah then
       GameTooltip:AddDoubleLine(Mark("ah") .. L["AH ahora"], string.format(L["%s · %d a la venta"], ES.Money(src.ah.price), src.ah.listings),
@@ -2743,6 +2754,79 @@ function ES:CheckBetterRoute(page)
   end, "better", true)
 end
 
+---------------------------------------------------------------------------
+-- Precios nuevos con la ruta empezada: lo que te queda de ruta (las mismas recetas,
+-- desde tu nivel y con lo que llevas) con los precios del principio y con los del
+-- último escaneo. Si cambia mucho, se dice en la ruta y una vez en el chat, para
+-- que pulses Actualizar precios. La ruta no cambia sola
+---------------------------------------------------------------------------
+ES.driftCache = ES.driftCache or {}
+ES.DRIFT_MIN = 5000   -- 50s
+ES.DRIFT_SHARE = 0.2  -- y un 20 % de lo que costaba
+
+-- ¿Cambia lo bastante para avisar? d = { old, new } (coste de lo que te queda)
+function ES.DriftMatters(d)
+  if not d then return false end
+  return math.abs(d.new - d.old) >= math.max(ES.DRIFT_MIN, ES.DRIFT_SHARE * math.abs(d.old))
+end
+
+-- Devuelve el resultado si ya está calculado (false: no se puede comparar). Si no,
+-- lo calcula repartido entre fotogramas y llama a onDone(resultado), uno por owner
+function ES:CheckRouteDrift(profKey, onDone, owner)
+  local lock = self:RouteLock(profKey)
+  local scan = self.db.scans and self.db.scans[self:RealmKey()]
+  if not lock or lock.completed or not scan or scan.time == lock.scanTime then return nil end
+  local rank, cap = self:GetProfessionSkill(ES.Data[profKey].skillLine)
+  local from = math.max(rank or lock.from, lock.from)
+  if from >= lock.to then return nil end
+  local key = table.concat({ "drift", profKey, tostring(lock.started), tostring(lock.scanTime), tostring(scan.time), from,
+    tostring(cap), tostring(self.Planner.SKILL_BONUS or 0) }, ":")
+  local cached = self.driftCache[profKey]
+  if cached and cached.key == key then return cached.result end
+  self.Jobs.Run("drift:" .. profKey, key, function()
+    local data = ES.Data[profKey]
+    local function Mine(old)
+      local opts = self:PlanOptions(profKey, from, lock.to, cap)
+      opts.forced, opts.via = lock.choice, lock.via
+      if old then opts.prices, opts.pricesTime = lock.prices, lock.scanTime end
+      return self.Planner:Plan(data, opts)
+    end
+    local before, now = Mine(true), Mine(false)
+    -- Solo si las dos llegan igual de lejos: si no, no es el mismo trabajo
+    if #before.steps == 0 or #now.steps == 0 or before.stoppedAt ~= now.stoppedAt then return false end
+    return { old = before.net, new = now.net, from = from }
+  end, function(result)
+    self.driftCache[profKey] = { key = key, result = result }
+    if onDone then onDone(result) end
+  end, owner or onDone or "drift", true)
+  -- (fuera del juego se calcula de golpe: ya está)
+  cached = self.driftCache[profKey]
+  if cached and cached.key == key then return cached.result end
+  return nil
+end
+
+-- Al acabar un escaneo: si alguna ruta empezada cuesta ahora bastante más, una
+-- línea en el chat (una vez por precios de la ruta: hasta que pulses Actualizar
+-- precios no se repite, aunque abras la AH otra vez)
+function ES:AnnounceRouteDrift()
+  if self.db.noChatAlerts then return end -- (opción: la ruta lo sigue diciendo en su estado)
+  for _, p in ipairs(ES.PROFESSIONS) do
+    local profKey = p.key
+    local lock = self:RouteLock(profKey)
+    if lock and not lock.completed and lock.driftWarned ~= lock.scanTime then
+      local function Done(d)
+        if self:RouteLock(profKey) ~= lock or lock.driftWarned == lock.scanTime then return end
+        if not (ES.DriftMatters(d) and d.new > d.old) then return end
+        lock.driftWarned = lock.scanTime
+        self:Print(string.format(L["Con el último escaneo, lo que te queda de tu ruta de %s cuesta %s más (%s en vez de %s). Ábrela y pulsa Actualizar precios para verla con estos precios."],
+          self:ProfLabel(profKey), ES.Money(d.new - d.old), ES.Money(d.new), ES.Money(d.old)))
+      end
+      local d = self:CheckRouteDrift(profKey, Done, "announce:" .. profKey)
+      if d ~= nil then Done(d) end
+    end
+  end
+end
+
 -- Fila del aviso (arriba de la ruta) o nil
 local function BetterLine(page)
   local lock = ES:RouteLock(page.profKey)
@@ -2854,9 +2938,18 @@ function ES:RenderPlan(page)
     if phaseText ~= "" then
       status = GREEN .. string.format(L["Ruta en curso · de %d a %d"], lock.from, lock.to) .. "|r" .. phaseText
     end
+    page.drift = nil
     if scan and scan.time ~= lock.scanTime then
       newPrices = true
-      status = status .. ORANGE .. L[" · hay precios nuevos de la AH|r"]
+      -- Cuánto cambia lo que te queda con esos precios (se calcula aparte y se repinta)
+      local d = self:CheckRouteDrift(page.profKey, function() if page:IsVisible() then ES:RenderPlan(page) end end, page)
+      if ES.DriftMatters(d) then
+        page.drift = d
+        status = status .. ORANGE .. string.format(d.new > d.old and L[" · precios nuevos: %s más|r"]
+          or L[" · precios nuevos: %s menos|r"], ES.Money(math.abs(d.new - d.old)))
+      else
+        status = status .. ORANGE .. L[" · hay precios nuevos de la AH|r"]
+      end
     end
   elseif plan and #plan.steps > 0 and not page.calculating and self.db.prof[page.profKey].useBags then
     status = status .. GREY .. L[" · pulsa Empezar ruta antes de comprar|r"]

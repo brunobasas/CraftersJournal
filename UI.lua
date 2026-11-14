@@ -506,6 +506,7 @@ function ES:OnScanComplete(scan, followed)
   if not followed then self:ShowMainFrame() end
   self:RefreshAllViews() -- precios nuevos: todos los apartados
   self.Collection:AlertScan(scan) -- pergaminos de botín que te faltan, en la AH
+  self:AnnounceRouteDrift() -- ruta empezada que ahora cuesta bastante más
 end
 
 ---------------------------------------------------------------------------

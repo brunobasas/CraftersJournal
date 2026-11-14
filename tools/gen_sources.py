@@ -102,7 +102,7 @@ def main():
     # import_recipebook.py): se suman a los de QuestieDB, solo los que tienen sitio en el
     # mapa. Un pergamino que en Forever no vende nadie (patrones de Spitfire, Ironvine...:
     # no existen en Forever) se queda sin vendedor
-    book_npcs, book_vendors = {}, {}
+    book_npcs, book_vendors, limited = {}, {}, set()
     if (HERE / "forever" / "recipebook_vendors.csv").exists():
         with open(HERE / "forever" / "recipebook_npcs.csv", encoding="utf-8") as f:
             for r in csv.DictReader(l for l in f if not l.startswith("#")):
@@ -111,6 +111,9 @@ def main():
             for r in csv.DictReader(l for l in f if not l.startswith("#")):
                 if int(r["npc"]) in book_npcs:
                     book_vendors.setdefault(int(r["item"]), set()).add(int(r["npc"]))
+                    # "Limited (N)": vende N y se repone con el tiempo ("Unlimited": siempre hay)
+                    if r["stock"].strip().startswith("Limited"):
+                        limited.add((int(r["item"]), int(r["npc"])))
         for item_id in scrolls:
             book = book_vendors.get(item_id)
             vendors, qs = items.get(item_id, ([], []))
@@ -205,7 +208,8 @@ def main():
         "-- [objeto] = { v = { vendedores }, q = { misiones que lo dan },",
         f"--   d = {{ criaturas que lo sueltan }} (hasta {WORLD_DROP}), w = nº de criaturas si es botín del mundo",
         "--   (wl = { nivel mínimo, máximo } de esas criaturas),",
-        "--   o = nº de objetos (cofres...) que lo contienen }",
+        "--   o = nº de objetos (cofres...) que lo contienen,",
+        "--   lim = true si todos sus vendedores tienen stock limitado (venden pocos y reponen con el tiempo) }",
         "-- (pergaminos de receta, libros de rango y materiales que se compran al vendedor)",
         "ES.Data.ItemSources = {",
     ]
@@ -213,6 +217,9 @@ def main():
         parts = []
         if vendors:
             parts.append("v = " + lua_ids(vendors))
+            # Todos sus vendedores tienen stock limitado: puede no haber (la ruta lo avisa)
+            if all((item_id, v) in limited for v in vendors):
+                parts.append("lim = true")
         if qs:
             parts.append("q = " + lua_ids(qs))
         if item_id in drops:

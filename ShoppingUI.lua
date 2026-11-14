@@ -367,7 +367,7 @@ RenderMini = function(st, lines, ahOpen)
   -- abierta), salvo que lo cerraras o la ventana grande esté a su lado
   local main = CraftersJournalMainFrame
   if not mini:IsShown() and ahOpen and not ES.shopMiniClosed and not (main and main:IsShown())
-    and ES.Shopping.HasPending(st) then
+    and ES:AuctionWindowsOn() and ES.Shopping.HasPending(st) then
     ES:PlaceShoppingMini()
     mini:Show()
   end
@@ -466,7 +466,8 @@ function ES:SetupShoppingMini(ahFrame)
     return
   end
   ES:PlaceShoppingMini()
-  mini:SetShown(ES.Shopping.HasPending())
+  -- (desactivada en las opciones, no sale sola: el botón de la AH la abre a mano)
+  mini:SetShown(ES:AuctionWindowsOn() and ES.Shopping.HasPending())
   ES:RenderShopping()
 end
 
@@ -497,7 +498,7 @@ function ES:MiniOnMainHide()
   if not main.cjMiniHook then
     main.cjMiniHook = true
     main:HookScript("OnHide", function()
-      if ES:IsAuctionHouseOpen() and mini and not ES.shopMiniClosed and ES.Shopping.HasPending() then
+      if ES:IsAuctionHouseOpen() and mini and not ES.shopMiniClosed and ES:AuctionWindowsOn() and ES.Shopping.HasPending() then
         ES:PlaceShoppingMini()
         mini:Show()
         ES:RenderShopping()
