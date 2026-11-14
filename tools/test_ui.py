@@ -886,6 +886,28 @@ step("recetas de vendedor con stock limitado (lim)", function()
   end
   log[#log+1] = "     " .. n .. " objetos con stock limitado en todos sus vendedores"
 end)
+step("sin escaneo de la AH: la ruta dice que escanees", function()
+  -- (Discord: "Can't level from...: X materials without price" en casi todas las
+  -- profesiones; sin escaneo, lo que solo se compra en la AH no tiene precio)
+  ES:GetMainFrame()
+  local page
+  for _, p in ipairs(ES.professionPages) do if p.profKey == "Leatherworking" then page = p end end
+  local key = ES:RealmKey()
+  local savedScan, savedLock = ES.db.scans[key], ES.db.prof.Leatherworking.lock
+  ES.db.scans[key], ES.db.prof.Leatherworking.lock = nil, nil
+  ES.lockedPlans = {}
+  page.from = 100
+  page.toBox._text = "200"
+  ES:CalculatePlan(page)
+  local status = tostring(page.status._text)
+  ES.db.scans[key], ES.db.prof.Leatherworking.lock = savedScan, savedLock
+  ES.lockedPlans = {}
+  if page.plan and #page.plan.steps == 0 then
+    assert(status:find("Escanear"), "sin escaneo, la ruta parada no dice que escanees: " .. status)
+  end
+  log[#log+1] = "     " .. status:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):sub(1, 150)
+  ES:CalculatePlan(page)
+end)
 step("equipo que no fabricas: no se propone vender (opción)", function()
   local INV = ES.Inventory
   local crafted

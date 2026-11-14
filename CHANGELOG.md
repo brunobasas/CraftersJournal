@@ -1,5 +1,9 @@
 # Crafter's Journal
 
+## Unreleased
+
+- **A route that stops for lack of prices now says to scan.** Without an Auction House scan, every material sold only on the AH has no price, and routes stopped with "X materials without price (not on the AH)". It now says you don't have an AH scan yet and to open it and press Scan. At the neutral AH, whose prices are kept apart, it says to scan it or open your faction's AH.
+
 ## 0.47.0
 
 - **"To the vendor" at the top of Inventory matches the Sell button.** It used to also count the leftover units of AH rows ("AH: 5 · vendor: 2"), which no button sells, so it promised gold you couldn't get. It now adds up only the "To the vendor" section.

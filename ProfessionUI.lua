@@ -495,6 +495,13 @@ local function StopReason(plan)
   for _ in pairs(plan.missingPrice) do missing = missing + 1 end
   if #short > 0 then
     return L["no quedan suficientes en la AH de: "] .. table.concat(short, ", ")
+  elseif missing > 0 and not plan.scanTime then
+    -- Sin escaneo de la AH que usas, lo que solo se compra allí no tiene precio: lo
+    -- que hay que hacer es escanear (antes solo decía "N materiales sin precio"). La
+    -- AH neutral guarda sus precios aparte
+    return ES:IsNeutralAH()
+      and string.format(L["%d materiales sin precio: no tienes escaneo de la Casa de Subastas neutral. Escanéala, o abre la de tu facción para usar sus precios"], missing)
+      or string.format(L["%d materiales sin precio: aún no tienes escaneo de la Casa de Subastas. Ábrela y pulsa Escanear"], missing)
   elseif missing > 0 then
     return string.format(L["%d materiales sin precio (no están en la AH)"], missing)
   end
