@@ -352,11 +352,14 @@ local sourceCache, sourceKey = {}, nil
 -- `prices` es la tabla de precios del escaneo (ctx.prices). Sin ninguna fuente, best = nil.
 -- Con `noQuests` (icono de misión desactivado) las misiones no cuentan: se listan
 -- en el tooltip como desactivadas y la receta solo se consigue comprándola.
-function WP.RecipeSource(recipe, prices, noQuests)
+-- Con `noLimited` (opción: no contar con vendedores de stock limitado) el vendedor
+-- de una receta con stock limitado (Data/Sources.lua, lim) no cuenta: se lista como
+-- desactivado y la receta se consigue por misión o en la AH, si se puede
+function WP.RecipeSource(recipe, prices, noQuests, noLimited)
   if not recipe.scroll then return nil end
   -- Se recalcula con otro escaneo, otro bando, el filtro de misiones o cuando Questie pasa a estar disponible
   local key = tostring(prices) .. (UnitFactionGroup("player") or "") .. tostring(WP.Available()) .. tostring(noQuests and true)
-    .. (ES.repStamp or "")
+    .. tostring(noLimited and true) .. (ES.repStamp or "")
   if sourceKey ~= key then sourceCache, sourceKey = {}, key end
   local cached = sourceCache[recipe.scroll]
   if cached then return WP.WithOwned(cached, recipe.scroll) end
@@ -371,7 +374,11 @@ function WP.RecipeSource(recipe, prices, noQuests)
   if src.quests[1] and not noQuests then
     src.options[#src.options + 1] = { kind = "quest", cost = 0, quest = src.quests[1] }
   end
-  if src.vendors[1] then
+  local item = ES.Data.ItemSources and ES.Data.ItemSources[recipe.scroll]
+  src.limited = item and item.lim and src.vendors[1] ~= nil or nil
+  if src.vendors[1] and src.limited and noLimited then
+    src.vendorsOff = true
+  elseif src.vendors[1] then
     src.options[#src.options + 1] = { kind = "vendor", cost = recipe.scrollPrice or 0,
       unknownPrice = not recipe.scrollPrice }
   end

@@ -447,7 +447,7 @@ function Planner.LearnSkill(recipe, opts)
   -- Solo con su icono activado (opts.useFavor; por defecto no): entonces cuesta 0 oro
   if recipe.favor then return opts.useFavor and (recipe.train or 1) or nil end
   if Sourced(recipe, opts) then
-    local src = ES.Waypoints.RecipeSource(recipe, opts.prices or ScanPrices(), opts.noQuests)
+    local src = ES.Waypoints.RecipeSource(recipe, opts.prices or ScanPrices(), opts.noQuests, opts.noLimited)
     return src and src.best and (recipe.train or 1) or nil
   end
   if fee or recipe.intermediate then return train end
@@ -474,7 +474,7 @@ function Planner.LearnCost(ctx, recipe)
   if recipe.basic then return 0, nil end
   if recipe.favor then return 0, "favor" end
   if Sourced(recipe, ctx.opts) then
-    local src = ES.Waypoints.RecipeSource(recipe, ctx.prices, ctx.opts.noQuests)
+    local src = ES.Waypoints.RecipeSource(recipe, ctx.prices, ctx.opts.noQuests, ctx.opts.noLimited)
     if src and src.best then return src.best.cost, src.best.kind end
     return 0, "unknown"
   end
@@ -2504,7 +2504,8 @@ end
 -- que no fabrican objeto, como los encantamientos), para la Colección
 function Planner:RecipeMarket(data, opts)
   local o = { from = 1, to = 300, includeScrolls = false, ignoreSupply = true,
-    hours = opts.hours, neutral = opts.neutral, sourcedScrolls = opts.sourcedScrolls, noQuests = opts.noQuests }
+    hours = opts.hours, neutral = opts.neutral, sourcedScrolls = opts.sourcedScrolls, noQuests = opts.noQuests,
+    noLimited = opts.noLimited }
   local ctx = NewContext(data, o)
   Annotate(data)
   local list = {}

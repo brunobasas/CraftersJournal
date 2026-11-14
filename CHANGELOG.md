@@ -2,6 +2,8 @@
 
 ## 0.47.0
 
+- **New route icon: limited-stock recipe vendors.** Some vendors sell only one of a recipe and other players often buy them all to resell on the AH. A new icon above the route, next to the quest one, turns them off for that profession. By default it's on, since that's usually the cheapest. When off, those recipes only count if a quest gives them or they're on the AH; otherwise the route picks another recipe.
+- **The X to skip a recipe is easier to find.** "Get recipe" rows bought on the AH or from a limited-stock vendor now say "X to remove it", and every "Get recipe" tooltip explains that the X removes the recipe and the route picks another.
 - **A route that stops for lack of prices now says to scan.** Without an Auction House scan, every material sold only on the AH has no price, and routes stopped with "X materials without price (not on the AH)". It now says you don't have an AH scan yet and to open it and press Scan. At the neutral AH, whose prices are kept apart, it says to scan it or open your faction's AH.
 - **"To the vendor" at the top of Inventory matches the Sell button.** It used to also count the leftover units of AH rows ("AH: 5 · vendor: 2"), which no button sells, so it promised gold you couldn't get. It now adds up only the "To the vendor" section.
 - **The small shopping list next to the AH no longer says "empty" when your list only has vendor items.** It now says there's nothing to buy on the AH and that those items show in the vendor's window.

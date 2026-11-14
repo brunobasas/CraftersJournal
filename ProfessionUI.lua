@@ -253,6 +253,7 @@ function ES:PlanOptions(profKey, from, to, cap)
     -- Prueba piloto: recetas de pergamino por sus fuentes reales (misión, vendedor, AH)
     sourcedScrolls = ES.Waypoints.SOURCED_PROFESSIONS[profKey] or nil,
     noQuests = settings.useQuests == false or nil, -- icono de misión desactivado
+    noLimited = settings.noLimited or nil, -- icono de vendedores de stock limitado desactivado
     excluded = settings.excluded and next(settings.excluded) and settings.excluded or nil, -- quitadas con la ✕
     useFavor = settings.useFavor or nil, -- recetas de Merchant's Favor (icono; por defecto no)
     -- Icono "Menos fabricaciones": cada fabricación pesa más al elegir (por defecto no)
@@ -409,7 +410,8 @@ function ES:PlanKey(profKey, from, to, cap)
   local scan = self.db.scans and self.db.scans[self:RealmKey()]
   return table.concat({ profKey, self.planGen .. "." .. (self.planGens[profKey] or 0), scan and scan.time or 0, from, to, tostring(cap), tostring(settings.useBags),
     tostring(settings.useQuests), self:RealmKey(), ExcludedKey(settings), tostring(settings.useFavor),
-    tostring(settings.fewerCrafts), tostring(self.Planner.SKILL_BONUS or 0) }, ":") -- (Working Overtime)
+    tostring(settings.fewerCrafts), tostring(self.Planner.SKILL_BONUS or 0), -- (Working Overtime)
+    tostring(settings.noLimited or false) }, ":")
 end
 
 -- La ruta ya calculada (fijada, o en la caché y aún válida), sin calcular nada
@@ -1420,8 +1422,22 @@ function ES:CreateProfessionPage(page, profKey)
       end)
   end
 
+  -- Vendedores de recetas de stock limitado (venden una y reponen con el tiempo; otros
+  -- las acaparan para la AH): por defecto sí, es lo más barato. Desactivado, esas
+  -- recetas solo cuentan por misión o en la AH (Waypoints.RecipeSource, noLimited)
+  if ES.Waypoints.SOURCED_PROFESSIONS[profKey] then
+    page.limitedButton = FilterIcon(page.questButton or page.bagsButton, "Interface\\Icons\\INV_Scroll_03",
+      L["Vendedores de recetas de stock limitado"],
+      function() return not settings.noLimited end,
+      function() settings.noLimited = not settings.noLimited or nil end,
+      function()
+        return { not settings.noLimited and L["La ruta cuenta con ellos: suele ser lo más barato. Venden pocas y reponen con el tiempo, y a veces otros jugadores las acaparan para revenderlas."]
+          or L["La ruta no cuenta con ellos: esas recetas solo se consiguen por misión o en la Casa de Subastas; si no, se usa otra receta."] }
+      end)
+  end
+
   -- Recetas de Merchant's Favor (fichas y reputación del campamento): por defecto no
-  page.favorButton = FilterIcon(page.questButton or page.bagsButton, "Interface\\Icons\\INV_Misc_Coin_17",
+  page.favorButton = FilterIcon(page.limitedButton or page.questButton or page.bagsButton, "Interface\\Icons\\INV_Misc_Coin_17",
     L["Recetas de Merchant's Favor"],
     function() return settings.useFavor and true or false end,
     function() settings.useFavor = not settings.useFavor or nil end,
@@ -1855,15 +1871,18 @@ end
 -- Prueba piloto: fila "Conseguir receta" con su mejor fuente (misión, vendedor
 -- o AH), el clic a quien da la misión o la vende, y todas las fuentes en el tooltip
 local function SourcedLearnLine(r, st, profName, plan)
-  local src = WP.RecipeSource(r, plan.ctx.prices, plan.ctx.opts.noQuests)
+  local src = WP.RecipeSource(r, plan.ctx.prices, plan.ctx.opts.noQuests, plan.ctx.opts.noLimited)
   local best = src and src.best
   if not best then return nil end
   local title = L["Conseguir receta: "] .. r.name
   local also = src.ah and best.kind ~= "ah" and (L[" · también en la AH: "] .. ES.Money(src.ah.price)) or ""
   -- Todos sus vendedores venden pocos y reponen con el tiempo (Data/Sources.lua, lim):
-  -- puede no haber. Se avisa; quien no quiera esperar la quita con la ✕
-  local itemSrc = r.scroll and ES.Data.ItemSources and ES.Data.ItemSources[r.scroll]
-  local limited = itemSrc and itemSrc.lim and src.vendors[1] ~= nil
+  -- puede no haber. Se avisa; quien no quiera esperar la quita con la ✕ (o, en las
+  -- opciones, deja de contar con esos vendedores: src.vendorsOff)
+  local limited = src.limited
+  -- La ✕ de la fila, a la vista donde más falta (antes solo en su tooltip y casi nadie
+  -- sabía que podía saltarse una receta): vendedor de stock limitado y AH
+  local skipHint = GREY .. L[" · X para quitarla"] .. "|r"
   local icon, sub, pick, label
   local useItem
   if best.kind == "owned" then
@@ -1877,11 +1896,12 @@ local function SourcedLearnLine(r, st, profName, plan)
   elseif best.kind == "vendor" then
     icon, label = RECIPE_ICON, L["Vendedor más cercano"]
     sub = L["Vendedor de recetas"] .. (limited and (ORANGE .. L[" · stock limitado"] .. "|r") or "") .. also
+      .. (limited and skipHint or "")
     pick = function() return WP.Nearest(src.vendors) end
   else
     -- En la AH: clic al subastador más cercano; con la AH abierta, la busca
     icon, label = AH_ICON, L["Subastador más cercano"]
-    sub = string.format(L["Casa de Subastas · la más barata ahora (%d a la venta)"], src.ah.listings)
+    sub = string.format(L["Casa de Subastas · la más barata ahora (%d a la venta)"], src.ah.listings) .. skipHint
     pick = WP.Target("auction")
   end
 
@@ -1908,12 +1928,18 @@ local function SourcedLearnLine(r, st, profName, plan)
     if src.vendors[1] then
       local opt
       for _, o in ipairs(src.options) do if o.kind == "vendor" then opt = o end end
-      GameTooltip:AddDoubleLine(Mark("vendor") .. L["Vendedores"], string.format("%d · %s", #src.vendors,
-        opt and opt.unknownPrice and L["precio ?"] or ES.Money(opt and opt.cost or 0)), 1, 0.82, 0, 1, 1, 1)
+      if src.vendorsOff then
+        GameTooltip:AddDoubleLine(ES.Market.ICON_BAD .. L["Vendedores"], L["stock limitado · no se cuentan"], 0.6, 0.6, 0.6, 0.6, 0.6, 0.6)
+      else
+        GameTooltip:AddDoubleLine(Mark("vendor") .. L["Vendedores"], string.format("%d · %s", #src.vendors,
+          opt and opt.unknownPrice and L["precio ?"] or ES.Money(opt and opt.cost or 0)), 1, 0.82, 0, 1, 1, 1)
+      end
       local v = WP.Nearest(src.vendors)
       local npc = v and WP.NPC(v)
       if npc then GameTooltip:AddDoubleLine(" ", npc.name .. " · " .. WP.LocationText(npc), 1, 1, 1, 0.6, 0.6, 0.6) end
-      if limited then
+      if src.vendorsOff then
+        GameTooltip:AddLine(L["Su vendedor tiene stock limitado y desactivaste esos vendedores con su icono, arriba de la ruta."], 0.6, 0.6, 0.6, true)
+      elseif limited then
         GameTooltip:AddLine(L["Stock limitado: venden pocas y reponen con el tiempo, y a veces otros jugadores las compran para revenderlas. Si no está, quítala con la X de la fila y la ruta busca otra receta."],
           1, 0.6, 0.2, true)
       end
@@ -1938,6 +1964,9 @@ local function SourcedLearnLine(r, st, profName, plan)
       end
     elseif pick then
       GameTooltip:AddLine(L["Clic: marcar el camino ("] .. (best.kind == "quest" and L["a quien da la misión"] or L["al vendedor"]) .. ").", 0.5, 0.8, 1)
+    end
+    if best.kind ~= "owned" then
+      GameTooltip:AddLine(L["X de la fila: quitar esta receta y que la ruta busque otra (se recupera con la fila de recetas quitadas)."], 0.6, 0.6, 0.6, true)
     end
     GameTooltip:Show()
   end

@@ -885,6 +885,24 @@ step("recetas de vendedor con stock limitado (lim)", function()
     end
   end
   log[#log+1] = "     " .. n .. " objetos con stock limitado en todos sus vendedores"
+  -- Opción: por defecto se cuenta con el vendedor (lo más barato); desactivada, no
+  local WP = ES.Waypoints
+  local harness = ES.Data.Leatherworking.recipes[4096]
+  local savedSide = ES.Data.NPCs[2819][2]
+  ES.Data.NPCs[2819][2] = "" -- (Tunkk es de la Horda: de los dos bandos para la prueba)
+  local prices = { [13287] = { minUnit = 150000, listings = 2 } }
+  local on = WP.RecipeSource(harness, prices, nil, nil)
+  if on and on.vendors[1] then
+    assert(on.limited and on.best.kind == "vendor", "con la opción por defecto, la receta se compra al vendedor (lo más barato)")
+    local off = WP.RecipeSource(harness, prices, nil, true)
+    assert(off.vendorsOff and off.best.kind == "ah", "sin vendedores de stock limitado, la receta sale de la AH")
+    local none = WP.RecipeSource(harness, {}, nil, true)
+    assert(not none.best, "sin vendedor ni AH no hay de dónde sacarla")
+    log[#log+1] = "     opción: vendedor por defecto (" .. on.best.kind .. "), sin stock limitado: " .. off.best.kind
+  else
+    log[#log+1] = "     (sin datos de vendedores en la prueba: la opción no se comprueba aquí)"
+  end
+  ES.Data.NPCs[2819][2] = savedSide
 end)
 step("sin escaneo de la AH: la ruta dice que escanees", function()
   -- (Discord: "Can't level from...: X materials without price" en casi todas las
