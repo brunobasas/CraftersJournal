@@ -5,11 +5,11 @@
 - **A route that stops for lack of prices now says to scan.** Without an Auction House scan, every material sold only on the AH has no price, and routes stopped with "X materials without price (not on the AH)". It now says you don't have an AH scan yet and to open it and press Scan. At the neutral AH, whose prices are kept apart, it says to scan it or open your faction's AH.
 - **"To the vendor" at the top of Inventory matches the Sell button.** It used to also count the leftover units of AH rows ("AH: 5 · vendor: 2"), which no button sells, so it promised gold you couldn't get. It now adds up only the "To the vendor" section.
 - **The small shopping list next to the AH no longer says "empty" when your list only has vendor items.** It now says there's nothing to buy on the AH and that those items show in the vendor's window.
-- **Gear you don't craft is no longer suggested for selling.** "Sell all" next to a vendor could sell spare weapons, armor, bags or ammo from your bags with one careless click. Gear that doesn't come from a profession recipe now goes under "Not for sale", like profession tools. What you craft with your professions and grey items are still sold. Right-click one under "Not for sale" to allow it, or turn the protection off in the options.
+- **Your own gear is no longer suggested for selling.** "Sell all" next to a vendor could sell your other gear set (damage, healing…) with one careless click. Soulbound gear in your bags and gear in your equipment sets now go under "Not for sale", like profession tools. Unbound greens from loot are still offered, since that's where most of the gold comes from, and so are what you craft and grey items. Right-click one under "Not for sale" to allow it, or turn the protection off in the options.
 - **Options page.** There's now a Crafter's Journal page in the game's options (Options > AddOns), also opened with `/cj options`, with checkboxes for:
   - the window next to vendors (shopping list, Buy all and Sell all);
   - the windows that open on their own next to the AH (shopping list and selling on the AH); the button above the AH still opens the shopping list when you want it;
-  - not selling gear you don't craft;
+  - not selling your own gear (soulbound or in an equipment set);
   - chat alerts after a scan (loot recipes on the AH, and a started route that costs a lot more with new prices);
   - the minimap button (same as `/cj minimap`).
 

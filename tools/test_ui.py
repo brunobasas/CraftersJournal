@@ -920,15 +920,28 @@ step("equipo que no fabricas: no se propone vender (opción)", function()
   end
   ES.GetItemData = function(_, id) if id == GREYGEAR then return "Grey", 0, 1 end if id == LOOT then return "Green", 2, 1 end return savedData(ES, id) end
   ES.db.neverSell, ES.db.sellGear = {}, nil
-  assert(INV.NeverSell(LOOT) == "gear", "el equipo de botín no se propone vender")
-  assert(INV.NeverSell(crafted) == nil, "lo que fabricas sí se vende")
-  assert(INV.NeverSell(GREYGEAR) == nil, "el equipo gris sí se vende")
-  assert(INV.NeverSell(MAT) == nil, "los materiales sí se venden")
+  -- Tu equipo: ligado o en un conjunto. Los verdes sin ligar se venden (es el oro)
+  assert(INV.NeverSell(LOOT, true) == "gear", "el equipo ligado no se propone vender")
+  assert(INV.NeverSell(LOOT, nil) == nil, "un verde sin ligar sí se propone vender")
+  local SETITEM = 990003
+  local savedSets = C_EquipmentSet
+  C_EquipmentSet = { GetEquipmentSetIDs = function() return { 1 } end, GetItemIDs = function() return { [5] = SETITEM, [6] = -1 } end }
+  local savedGetTime = GetTime
+  GetTime = function() return 12345.5 end -- (la caché de conjuntos es por segundo)
+  local savedInstant2 = GetItemInfoInstant
+  GetItemInfoInstant = function(id) if id == SETITEM then return id, "Armor", "Cloth", "INVTYPE_ROBE" end return savedInstant2(id) end
+  local savedData2 = ES.GetItemData
+  ES.GetItemData = function(_, id) if id == SETITEM then return "Healer Robe", 2, 1 end return savedData2(ES, id) end
+  assert(INV.NeverSell(SETITEM, nil) == "gear", "lo de un conjunto del gestor de equipo no se propone vender")
+  C_EquipmentSet, GetTime, GetItemInfoInstant, ES.GetItemData = savedSets, savedGetTime, savedInstant2, savedData2
+  assert(INV.NeverSell(crafted, true) == nil, "lo que fabricas sí se vende")
+  assert(INV.NeverSell(GREYGEAR, true) == nil, "el equipo gris sí se vende")
+  assert(INV.NeverSell(MAT, true) == nil, "los materiales sí se venden")
   -- Clic derecho en No se venden: ese sí se puede vender
   local savedPrint = ES.Print
   ES.Print = function() end
   INV.SetNeverSell(LOOT, false)
-  assert(INV.NeverSell(LOOT) == nil and ES.db.neverSell[LOOT] == false, "con clic derecho se puede permitir uno")
+  assert(INV.NeverSell(LOOT, true) == nil and ES.db.neverSell[LOOT] == false, "con clic derecho se puede permitir uno")
   ES.db.neverSell = {}
   -- La casilla: desmarcada, el equipo se propone como lo demás
   local op = ES:OptionsPanel()
@@ -940,10 +953,10 @@ step("equipo que no fabricas: no se propone vender (opción)", function()
   assert(gcb and gcb:GetChecked(), "la casilla del equipo sale marcada por defecto")
   gcb:SetChecked(false)
   gcb._scripts.OnClick(gcb)
-  assert(ES.db.sellGear == true and INV.NeverSell(LOOT) == nil, "desmarcada, el equipo de botín se propone vender")
+  assert(ES.db.sellGear == true and INV.NeverSell(LOOT, true) == nil, "desmarcada, tu equipo ligado se propone vender")
   gcb:SetChecked(true)
   gcb._scripts.OnClick(gcb)
-  assert(ES.db.sellGear == nil and INV.NeverSell(LOOT) == "gear", "marcada otra vez, el equipo vuelve a protegerse")
+  assert(ES.db.sellGear == nil and INV.NeverSell(LOOT, true) == "gear", "marcada otra vez, el equipo vuelve a protegerse")
   -- Avisos del chat: desmarcados, el de recetas de botín no sale
   assert(ccb and ccb:GetChecked(), "los avisos del chat salen activados por defecto")
   ccb:SetChecked(false)

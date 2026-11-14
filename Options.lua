@@ -4,7 +4,7 @@ local L = ES.L
 ---------------------------------------------------------------------------
 -- Opciones del addon, en las opciones del juego (Opciones > AddOns > Crafter's
 -- Journal) y con /cj opciones: si salen solas las ventanas junto al vendedor y junto
--- a la Casa de Subastas, y si se propone vender el equipo que no fabricas.
+-- a la Casa de Subastas, y si se propone vender tu equipo (ligado o en un conjunto).
 --   ES.db.sellGear         = true: el equipo de botín se propone vender (InventoryUI.lua)
 --   ES.db.noChatAlerts     = true: sin los avisos del chat tras un escaneo (recetas
 --                            de botín en la AH, ruta que cuesta más con precios nuevos)
@@ -36,8 +36,8 @@ local OPTIONS = {
     desc = "Al abrir un vendedor: lo que te falta de la lista de compra y lo que puedes venderle, con los botones Comprar todo y Vender todo." },
   { key = "noAuctionWindows", label = "Ventanas junto a la Casa de Subastas",
     desc = "Al abrir la AH: tu lista de compra y lo que puedes vender en la AH. Desactivadas, la lista de compra se sigue pudiendo abrir con el botón de encima de la AH." },
-  { key = "sellGear", label = "No vender equipo que no fabricas",
-    desc = "Armas, armaduras, bolsas y munición de botín o de misiones no se proponen vender (ni Vender todo los vende). Lo que fabricas con tus profesiones y lo gris, sí. Con clic derecho en No se venden puedes permitir uno concreto." },
+  { key = "sellGear", label = "No vender tu equipo",
+    desc = "El equipo ligado a ti (tu otro equipo, lo de las misiones) y el de los conjuntos del gestor de equipo no se propone vender (ni Vender todo lo vende). Los verdes sin ligar de botín, lo que fabricas y lo gris, sí. Con clic derecho en No se venden puedes permitir uno concreto." },
   { key = "noChatAlerts", label = "Avisos en el chat",
     desc = "Tras un escaneo: recetas de botín que te faltan y están en la AH, y si tu ruta empezada cuesta bastante más con los precios nuevos. Desactivados, la ruta lo sigue diciendo en su línea de estado." },
   -- (se guarda en ES.db.minimap.hide, el sitio de LibDBIcon: también /cj minimap)

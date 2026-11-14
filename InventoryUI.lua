@@ -84,16 +84,36 @@ function Inventory.IsTool(itemID)
   return toolItems[itemID] or false
 end
 
--- Equipo que no sale de ninguna receta (botín, misiones): armas, armaduras, anillos,
--- bolsas, munición... Vender todo lo vendía con un clic sin mirar (CurseForge). Lo
--- que fabricas sí se vende (es para lo que sirve la ruta), y el gris también (basura).
--- Opción ES.db.sellGear = true: se propone como lo demás (Options.lua)
+-- Objetos de los conjuntos del gestor de equipo (tu equipo de daño, de curar...):
+-- { [itemID] = true }. Se mira como mucho una vez por segundo (se pregunta por cada
+-- objeto de las bolsas)
+local setItems, setItemsAt
+local function EquipmentSetItems()
+  local now = GetTime and GetTime() or 0
+  if setItems and setItemsAt == now then return setItems end
+  setItems, setItemsAt = {}, now
+  local sets = C_EquipmentSet
+  if not (sets and sets.GetEquipmentSetIDs and sets.GetItemIDs) then return setItems end
+  for _, setID in ipairs(sets.GetEquipmentSetIDs() or {}) do
+    for _, id in pairs(sets.GetItemIDs(setID) or {}) do
+      if type(id) == "number" and id > 0 then setItems[id] = true end
+    end
+  end
+  return setItems
+end
+
+-- Tu equipo: el ligado a ti (soulbound: tu otro equipo, de daño o de curar, lo que te
+-- dieron las misiones) o el que está en un conjunto del gestor de equipo. Vender todo
+-- lo vendía con un clic sin mirar (CurseForge). Los verdes sin ligar de botín sí se
+-- proponen: es de donde sale casi todo el oro. Lo que fabricas y lo gris, también.
+-- `bound`: ligado en tus bolsas. Opción ES.db.sellGear = true: nada se protege
 local craftedItems
-function Inventory.IsGear(itemID)
+function Inventory.IsGear(itemID, bound)
   if ES.db.sellGear then return false end
   local instant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
   local equipLoc = instant and select(4, instant(itemID))
   if not equipLoc or equipLoc == "" or equipLoc == "INVTYPE_NON_EQUIP_IGNORE" then return false end
+  if not (bound or EquipmentSetItems()[itemID]) then return false end
   local _, quality = ES:GetItemData(itemID)
   if quality == 0 then return false end -- (sin saber la calidad aún: se protege)
   if not craftedItems then
@@ -107,13 +127,13 @@ function Inventory.IsGear(itemID)
   return not craftedItems[itemID]
 end
 
--- ¿No se vende? Devuelve "user" (lo marcaste), "tool" (herramienta), "gear" (equipo
--- que no fabricas) o nil
-function Inventory.NeverSell(itemID)
+-- ¿No se vende? Devuelve "user" (lo marcaste), "tool" (herramienta), "gear" (tu
+-- equipo: ligado o en un conjunto) o nil. `bound`: ligado en tus bolsas
+function Inventory.NeverSell(itemID, bound)
   local mark = ES.db.neverSell and ES.db.neverSell[itemID]
   if mark == true then return "user" end
   if mark ~= false and Inventory.IsTool(itemID) then return "tool" end
-  if mark ~= false and Inventory.IsGear(itemID) then return "gear" end
+  if mark ~= false and Inventory.IsGear(itemID, bound) then return "gear" end
   return nil
 end
 
@@ -124,7 +144,8 @@ function Inventory.SetNeverSell(itemID, on)
     ES.db.neverSell[itemID] = true
   else
     -- (una herramienta o un equipo desmarcados se pueden vender: false; lo demás vuelve a lo normal)
-    if Inventory.IsTool(itemID) or Inventory.IsGear(itemID) then ES.db.neverSell[itemID] = false else ES.db.neverSell[itemID] = nil end
+    -- (equipo: como si estuviera ligado; si no lo está, el false no cambia nada)
+    if Inventory.IsTool(itemID) or Inventory.IsGear(itemID, true) then ES.db.neverSell[itemID] = false else ES.db.neverSell[itemID] = nil end
   end
   ES:Print(string.format(on and L["%s: no se propondrá venderlo. Se deshace con clic derecho en \"No se venden\" (pestaña Inventario)."]
     or L["%s: vuelve a proponerse para vender."], ES:DataItemName(itemID) or ("#" .. itemID)))
@@ -143,7 +164,7 @@ function Inventory:List()
   local need = RouteNeeds()
   local list = {}
   for id, it in pairs(BagContents()) do
-    local never = Inventory.NeverSell(id)
+    local never = Inventory.NeverSell(id, it.bound)
     local keep = never and it.count or math.min(it.count, need[id] or 0)
     local n = it.count - keep
     local vendor = not it.noValue and ES:VendorSellPrice(id) or 0
@@ -336,7 +357,7 @@ local function Tooltip(e, noActions)
     end
     if e.never then
       GameTooltip:AddLine(e.never == "tool" and L["Herramienta de profesión: sin ella no puedes fabricar o recolectar. No se propone venderla."]
-        or e.never == "gear" and L["Equipo que no fabricas con tus profesiones: no se propone venderlo, para no venderlo sin querer. Se cambia en /cj opciones."]
+        or e.never == "gear" and L["Tu equipo (ligado a ti o en un conjunto del gestor de equipo): no se propone venderlo, para no venderlo sin querer. Se cambia en /cj opciones."]
         or L["Lo marcaste para no venderlo."], 0.4, 1, 0.4, true)
       GameTooltip:AddLine(L["Clic derecho: volver a proponerlo para vender."], 0.6, 0.6, 0.6)
     elseif e.keep < e.count then
@@ -370,7 +391,7 @@ local function Line(e, mode)
       ES.Money(e.ahNet or 0), ES.Money(e.depositRisk or 0)) .. "|r"
   elseif mode == "never" then
     sub = GREY .. (e.never == "tool" and L["herramienta de profesión: no se vende"]
-      or e.never == "gear" and L["equipo que no fabricas: no se vende"] or L["lo marcaste para no venderlo"])
+      or e.never == "gear" and L["tu equipo: no se vende"] or L["lo marcaste para no venderlo"])
       .. " · " .. L["clic derecho: volver a proponerlo"] .. "|r"
   elseif mode == "keep" then
     sub = GREEN .. string.format(L["guarda %d para tus rutas"], e.keep) .. "|r"
