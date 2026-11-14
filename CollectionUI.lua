@@ -8,7 +8,7 @@ local L = ES.L
 -- La palabra "Receta" va del color de la calidad del pergamino (blanco, verde, azul...).
 -- Sin barras de desplazamiento: la lista y la ficha se mueven con la rueda del ratón.
 
-local GREEN, GREY, ORANGE, GOLD, WHITE = "|cff40ff40", "|cff9d9d9d", "|cffff9933", "|cffffd100", "|cffffffff"
+local GREEN, GREY, ORANGE, WHITE = "|cff40ff40", "|cff9d9d9d", "|cffff9933", "|cffffffff"
 -- Filas como las del instructor de Forever: icono grande con marco, nombre dorado,
 -- de dónde sale en blanco pequeño debajo y el nivel arriba a la derecha
 local ROW_H, ROW_GAP, LIST_W = 48, 3, 372

@@ -461,11 +461,12 @@ function ES:RenderInventory()
   local Signed = ES.UI.Signed
   local sec = Inventory:Sections(list)
   local rising, ah, vendor, keep, never = sec.rising, sec.ah, sec.vendor, sec.keep, sec.never
+  -- "Al vendedor": solo la sección del vendedor, lo que vende su botón y la ventana del
+  -- vendedor. El resto al vendedor de una fila de la AH ("AH: 5 · vendedor: 2") no lo
+  -- vende ningún botón: sumarlo prometía un oro que no se sacaba
   local tAH, tVendor = 0, 0
-  for _, e in ipairs(list) do
-    tAH = tAH + e.ahN * (e.ahUnit or 0)
-    tVendor = tVendor + e.vendorN * e.vendorUnit
-  end
+  for _, e in ipairs(list) do tAH = tAH + e.ahN * (e.ahUnit or 0) end
+  for _, e in ipairs(vendor) do tVendor = tVendor + e.vendorN * e.vendorUnit end
   page.stats.total:SetText(Signed(-(tAH + tVendor)))
   page.stats.ah:SetText(tAH > 0 and Signed(-tAH) or (GREY .. "—|r"))
   page.stats.vendor:SetText(tVendor > 0 and Signed(-tVendor) or (GREY .. "—|r"))

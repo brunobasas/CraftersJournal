@@ -382,17 +382,22 @@ RenderMini = function(st, lines, ahOpen)
   mini.bar:SetValue(mini.progress)
   -- Sin las filas de total de cada lista ("0 de 3 listos", con su ✕: eso, en la
   -- pestaña), sin las de vendedor y sin el título de una lista que se queda vacía
-  local shown, section = {}, nil
+  local shown, section, vendorOnly = {}, nil, false
   for _, line in ipairs(lines) do
     if line.section then
       section = line
-    elseif not line.total and line.source ~= "vendor" then
+    elseif line.source == "vendor" and not line.total then
+      vendorOnly = true -- (lo hay, pero se compra al vendedor)
+    elseif not line.total then
       if section then shown[#shown + 1] = section section = nil end
       shown[#shown + 1] = line
     end
   end
   lines = shown
-  mini.empty:SetText(#lines == 0 and L["La lista está vacía. Añade materiales con \"Añadir a la lista de compra\" en Ganar dinero, la calculadora o la vista Materiales de una ruta."] or "")
+  -- Sin nada de la AH: si lo que queda es de vendedor, no está vacía (antes lo decía)
+  mini.empty:SetText(#lines > 0 and ""
+    or vendorOnly and L["Nada que comprar en la AH. Lo de tu lista que vende un vendedor sale en su ventana al abrirlo."]
+    or L["La lista está vacía. Añade materiales con \"Añadir a la lista de compra\" en Ganar dinero, la calculadora o la vista Materiales de una ruta."])
   local y = 0
   for i, line in ipairs(lines) do
     local row = mini.rows[i] or MiniRow(mini.content)

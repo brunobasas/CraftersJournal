@@ -104,6 +104,7 @@ ES.Locales.en = {
   ["Lista de compra (%d)"] = "Shopping list (%d)",
   ["Enseña u oculta tu lista de compra al lado de la AH, para comprar sus materiales."] = "Shows or hides your shopping list next to the AH, to buy its materials.",
   ["Ver completa"] = "Full view",
+  ["Nada que comprar en la AH. Lo de tu lista que vende un vendedor sale en su ventana al abrirlo."] = "Nothing to buy on the AH. What's on your list from vendors shows in their window when you open them.",
   ["La lista está vacía. Añade materiales con \"Añadir a la lista de compra\" en Ganar dinero, la calculadora o la vista Materiales de una ruta."] = "The list is empty. Add materials with \"Add to shopping list\" in Make Money, the calculator or a route's Materials view.",
   ["Ganar dinero: lote del %s"] = "Make Money: batch of %s",
   ["Los materiales del lote de hoy que te faltan (descontando lo que llevas) pasan a la pestaña Lista de compra, desde donde los compras con la AH abierta."] = "The materials of today's batch you're missing (minus what you carry) go to the Shopping list tab, where you buy them with the AH open.",

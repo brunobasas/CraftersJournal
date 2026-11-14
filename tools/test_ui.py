@@ -2891,6 +2891,12 @@ step("inventario: qué vender de las bolsas, dónde y qué guardar", function()
   for i, row in ipairs(page.rows) do if row._shown and row.title then sections[#sections + 1] = tostring(row.title._text) end end
   log[#log+1] = "     inventario: " .. tostring(page.stats.total._text) .. " · " .. table.concat(sections, " | "):sub(1, 220)
   assert(page.action._shown, "con el vendedor abierto sale el botón de vender")
+  -- "Al vendedor" de arriba: lo mismo que vende el botón (solo la sección del vendedor)
+  local vendorSum = 0
+  for _, e in ipairs(ES.Inventory:Sections().vendor) do vendorSum = vendorSum + e.vendorN * e.vendorUnit end
+  local shownVendor = tostring(page.stats.vendor._text)
+  assert(vendorSum == 0 and shownVendor:find("—") or shownVendor:find(tostring(vendorSum % 100)),
+    "la cifra Al vendedor no es la de su sección: " .. shownVendor .. " frente a " .. vendorSum)
   page.action._scripts.OnClick(page.action)
   assert(sold[JUNK] == 2 and not sold[LL] and not sold[UP], "el botón solo vende lo que va al vendedor")
   -- Clic en una fila con la AH abierta: anuncia
