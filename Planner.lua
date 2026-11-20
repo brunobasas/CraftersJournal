@@ -1807,6 +1807,9 @@ function Planner.PlanGPS(data, opts)
   -- Recorre una ruta de verdad (pasada forzada, rápida). via: fabricar o comprar
   -- fijado (lo del jugador siempre manda)
   local function Walk(choice, via, depth)
+    -- (también aquí: cientos de rutas ya recorridas seguidas salen sin pasar por Plan, que
+    -- es donde se cede el fotograma, y el juego se paraba hasta 0,2 s)
+    ES.Yield()
     local v = Copy(via or {})
     for itemID, way in pairs(opts.via or {}) do v[itemID] = way end
     local key = ChoiceKey(opts, choice, v)
@@ -2178,7 +2181,16 @@ function Planner.PlanGPS(data, opts)
   local top = {}
   for _, p in pairs(pool) do top[#top + 1] = p end
   -- (primero las que llegan más lejos: una que se para antes sale barata por subir menos)
-  table.sort(top, function(a, b) return a.reached > b.reached or (a.reached == b.reached and Score(a) < Score(b)) end)
+  -- (la puntuación de cada una se calcula la primera vez que la pide la ordenación y se
+  -- reutiliza: antes eran dos por comparación, ~40.000 con lo de tus bolsas, y una
+  -- ordenación no puede ceder el fotograma: el juego se paraba casi medio segundo)
+  local topScore = {}
+  local function TopScore(p)
+    local s = topScore[p]
+    if s == nil then s = Score(p) topScore[p] = s end
+    return s
+  end
+  table.sort(top, function(a, b) return a.reached > b.reached or (a.reached == b.reached and TopScore(a) < TopScore(b)) end)
   local again = false
   for k = 1, math.min(GPS_TOP, #top) do
     local p = ViaPolish(top[k])
