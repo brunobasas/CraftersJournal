@@ -773,8 +773,11 @@ end
 -- Calcula, poco a poco, las alternativas de cada paso de la ruta y repinta al acabar
 -- (plan.alts[i] = lista de la más barata a la más cara; vacía si no hay otra receta)
 function ES:ComputeAlternatives(page, plan)
+  -- (la misma ruta en otra página, la de la ventana rehecha al cambiar de idioma: sigue
+  -- con lo que ya iba calculado y repinta esa; si no, la página vieja lo cortaba)
+  if plan.altsRunning and plan.altsPage ~= page then plan.altsPage = page return end
   if plan.alts or plan.altsRunning or not plan.choice or not (plan.ctx and plan.ctx.opts) then return end
-  plan.altsRunning = true
+  plan.altsRunning, plan.altsPage = true, page
   local P, data = self.Planner, page.data
   local jobs, results = {}, {}
   for i, st in ipairs(plan.steps) do
@@ -783,7 +786,8 @@ function ES:ComputeAlternatives(page, plan)
   end
   local k = 1
   local function Work()
-    if page.plan ~= plan then plan.altsRunning = nil return end -- ruta nueva: se deja
+    local page = plan.altsPage
+    if page.plan ~= plan then plan.altsRunning, plan.altsPage = nil, nil return end -- ruta nueva: se deja
     -- Como los cálculos de Jobs.lua: con la ventana cerrada o en combate se espera (se
     -- mira otra vez cada segundo); antes seguía gastando hasta 8 ms de cada fotograma
     local main = CraftersJournalMainFrame
@@ -811,7 +815,7 @@ function ES:ComputeAlternatives(page, plan)
         return a.delta < b.delta
       end)
     end
-    plan.alts, plan.altsRunning = results, nil
+    plan.alts, plan.altsRunning, plan.altsPage = results, nil, nil
     if page:IsVisible() and page.plan == plan then ES:RenderPlan(page) end
   end
   Work()

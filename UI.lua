@@ -514,11 +514,32 @@ end
 -- Vuelve a crear la ventana (al cambiar de idioma: todos sus textos se ponen al
 -- crearla). La vieja se esconde y se suelta; si estaba abierta, se abre la nueva
 -- en la misma página.
+-- La vieja no se puede borrar (el juego nunca libera ventanas): se deja sin eventos
+-- (cada cambio de idioma dejaba otra ventana entera atendiendo las bolsas, los objetos
+-- que llegan...) y se sueltan sus rutas calculadas y lo que sus filas guardan de ellas
+-- (tooltips y clics, que guardan la ruta entera), para que esa memoria se recoja. Lo
+-- de las filas solo lo leen sus propios clics y tooltips, que escondidas no saltan.
+-- Los botones seguros (usar un objeto) no se tocan: en combate el juego lo bloquea
+local ROW_FIELDS = { "tooltip", "onClick", "onRightClick", "go", "ahItem", "skipTitle" }
+local function Retire(f, seen)
+  if seen[f] then return end
+  seen[f] = true
+  if f.UnregisterAllEvents and not (f.IsProtected and f:IsProtected()) then f:UnregisterAllEvents() end
+  for _, k in ipairs(ROW_FIELDS) do
+    if rawget(f, k) ~= nil then f[k] = nil end
+  end
+  if f.GetChildren then
+    for _, child in ipairs({ f:GetChildren() }) do Retire(child, seen) end
+  end
+end
+
 function ES:RebuildMainFrame()
   if not main then return end
   local wasShown, page = main:IsShown(), self.db.lastPage
   main:Hide()
   main:SetScript("OnShow", nil)
+  for _, p in ipairs(self.professionPages or {}) do p.plan, p.lines = nil, nil end
+  pcall(Retire, main, {})
   main = nil
   self.professionPages, self.patternPages = nil, nil
   self.homePage, self.earnPage, self.patternsPage = nil, nil, nil
