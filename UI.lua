@@ -743,7 +743,9 @@ end
 -- opción de ese aviso (ES.db[opts.key] = true); se vuelve a encender en /cj opciones,
 -- en la categoría de esa acción. CurseForge: un clic sin querer anunció o vendió de golpe.
 --   opts = { key, title, text, warn (aviso en naranja, opcional), yes (texto del botón,
---            opcional), onYes = función, closeOn = "MERCHANT_CLOSED" o
+--            opcional), onYes = función, no y onNo (texto y acción del otro botón,
+--            opcionales), extra (alto de más para un texto largo, opcional),
+--            closeOn = "MERCHANT_CLOSED" o
 --            "AUCTION_HOUSE_CLOSED" (opcional: se cierra con esa ventana) }
 -- La acción sale del clic en Sí: vender, comprar y anunciar piden un clic del jugador
 ---------------------------------------------------------------------------
@@ -789,7 +791,21 @@ local function ConfirmDialog()
   d.cancel = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
   d.cancel:SetSize(120, 24)
   d.cancel:SetPoint("BOTTOMLEFT", d, "BOTTOM", 4, 18)
-  d.cancel:SetScript("OnClick", function() d.pending = nil d:Hide() end)
+  -- (opts.onNo: el segundo botón también hace algo; entonces la casilla vale con los
+  -- dos, porque es un aviso y no una pregunta)
+  d.cancel:SetScript("OnClick", function()
+    local p = d.pending
+    d.pending = nil
+    d:Hide()
+    if p and p.onNo then
+      p.onNo()
+      if d.check:GetChecked() then
+        ES.db[p.key] = true
+        ES:Print(string.format(L["Ya no se mostrará este aviso. Se vuelve a activar en /cj opciones (%s)."],
+          ES.OptionLabel and ES.OptionLabel(p.key) or p.key))
+      end
+    end
+  end)
   -- La acción va lo PRIMERO del clic, antes de esconder el diálogo (con el botón que se
   -- acaba de pulsar) o de guardar la casilla: el anuncio en la AH pide el clic del
   -- jugador y, hecho después del Hide, el juego lo bloqueaba (GitHub #6: "ADDON BLOCKED"
@@ -832,7 +848,7 @@ function ES:Confirm(opts)
   d.text:SetText(opts.text)
   d.warn:SetText(opts.warn or "")
   if opts.warn then d.warn:Show() else d.warn:Hide() end
-  local extra = opts.warn and WARN_H or 0
+  local extra = (opts.warn and WARN_H or 0) + (opts.extra or 0) -- (opts.extra: texto más largo)
   d:SetHeight(170 + extra)
   d.check:ClearAllPoints()
   d.check:SetPoint("TOPLEFT", 24, -78 - extra)
@@ -841,6 +857,6 @@ function ES:Confirm(opts)
   d.note:SetText(string.format(L["Se vuelve a activar en /cj opciones (%s)."],
     ES.OptionLabel and ES.OptionLabel(opts.key) or opts.key))
   d.ok:SetText(opts.yes or YES or L["Sí"])
-  d.cancel:SetText(NO or L["No"])
+  d.cancel:SetText(opts.no or NO or L["No"])
   d:Show()
 end

@@ -177,6 +177,14 @@ local function DirectQty(r, itemID)
   end
 end
 
+-- El colchón de un material: z desviaciones de lo que varía en los niveles amarillos
+-- (var) y, en los verdes (varGreen), como mucho GREEN_Z. Lo comparten Need y
+-- CraftedNeedIn: así un intermedio y su material llevan el mismo colchón (los Bolt que
+-- pide la fila son los que da el paño que pide la compra)
+local function Margin(var, varGreen, z)
+  return z * math.sqrt(var) + math.min(z, Planner.GREEN_Z) * math.sqrt(varGreen)
+end
+
 local function Need(plan, from, to, z, green)
   local recipes = plan.ctx and plan.ctx.data and plan.ctx.data.recipes or {}
   local acc = {} -- [itemID] = { expected, var, shares = { [receta] = { q, per } }, other, first }
@@ -220,7 +228,7 @@ local function Need(plan, from, to, z, green)
   local out = {}
   for itemID, a in pairs(acc) do
     -- El colchón, con la primera receta que lo gasta (es la que fabricas antes)
-    local margin = z * math.sqrt(a.var) + math.min(z, Planner.GREEN_Z) * math.sqrt(a.varGreen)
+    local margin = Margin(a.var, a.varGreen, z)
     if a.first then a.shares[a.first].q = a.shares[a.first].q + margin else a.other = a.other + margin end
     local target = math.ceil(a.other - 0.001)
     for _, sh in pairs(a.shares) do
@@ -461,6 +469,37 @@ function Planner.PhaseNeed(plan, level, z, upTo)
   return out, phase
 end
 
+-- Cuántos de un intermedio de plan.crafted (Bolt of Silk Cloth) gastan los niveles de
+-- `from` a `to`, los fabricados y los que salen de tus bolsas, con el colchón de Need
+-- (z desviaciones; en los niveles green(s), como mucho GREEN_Z). nil si el plan no lo
+-- sabe (sin pointUse)
+function Planner.CraftedNeedIn(plan, itemID, from, to, z, green)
+  if not plan.pointUse then return nil end
+  local expected, var, varGreen = 0, 0, 0
+  for s = from, to - 1 do
+    local u = plan.pointUse[s] and plan.pointUse[s][itemID]
+    if u then
+      local q = (u.craft or 0) + (u.owned or 0)
+      local p = plan.pointChance and plan.pointChance[s] or 1
+      expected = expected + q
+      if green and green(s) then varGreen = varGreen + q * q * (1 - p) else var = var + q * q * (1 - p) end
+    end
+  end
+  if expected <= 0 then return 0 end
+  return math.ceil(expected + Margin(var, varGreen, z or 0) - 0.001)
+end
+
+-- Lo mismo para el tramo (o la tanda en verde) de `level`, el que compra la Lista de
+-- compra por tramos (PhaseNeed): la fila "Fabrica N× Bolt of Silk Cloth" pide los
+-- Bolt que da el Silk Cloth comprado. CurseForge: la compra del tramo pedía 32 Silk y
+-- la fila, 82 Bolt (los de toda la ruta). Devuelve la cantidad y el tramo (o nil)
+function Planner.PhaseCraftedNeed(plan, itemID, level)
+  local _, phase = Planner.PhaseNeed(plan, level)
+  if not phase then return nil end
+  return Planner.CraftedNeedIn(plan, itemID, phase.from, phase.batchTo or phase.to, Planner.PHASE_Z,
+    function(s) return GreenPoint(plan, s) end), phase
+end
+
 ---------------------------------------------------------------------------
 -- Comprado, a fabricar. Al tener todo lo de la tanda (o del tramo) en el que estás,
 -- se apunta (con la ruta, en la partida: sobrevive a /reload) hasta qué nivel
@@ -618,20 +657,24 @@ end
 --     es solo el tramo; si no, te diría que vendas lo del tramo siguiente)
 --   opts.phase: por tramos aunque la Lista de compra sea de la ruta entera (las filas de
 --     compra de la vista Ruta y el asistente: te guían tanda a tanda)
+--   opts.preview: sin empezar la ruta, lo que pedirá al empezarla con el modo elegido
+--     (la vista Materiales: por tramos, el primer tramo). No apunta nada (Stocked)
 -- Devuelve { [itemID] = { need (unidades enteras), expected } } y el tramo (o nil)
 function Planner.RouteNeed(profKey, plan, level, opts)
   local out = {}
   if not plan then return out, nil end
   level = math.max(plan.from or level or 1, level or plan.from or 1)
-  local byPhase = not (opts and opts.keep) and ES:RouteLock(profKey)
+  local locked = ES:RouteLock(profKey)
+  local preview = opts and opts.preview and not locked
+  local byPhase = not (opts and opts.keep) and (locked or preview)
     and ((opts and opts.phase) or (ES.Shopping and ES.Shopping.ByPhase(profKey)))
   if byPhase then
     -- Comprado, a fabricar (Planner.Stocked): mientras puedas fabricar, nada más; sin
     -- poder, la tanda siguiente desde tu nivel (una sola compra). Antes pedía solo lo
     -- que faltaba para llegar al nivel apuntado: 12 Bolt para un punto y, al llegar,
     -- otra tanda: dos viajes seguidos (Discord, Linen Bag a 55)
-    local mark = Planner.Stocked(profKey, plan, level)
-    local hold = Planner.PhaseHold(profKey, plan, level)
+    local mark = not preview and Planner.Stocked(profKey, plan, level)
+    local hold = not preview and Planner.PhaseHold(profKey, plan, level)
     local need, phase = Planner.PhaseNeed(plan, level)
     if not phase then return out, nil end
     phase.hold = hold or nil
@@ -650,7 +693,7 @@ function Planner.RouteNeed(profKey, plan, level, opts)
     -- La herramienta que piden los pasos del tramo y no llevas (ver AddMissingTools)
     if Planner.AddMissingTools(profKey, plan, level, phase.batchTo or phase.to, out) then all = false end
     -- Lo tienes todo: se apunta hasta dónde llega (y desde ahí, a fabricar)
-    if all and not hold and next(need) then
+    if all and not hold and not preview and next(need) then
       Planner.SetStocked(profKey, plan, level, phase.batchTo or phase.to)
     end
     return out, phase

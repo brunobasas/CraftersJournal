@@ -154,6 +154,95 @@ test("ruta más corta tras dejarla: la lista no se queda desplazada más allá d
     tostring(cur), tostring(range), tostring(cur - range))
 end, { state = "scan" })
 
+-- CurseForge: "Profit ignora las Small Silk Pack". Estaban (la primera fila), pero la
+-- lista seguía bajada como la de Materiales y quedaban arriba, fuera de la vista
+test("al cambiar de vista la lista empieza arriba", function()
+  local page = StartRoute("Tailoring", 1, 150)
+  ES:SelectProfessionView(page, "shop")
+  RunTimers()
+  local h = expect(page.content._height, "la lista no tiene alto")
+  page.scroll:SetVerticalScroll(math.max(0, h - page.scroll:GetHeight()))
+  expect(page.scroll:GetVerticalScroll() > 0, "Materiales no se puede bajar: la prueba no prueba nada")
+  ES:SelectProfessionView(page, "profit")
+  RunTimers()
+  expect_eq(page.scroll:GetVerticalScroll(), 0, "desplazamiento de Profit")
+  -- Abierta desde el asistente, la vista Ruta sigue bajando hasta el paso actual
+  SKILLS[ES.Data.Tailoring.skillLine] = { 140, 150 }
+  FireEvent("SKILL_LINES_CHANGED")
+  RunTimers()
+  ES:SelectProfessionView(page, "route")
+  RunTimers()
+  expect_eq(page.scroll:GetVerticalScroll(), 0, "desplazamiento de Ruta al cambiar de vista")
+  ES.Assistant.Update()
+  ES.Assistant.OpenWindow("route")
+  RunTimers()
+  expect(page.scroll:GetVerticalScroll() > 0, "abierta desde el asistente no baja hasta el paso actual")
+end, { state = "scan" })
+
+-- Intermedios con la ruta empezada: la fila "Fabrica N× <Bolt>" pide los que da el paño
+-- que pide la compra (por tramos: el del tramo). CurseForge: la compra del tramo pedía
+-- 32 Silk Cloth y la fila "Fabrica 82× Bolt of Silk Cloth", los de toda la ruta. Con
+-- los precios de las pruebas, la ruta de Sastrería 120-150 usa Bolt of Woolen Cloth
+
+-- Ruta de Sastrería 120-150 empezada, con el modo de compra `byPhase` (nil: el de por
+-- defecto, por tramos; false: ruta entera). Devuelve un resumen del primer intermedio
+-- de la ruta: { item, whole (lo que gasta la ruta), row (lo que pide su fila), raw
+-- (su material), per (material por unidad), buy (lo que pide la compra de ese material) }
+local function PrepRoute(byPhase)
+  ES.db.prof.Tailoring = ES.db.prof.Tailoring or {}
+  ES.db.prof.Tailoring.byPhase = byPhase
+  local page, plan = StartRoute("Tailoring", 120, 150)
+  ES:SelectProfessionView(page, "route")
+  RunTimers()
+  local c = expect(plan.crafted[1], "la ruta de Sastrería 120-150 no fabrica intermedios: la prueba no prueba nada")
+  local res = { page = page, plan = plan, item = c.itemID, whole = ES.Planner.CraftedTotal(c) }
+  for _, l in ipairs(page.lines or {}) do
+    if l.item == c.itemID and l.stepRecipe then res.row = tonumber(tostring(l.title):match("(%d+)×")) break end
+  end
+  expect(res.row, "no hay fila de fabricar %d en la vista Ruta", c.itemID)
+  local rq = c.recipe.r[1]
+  res.raw, res.per = rq[1], rq[2] / ((c.recipe.out and c.recipe.out[2]) or 1)
+  local need = ES.Planner.RouteNeed("Tailoring", plan, 120)
+  res.buy = need[res.raw] and need[res.raw].need or 0
+  note("fila: %s × %d · compra: %d × %d (%s por unidad) · ruta entera: %d", tostring(res.row), res.item,
+    res.buy, res.raw, tostring(res.per), res.whole)
+  return res
+end
+
+-- La fila pide lo que da el material de la compra, redondeando hacia arriba
+local function RowMatchesBuy(r)
+  expect(r.buy > 0, "la compra no pide el material del intermedio")
+  expect(r.row * r.per >= r.buy and r.row * r.per < r.buy + r.per,
+    "la fila pide %d (son %s de material) y la compra %d", r.row, tostring(r.row * r.per), r.buy)
+end
+
+test("ruta empezada por tramos: la fila del intermedio pide lo del tramo, como la compra", function()
+  local r = PrepRoute(nil)
+  expect(r.row < r.whole, "la fila pide %d, los de toda la ruta (%d), no los del tramo", r.row, r.whole)
+  RowMatchesBuy(r)
+end, { state = "scan" })
+
+test("ruta empezada con ruta entera: la fila del intermedio pide lo que queda de ruta", function()
+  local r = PrepRoute(false)
+  expect_eq(r.row, r.whole, "intermedios que pide la fila")
+  RowMatchesBuy(r)
+end, { state = "scan" })
+
+test("cambiar de modo con la ruta empezada cambia la fila del intermedio", function()
+  local r = PrepRoute(nil)
+  local function Row()
+    ES:RenderPlan(r.page)
+    RunTimers()
+    for _, l in ipairs(r.page.lines) do
+      if l.item == r.item and l.stepRecipe then return tonumber(tostring(l.title):match("(%d+)×")) end
+    end
+  end
+  ES.db.prof.Tailoring.byPhase = false
+  expect_eq(Row(), r.whole, "con ruta entera")
+  ES.db.prof.Tailoring.byPhase = nil
+  expect_eq(Row(), r.row, "otra vez por tramos")
+end, { state = "scan" })
+
 -- Rutas de 1 a 300 de cada profesión, e instantánea ------------------------------
 
 for _, prof in ipairs({ "Alchemy", "Blacksmithing", "Enchanting", "Engineering", "Leatherworking", "Tailoring", "Cooking", "FirstAid" }) do

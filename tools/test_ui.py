@@ -1627,6 +1627,8 @@ step("portada: tarjetas de profesiones", function()
     end
   end
   log[#log+1] = "     lista de la compra: " .. buyLine.title
+  -- (con las bolsas llenas, por tramos todo el primer tramo está en "Ya lo tienes")
+  bags = 0
   -- Clic en un material de la AH: sin la AH abierta marca el subastador; con ella, lo busca
   local savedSearch, savedOpen = ES.SearchAuction, ES.IsAuctionHouseOpen
   ES.IsAuctionHouseOpen = function() return false end
@@ -5945,6 +5947,8 @@ step("ruta: filas de compra (paran al empezar el tramo o sin poder fabricar)", f
     do
       local c1 = plan.crafted[1]
       ES.db.prof.Leatherworking.lock = { from = 120, to = 225, started = 777 }
+      -- (con "ruta entera": por tramos, la fila pide lo del tramo; ver la categoría route)
+      ES.db.prof.Leatherworking.byPhase = false
       plan.lockStarted, plan.lockPrices = 777, nil
       ES.lockedPlans.Leatherworking = plan
       local savedCount, savedSkill, savedKnown = ES.ItemCount, ES.GetProfessionSkill, ES.IsRecipeKnown
@@ -6016,6 +6020,7 @@ step("ruta: filas de compra (paran al empezar el tramo o sin poder fabricar)", f
       else
         log[#log+1] = "     (con bolsas, la ruta de prueba no usa las 10 del intermedio)"
       end
+      ES.db.prof.Leatherworking.byPhase = nil
     end
     ES.db.prof.Leatherworking.lock = lock
     plan.lockStarted, plan.lockPrices = lock.started, lock.scanTime

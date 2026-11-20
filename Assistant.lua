@@ -1606,6 +1606,10 @@ if ES.OPTIONS and ES.OPTION_CATEGORIES then
     desc = "Activado, los controles alrededor del asistente (flechas de pasos, modo de compra, saltar, cerrar) se ven siempre. Desactivado, se despliegan al pasar el ratón por el asistente y se pliegan al salir.",
     get = function() return DB().stepsAlways == true end,
     set = function(on) DB().stepsAlways = on or nil A.Refresh() end })
+  -- El aviso al empezar una ruta comprando la ruta entera (ES:WholeRouteNotice): lo
+  -- apaga su casilla "No volver a mostrar este aviso" (ES.db.noWholeRouteNotice)
+  table.insert(ES.OPTIONS, { key = "noWholeRouteNotice", cat = "assistant", label = "Avisar al empezar una ruta comprando la ruta entera",
+    desc = "Al empezar una ruta con \"ruta entera\", recuerda que por tramos suele salir mejor y que se cambia con los iconos del asistente (la bolsa y la caja)." })
 end
 
 -- Un PNJ pulsado en la ventana (WP.SetWaypoint, que ya lo marcó en el mapa): la flecha

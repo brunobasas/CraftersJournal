@@ -399,6 +399,35 @@ function ES:StartRoute(page)
     self:FlashTab("shopping", true)
     if self.RenderShopping then self:RenderShopping() end
   end
+  -- Empezada con "ruta entera" (elegida en la vista Materiales): se recuerda que por
+  -- tramos suele salir mejor y dónde se cambia
+  if ES.Shopping and not ES.Shopping.ByPhase(page.profKey) then self:WholeRouteNotice(page.profKey) end
+end
+
+-- Aviso al empezar una ruta comprando la ruta entera: por tramos suele salir mejor, y se
+-- cambia con los iconos del asistente (la bolsa, por tramos; la caja, la ruta entera).
+-- "Por tramos" lo cambia ya. Se apaga con su casilla (ES.db.noWholeRouteNotice) y se
+-- vuelve a encender en /cj opciones (Asistente de ruta)
+function ES:WholeRouteNotice(profKey)
+  self:Confirm({
+    key = "noWholeRouteNotice", title = L["Vas a comprar la ruta entera"],
+    text = L["Has elegido comprar toda la ruta de una vez. Por tramos suele salir mejor: compras solo lo del tramo en el que estás, con un margen, y no te sobra material si los puntos suben antes."]
+      .. "\n\n" .. L["Lo puedes cambiar cuando quieras con los iconos del asistente: la bolsa es por tramos y la caja, la ruta entera."],
+    extra = 70,
+    yes = L["Ruta entera"], no = L["Por tramos"],
+    onYes = function() end,
+    onNo = function()
+      local s = self.db.prof[profKey]
+      if not s then return end
+      s.byPhase = nil
+      if self.Assistant and self.Assistant.ModeChanged then self.Assistant.ModeChanged() end
+      if self.RenderShopping then self:RenderShopping() end
+      for _, page in ipairs(self.professionPages or {}) do
+        if page.initialized and page.profKey == profKey and page:IsVisible() then self:RenderPlan(page) end
+      end
+      if self.Assistant and self.Assistant.Refresh then self.Assistant.Refresh() end
+    end,
+  })
 end
 
 function ES:StopRoute(profKey)
@@ -1948,6 +1977,11 @@ function ES:SelectProfessionView(page, key)
   for _, b in ipairs(page.viewButtons) do
     if b.key == key then b:LockHighlight() else b:UnlockHighlight() end
   end
+  -- Otra vista, desde arriba: si no, se quedaba desplazada como la anterior y sus
+  -- primeras filas no se veían (CurseForge: en Profit "no salían" las Small Silk Pack,
+  -- la primera fila; y la fila del modo de compra, la primera de Materiales). Abrirla
+  -- desde el asistente (page.scrollToCurrent) baja después, en RenderLines
+  if page.scroll then page.scroll:SetVerticalScroll(0) end
   self:RenderPlan(page)
 end
 
@@ -3314,6 +3348,13 @@ local function RouteLines(plan, page, opts)
         local rem = ES.Planner.CraftedNeedFrom(plan, c0.itemID, page.from, true)
         if rem then c.quantity = math.min(c.quantity, math.ceil(rem - 0.001)) end
       end
+      -- Comprando por tramos: lo del tramo, como la Lista de compra (los Bolt que da el
+      -- Silk que pide). Un paso que aún no ha llegado, lo de su tramo cuando llegues.
+      -- CurseForge: la compra del tramo pedía 32 Silk y esta fila "Fabrica 82×"
+      if locked and ES.Shopping.ByPhase(page.profKey) then
+        local inPhase = ES.Planner.PhaseCraftedNeed(plan, c0.itemID, math.max(page.from or 0, st.from))
+        if inPhase then c.quantity = math.min(c.quantity, inPhase) end
+      end
       if c.quantity > 0 then
       local name, texture = ItemLabel(c.itemID, L["Objeto "] .. c.itemID)
       local conversion = c.recipe and c.recipe.conversion
@@ -4165,6 +4206,16 @@ local function ProfitLines(plan, page)
   return lines
 end
 
+-- Tooltip de la fila del modo de compra (por tramos o ruta entera) de la vista Materiales
+local function ModeTooltip(row)
+  GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+  GameTooltip:AddLine(L["Qué va a la Lista de compra"])
+  GameTooltip:AddLine(L["Por tramos: solo lo del tramo en el que estás, con un margen. Al acabarlo, sale el siguiente."], 1, 1, 1, true)
+  GameTooltip:AddLine(L["Ruta entera: todo lo que queda de ruta, de una vez."], 1, 1, 1, true)
+  GameTooltip:AddLine(L["Pulsa la fila para cambiar. La lista se llena sola: no hay que añadir nada."], 0.5, 0.8, 1, true)
+  GameTooltip:Show()
+end
+
 -- Líneas de la vista Materiales
 local function ShopLines(plan, page)
   local lines = {}
@@ -4190,7 +4241,8 @@ local function ShopLines(plan, page)
   -- Lo que tienes: las bolsas (ni el banco ni el correo; ver ES:HaveForShopping). Lo
   -- mismo que las filas de
   -- compra de la vista Ruta (RouteBuy)
-  local buy = RouteBuy(plan, page.profKey, page.from)
+  -- (sin empezar la ruta, preview: lo que pedirá al empezarla con el modo elegido)
+  local buy = RouteBuy(plan, page.profKey, page.from, { preview = true })
   local need, phase, Have = buy.need, buy.phase, buy.Have
   local function Progress(itemID)
     local have = Have(itemID)
@@ -4244,14 +4296,11 @@ local function ShopLines(plan, page)
   -- Ruta empezada: las secciones salen de lo que llevas AHORA (lo que gastas o
   -- compras mueve cada material de "comprar" a "ya lo tienes" y al revés), no de lo
   -- que llevabas al empezarla; los totales de la ruta siguen congelados
-  if ES:RouteLock(page.profKey) then
-    -- Por tramos (por defecto): solo lo del tramo en el que estás, con su margen
-    -- (ya en `need`, de Planner.RouteNeed); la Lista de compra lo enseña sola
-    local byPhase = ES.Shopping.ByPhase(page.profKey)
-    local buyAH, buyVendor, haveAll, left = buy.ah, buy.vendor, buy.have, buy.left
-    Section(L["Comprar en la Casa de Subastas"], buyAH, Buy)
-    Section(L["Comprar al vendedor"], buyVendor, Buy)
-    Section(L["Ya lo tienes"], haveAll, function(it)
+  -- Comprar, al vendedor y "Ya lo tienes", con lo que falta (RouteBuy) y su total
+  local function NeedSections()
+    Section(L["Comprar en la Casa de Subastas"], buy.ah, Buy)
+    Section(L["Comprar al vendedor"], buy.vendor, Buy)
+    Section(L["Ya lo tienes"], buy.have, function(it)
       local name, texture = ItemLabel(it.itemID, L["Objeto "] .. it.itemID)
       return { level = "×" .. it.quantity, icon = texture or 134400, title = name, sub = Progress(it.itemID),
         item = it.itemID, tooltip = SimpleTooltip(it.itemID, phase and L["Ya tienes lo que te hace falta para este tramo."]
@@ -4259,7 +4308,20 @@ local function ShopLines(plan, page)
     end)
     lines[#lines + 1] = { total = true, title = L["Te falta por comprar"],
       sub = phase and L["Lo que te falta para este tramo, con lo que llevas ahora"]
-        or L["Lo que te falta para lo que queda de ruta, con lo que llevas ahora"], value = Signed(left) }
+        or L["Lo que te falta para lo que queda de ruta, con lo que llevas ahora"], value = Signed(buy.left) }
+  end
+  -- Título de la fila del modo con el tramo: "… · Tramo 120-125 (Bright Yellow Shirt)"
+  local function PhaseTitle(prefix)
+    local names = {}
+    for _, st in ipairs(phase.steps) do names[#names + 1] = st.recipe.name end
+    return string.format(prefix, phase.from, phase.batchTo or phase.to, table.concat(names, ", "))
+      .. (phase.batchTo and L[" · por tandas (en verde)"] or "")
+  end
+  if ES:RouteLock(page.profKey) then
+    -- Por tramos (por defecto): solo lo del tramo en el que estás, con su margen
+    -- (ya en `need`, de Planner.RouteNeed); la Lista de compra lo enseña sola
+    local byPhase = ES.Shopping.ByPhase(page.profKey)
+    NeedSections()
     -- Arriba, una fila: qué hay en la Lista de compra (el tramo o la ruta entera) y,
     -- al pulsarla, se cambia a lo otro. Eso pasa a la lista (ES.Shopping.PhaseList: no
     -- se guarda, se calcula) y se avisa: chat, monedas y la pestaña brilla
@@ -4296,33 +4358,46 @@ local function ShopLines(plan, page)
       title = L["Lista de compra · quitada"]
       sub = ACT .. L["Pulsa para volver a ponerla"] .. "|r · " .. L["la quitaste con la X de la Lista de compra"]
     elseif phase then
-      local names = {}
-      for _, st in ipairs(phase.steps) do names[#names + 1] = st.recipe.name end
-      title = string.format(L["Lista de compra · Tramo %d-%d (%s)"], phase.from, phase.batchTo or phase.to, table.concat(names, ", "))
-        .. (phase.batchTo and L[" · por tandas (en verde)"] or "")
+      title = PhaseTitle(L["Lista de compra · Tramo %d-%d (%s)"])
       sub = ACT .. L["Pulsa para cambiar a la ruta entera"] .. "|r · " .. L["ahora: este tramo, con margen por si los puntos tardan"]
     else
       title = L["Lista de compra · Ruta entera"]
       sub = ACT .. L["Pulsa para cambiar a solo este tramo"] .. "|r · " .. L["ahora: todo lo que queda de ruta"]
     end
     table.insert(lines, 1, { total = true, icon = "Interface\\Icons\\INV_Misc_Note_01", title = title, sub = sub,
-      onClick = Switch, phaseLine = true,
-      tooltip = function(row)
-        GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-        GameTooltip:AddLine(L["Qué va a la Lista de compra"])
-        GameTooltip:AddLine(L["Por tramos: solo lo del tramo en el que estás, con un margen. Al acabarlo, sale el siguiente."], 1, 1, 1, true)
-        GameTooltip:AddLine(L["Ruta entera: todo lo que queda de ruta, de una vez."], 1, 1, 1, true)
-        GameTooltip:AddLine(L["Pulsa la fila para cambiar. La lista se llena sola: no hay que añadir nada."], 0.5, 0.8, 1, true)
-        GameTooltip:Show()
-      end })
+      onClick = Switch, phaseLine = true, tooltip = ModeTooltip })
     return lines
   end
 
-  -- Sin empezar la ruta: la lista de la compra se llena sola al empezarla
+  -- Sin empezar la ruta: la fila del modo, igual que con la ruta empezada. Se elige
+  -- aquí, antes de empezar, y "Empezar ruta" lo respeta; la lista de debajo es la que
+  -- saldrá al empezarla (por tramos, el primer tramo), así se ve qué cambia al pulsar.
+  -- CurseForge: elegías la ruta viendo 326 Silk Cloth y al empezarla la lista pasaba
+  -- sola a "por tramos" (32): parecía que te la cambiaban
+  local modeLine
   if #plan.shopping > 0 then
-    table.insert(lines, 1, { total = true, icon = "Interface\\Icons\\INV_Misc_Note_01", title = L["Lista de compra"],
-      sub = L["Pulsa Empezar ruta y lo que hay que comprar sale solo en la pestaña Lista de compra."] })
+    local ACT = "|cff80c0ff"
+    local byPhase = ES.Shopping.ByPhase(page.profKey)
+    local title = not byPhase and L["Al empezar compras: la ruta entera"]
+      or phase and PhaseTitle(L["Al empezar compras: por tramos · Tramo %d-%d (%s)"])
+      or L["Al empezar compras: por tramos"]
+    local sub = ACT .. (byPhase and L["Pulsa para comprar la ruta entera de una vez"] or L["Pulsa para comprar solo el tramo en el que estés"])
+      .. "|r · " .. (phase and L["abajo, lo del primer tramo"] or L["abajo, lo que gasta la ruta entera"])
+    modeLine = { total = true, icon = "Interface\\Icons\\INV_Misc_Note_01", title = title, sub = sub,
+      phaseLine = true, tooltip = ModeTooltip,
+      onClick = function()
+        -- (por tramos -> ruta entera = false; ruta entera -> por tramos = nil, el de por defecto)
+        if byPhase then ES.db.prof[page.profKey].byPhase = false else ES.db.prof[page.profKey].byPhase = nil end
+        ES:RenderPlan(page)
+      end }
   end
+  if phase then
+    -- Por tramos: lo del primer tramo, como saldrá al empezar la ruta
+    NeedSections()
+    if modeLine then table.insert(lines, 1, modeLine) end
+    return lines
+  end
+  if modeLine then table.insert(lines, 1, modeLine) end
   Section(L["Comprar en la Casa de Subastas"], ah, Buy)
   Section(L["Comprar al vendedor"], vendor, Buy)
   -- Lo que también se compra ya dice arriba cuántos tienes y cuántos faltan: aquí

@@ -65,6 +65,26 @@ test("al subir de nivel pasa al paso siguiente", function()
   expect(tostring(f.banner.title._text) == tostring(current.bannerTitle or current.title), "el banner no es el paso actual")
 end, { state = "scan" })
 
+-- CurseForge: comprando por tramos, la compra pedía Silk Cloth para 8 Bolt y el
+-- asistente decía "Craft 82× Bolt of Silk Cloth" (los de toda la ruta)
+test("por tramos, el paso del intermedio pide lo del tramo", function()
+  A = ES.Assistant
+  local _, plan = StartRoute("Tailoring", 120, 150)
+  A.Update()
+  RunTimers()
+  local c = expect(plan.crafted[1], "la ruta de Sastrería 120-150 no fabrica intermedios: la prueba no prueba nada")
+  local step
+  for _, l in ipairs(A.State().steps) do
+    if l.item == c.itemID and l.stepRecipe then step = l end
+  end
+  step = expect(step, "el asistente no tiene el paso de fabricar %d", c.itemID)
+  local n = tonumber(tostring(step.bannerTitle or step.title):match("(%d+)×"))
+  local inPhase = ES.Planner.PhaseCraftedNeed(plan, c.itemID, 120)
+  note("asistente: %s · tramo: %s · ruta entera: %d", tostring(n), tostring(inPhase), ES.Planner.CraftedTotal(c))
+  expect(inPhase and inPhase < ES.Planner.CraftedTotal(c), "el tramo pide lo mismo que la ruta: la prueba no prueba nada")
+  expect_eq(n, inPhase, "intermedios que pide el paso del asistente")
+end, { state = "scan" })
+
 test("en combate no se toca lo protegido", function()
   A = ES.Assistant
   StartRoute("Tailoring", 1, 75)
