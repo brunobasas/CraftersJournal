@@ -126,6 +126,34 @@ test("la página de una profesión calcula su ruta al abrirla", function()
   expect(#bad == 0, "ruta de la página:\n    %s", table.concat(bad, "\n    "))
 end)
 
+-- CurseForge: "falta 105-135 de Encantamiento" tras dejar la ruta a medias. La lista
+-- estaba bajada hasta el paso actual (la abre así el asistente); al dejar la ruta se
+-- rehace desde tu nivel, más corta, y se quedaba desplazada más allá del final: las
+-- primeras filas, arriba y fuera de la vista, y un hueco vacío debajo
+test("ruta más corta tras dejarla: la lista no se queda desplazada más allá del final", function()
+  local page = StartRoute("Tailoring", 1, 150)
+  local longH = expect(page.content._height, "la lista no tiene alto")
+  -- Bajada hasta el final de la ruta larga
+  page.scroll:SetVerticalScroll(math.max(0, longH - page.scroll:GetHeight()))
+  local before = page.scroll:GetVerticalScroll()
+  -- Subes casi hasta el objetivo y dejas la ruta: se rehace desde ahí, mucho más corta
+  SKILLS[ES.Data.Tailoring.skillLine] = { 140, 150 }
+  FireEvent("SKILL_LINES_CHANGED")
+  RunTimers()
+  -- (lo que hace el botón Dejar ruta)
+  ES:StopRoute("Tailoring")
+  ES:ClearHomeCache()
+  ES:CalculatePlan(page)
+  RunTimers()
+  expect_eq(page.plan.from, 140, "la ruta nueva empieza en tu nivel")
+  local shortH = page.content._height
+  expect(shortH < before, "la ruta nueva no es más corta (%s y antes bajada %s): la prueba no prueba nada", tostring(shortH), tostring(before))
+  local range = math.max(0, shortH - page.scroll:GetHeight())
+  local cur = page.scroll:GetVerticalScroll()
+  expect(cur <= range, "desplazada %s con un máximo de %s: las primeras %s px de la ruta quedan fuera de la vista",
+    tostring(cur), tostring(range), tostring(cur - range))
+end, { state = "scan" })
+
 -- Rutas de 1 a 300 de cada profesión, e instantánea ------------------------------
 
 for _, prof in ipairs({ "Alchemy", "Blacksmithing", "Enchanting", "Engineering", "Leatherworking", "Tailoring", "Cooking", "FirstAid" }) do

@@ -1429,6 +1429,15 @@ function ES.UI.RenderLines(page, lines)
   end
   for i = #lines + 1, #page.rows do page.rows[i]:Hide() end
   page.content:SetHeight(math.max(1, y))
+  -- Con menos filas que antes (dejar la ruta la rehace desde tu nivel, más corta), que
+  -- no se quede desplazada más allá del final: el juego no lo limita solo y las
+  -- primeras filas quedaban arriba, fuera de la vista, con un hueco vacío debajo
+  -- (CurseForge: "falta 105-135 de Encantamiento")
+  if page.scroll then
+    if page.scroll.UpdateScrollChildRect then page.scroll:UpdateScrollChildRect() end
+    local range = math.max(0, y - (tonumber(page.scroll:GetHeight()) or 0))
+    if (tonumber(page.scroll:GetVerticalScroll() or 0) or 0) > range then page.scroll:SetVerticalScroll(range) end
+  end
   -- Abierta desde el asistente: la lista baja hasta el paso actual (con un poco de lo
   -- de antes a la vista)
   if page.scrollToCurrent and currentY and page.scroll then

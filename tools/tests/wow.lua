@@ -69,6 +69,15 @@ local function Mock(name)
     if k == "IsShown" or k == "IsVisible" then return function(self) return self._shown end end
     if k == "GetChecked" then return function(self) return self._checked end end
     if k == "SetChecked" then return function(self, v) self._checked = v and true or false end end
+    -- Desplazamiento de un ScrollFrame: se recuerda (como en el juego, no se limita
+    -- solo al encoger el contenido). La altura pedida se apunta en _height (GetHeight
+    -- sigue devolviendo 100)
+    if k == "GetVerticalScroll" then return function(self) return self._vscroll or 0 end end
+    if k == "SetVerticalScroll" then return function(self, v)
+      self._vscroll = v
+      if self._scripts.OnVerticalScroll then self._scripts.OnVerticalScroll(self, v) end
+    end end
+    if k == "SetHeight" then return function(self, v) self._height = v end end
     if k == "GetValue" then return function(self) return self._value or 0 end end
     if k == "SetValue" then return function(self, v) self._value = v end end
     if k == "AddLine" or k == "AddDoubleLine" then return function(self, a, b)
