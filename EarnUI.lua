@@ -429,9 +429,9 @@ function ES:CreateEarnPage(page)
   page.empty:SetWidth(600)
 
   ES.SafeRegister(page, "GET_ITEM_INFO_RECEIVED")
-  page:SetScript("OnEvent", function(self)
-    -- (sin verse, nada: al abrirse se pinta entera, OnShow)
-    if self.pendingItems and not self.refreshQueued and self:IsVisible() then
+  page:SetScript("OnEvent", function(self, _, itemID)
+    -- (sin verse, nada: al abrirse se pinta entera, OnShow; y solo con los que faltaban)
+    if ES.UI.WaitingForItem(self, itemID) and not self.refreshQueued and self:IsVisible() then
       self.refreshQueued = true
       C_Timer.After(0.5, function()
         self.refreshQueued = false

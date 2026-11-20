@@ -1408,10 +1408,20 @@ local function ListWidth(page)
 end
 ES.UI.ListWidth = ListWidth
 
+-- ¿Es `itemID` (GET_ITEM_INFO_RECEIVED) uno de los que faltaban al pintar la lista? Solo
+-- esos repintan: un objeto que el servidor no da nunca dejaba la lista repintándose con
+-- cada objeto que llegaba de cualquier otra cosa (bolsas, chat, otros addons)
+function ES.UI.WaitingForItem(page, itemID)
+  return page.pendingItems and itemID ~= nil and page.pendingItemIDs ~= nil and page.pendingItemIDs[itemID] == true
+end
+
 -- Pinta una lista de líneas (ver StyleRow) en page.content con page.rows
 function ES.UI.RenderLines(page, lines)
   local y = 0
   page.pendingItems = false
+  -- (y cuáles: solo su llegada repinta, ver ES.UI.WaitingForItem)
+  local waiting = page.pendingItemIDs
+  if waiting then for id in pairs(waiting) do waiting[id] = nil end else waiting = {} page.pendingItemIDs = waiting end
   local width = ListWidth(page)
   page.content:SetWidth(width)
   local currentY
@@ -1424,7 +1434,7 @@ function ES.UI.RenderLines(page, lines)
     row:SetPoint("TOPLEFT", 0, -y)
     if line.current and not currentY then currentY = y end
     y = y + height + ROW_GAP
-    if line.item and not ES:GetItemData(line.item) then page.pendingItems = true end
+    if line.item and not ES:GetItemData(line.item) then page.pendingItems, waiting[line.item] = true, true end
     row:Show()
   end
   for i = #lines + 1, #page.rows do page.rows[i]:Hide() end
@@ -1889,7 +1899,7 @@ function ES:CreateProfessionPage(page, profKey)
     if success ~= false and itemID and waiting and waiting[itemID] then self.recalcQueued = true end
     -- (sin verse, nada más: yendo por el mundo llegan sin parar; se repinta al verse)
     if not self:IsVisible() then return end
-    if not (self.pendingItems or self.recalcQueued) then return end
+    if not (self.recalcQueued or ES.UI.WaitingForItem(self, itemID)) then return end
     -- Llegan en oleadas: se espera a que paren (cada uno reinicia la espera) y se
     -- recalcula una vez. Con 0,5 s desde el primero, cada oleada era un cálculo entero
     self.infoStamp = (self.infoStamp or 0) + 1
