@@ -515,6 +515,7 @@ ES.Locales.de = {
   ["Faltan precios: escanea la AH|r"] = "Preise fehlen: scanne das AH|r",
   ["El plan llega hasta "] = "Der Plan erreicht ",
   ["No la tienes|r"] = "Nicht erlernt|r",
+  ["Abrir para calcular|r"] = "Zum Berechnen öffnen|r",
   ["Sin escaneo: precios de vendedor|r"] = "Kein Scan: Händlerpreise|r",
   ["Al máximo"] = "Maximal",
   ["Objetivo cumplido"] = "Ziel erreicht",

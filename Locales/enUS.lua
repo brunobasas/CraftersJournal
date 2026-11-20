@@ -515,6 +515,7 @@ ES.Locales.en = {
   ["Faltan precios: escanea la AH|r"] = "Missing prices: scan the AH|r",
   ["El plan llega hasta "] = "The plan reaches ",
   ["No la tienes|r"] = "Not learned|r",
+  ["Abrir para calcular|r"] = "Open to calculate|r",
   ["Sin escaneo: precios de vendedor|r"] = "No scan: vendor prices|r",
   ["Al máximo"] = "Maxed",
   ["Objetivo cumplido"] = "Target reached",

@@ -300,6 +300,9 @@ function Ledger:ReadTrainer()
     -- cambian, solo lo que cuesta aprenderlas)
     for key in pairs(changedProfs) do
       if ES.InvalidatePlan then ES:InvalidatePlan(key) end
+      -- (y la guardada de otra sesión: va en su clave, ES:StableRouteKey)
+      ES.db.trainerStamp = ES.db.trainerStamp or {}
+      ES.db.trainerStamp[key] = (ES.db.trainerStamp[key] or 0) + 1
       if ES.lockedPlans then ES.lockedPlans[key] = nil end
       -- La ruta fijada, rehecha con lo que enseña de verdad el instructor, ya no sale
       -- (una receta suya a un nivel o rango que no toca): se suelta y se calcula otra

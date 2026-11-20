@@ -3650,8 +3650,9 @@ step("comandos /es", function()
   -- Registro de errores: los iguales juntos, con cuántas veces; /cj errores los lista y los borra   ES.db.errorLog = nil   ES:RecordError("lua", "Interface/AddOns/CraftersJournal/Planner.lua:1: boom", "pila")   ES:RecordError("lua", "Interface/AddOns/CraftersJournal/Planner.lua:1: boom", "pila")   ES:RecordError("bloqueada", "SetRaidTarget()")   assert(#ES.db.errorLog == 2 and ES.db.errorLog[1].count == 2, "no agrupó los errores iguales")   SlashCmdList.CRAFTERSJOURNAL("errores")   SlashCmdList.CRAFTERSJOURNAL("errores borrar")   assert(ES.db.errorLog == nil, "/cj errores borrar no lo vació")
 end)
 step("rutas repartidas entre fotogramas (sin tirones)", function()
-  -- En el juego (con debugprofilestop) las rutas no se calculan al abrir: cada
-  -- fotograma hace un trozo de 8 ms y las tarjetas ponen "Calculando la ruta…"
+  -- En el juego (con debugprofilestop) la portada no calcula rutas: la tarjeta dice
+  -- "Abrir para calcular" (CurseForge: abrir el addon calculaba las de todas las tuyas).
+  -- Al abrir la profesión, cada fotograma hace un trozo de 8 ms ("Calculando la ruta…")
   local frames = {}
   local realAfter = C_Timer.After
   C_Timer.After = function(_, fn) frames[#frames + 1] = fn end
@@ -3664,14 +3665,23 @@ step("rutas repartidas entre fotogramas (sin tirones)", function()
     return savedSkill(self, line)
   end
   ES:ClearHomeCache()
+  if ES.db.prof.Leatherworking then ES.db.prof.Leatherworking.lastRoute = nil end -- (ni la guardada)
   ES:SelectPage("home")
+  local openText = (ES.L["Abrir para calcular|r"]:gsub("|r", ""))
   local first = ES.homePage.cards[1]
   for _, c in ipairs(ES.homePage.cards) do
     if c.key == "Leatherworking" then first = c
     else assert(not tostring(c.note._text):find("Calculando"), "no debería calcular una profesión que no tienes: " .. tostring(c.key)) end
   end
   log[#log+1] = "     al abrir: " .. tostring(first.cost._text) .. " | " .. tostring(first.note._text)
-  assert(tostring(first.note._text):find("Calculando"), "la tarjeta debería poner Calculando: " .. tostring(first.note._text))
+  assert(tostring(first.note._text):find(openText, 1, true), "la tarjeta debería poner " .. openText .. ": " .. tostring(first.note._text))
+  assert(#frames == 0, "la portada no debería calcular: " .. #frames .. " fotogramas pedidos")
+  -- Abrir la profesión: se calcula repartida entre fotogramas
+  ES:SelectPage(first.key)
+  local page = ES.professionPages[1]
+  for _, p in ipairs(ES.professionPages) do if p.profKey == first.key then page = p end end
+  page._scripts.OnShow(page) -- el simulacro no lanza OnShow al mostrar
+  assert(page.calculating, "la página debería estar calculando")
   local n = 0
   while #frames > 0 and n < 100000 do
     local fn = table.remove(frames, 1)
@@ -3682,17 +3692,14 @@ step("rutas repartidas entre fotogramas (sin tirones)", function()
   end
   log[#log+1] = "     fotogramas hasta tener la ruta de tu profesión: " .. n
   assert(n > 1, "no se repartió el cálculo (" .. n .. " fotogramas)")
+  assert(page.plan and not page.calculating, "la página sigue sin ruta tras acabar")
+  -- La portada enseña ya su coste, sin calcular (de la caché)
+  frames = {}
+  ES:SelectPage("home")
   for _, c in ipairs(ES.homePage.cards) do if c.key == "Leatherworking" then first = c end end
   log[#log+1] = "     al acabar: " .. tostring(first.cost._text) .. " | " .. tostring(first.note._text)
   assert(not tostring(first.note._text):find("Calculando"), "sigue calculando tras acabar")
-  -- Abrir la profesión con la ruta ya calculada: sin esperar (de la caché)
-  frames = {}
-  ES:SelectPage(first.key)
-  local page = ES.professionPages[1]
-  for _, p in ipairs(ES.professionPages) do if p.profKey == first.key then page = p end end
-  page._scripts.OnShow(page) -- el simulacro no lanza OnShow al mostrar
-  assert(page.plan and not page.calculating, "la página debería usar la ruta de la portada: " .. tostring(page.planKey)
-    .. " vs " .. tostring(ES.homePlanCache[first.key] and ES.homePlanCache[first.key].key))
+  assert(not tostring(first.note._text):find(openText, 1, true), "la portada no usa la ruta calculada: " .. tostring(first.note._text))
   assert(#frames == 0, "no debería recalcular: " .. #frames)
   debugprofilestop = nil
   C_Timer.After = realAfter

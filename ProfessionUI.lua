@@ -264,8 +264,9 @@ function ES:PlanOptions(profKey, from, to, cap)
   end
   return {
     via = via,
-    -- La última ruta calculada de esta profesión: el GPS la prueba primero (ver PlanGPS)
-    hint = self.lastRoutes[profKey],
+    -- La última ruta calculada de esta profesión: el GPS la prueba primero (ver PlanGPS).
+    -- Tras recargar, la guardada (settings.lastRoute), aunque ya no valga tal cual
+    hint = self.lastRoutes[profKey] or self:SavedRouteHint(profKey),
     from = from, to = to, cap = cap,
     hours = 24,
     neutral = self:IsNeutralAH(),
@@ -322,9 +323,8 @@ end
 -- Precios del escaneo de los objetos que usa una ruta: materiales, lo que se
 -- fabrica antes, lo que sale de cada paso, los pergaminos y las herramientas.
 -- Con ellos la ruta fijada se rehace igual aunque haya escaneos nuevos.
-local function RoutePrices(plan)
-  local scan = ES.db.scans and ES.db.scans[ES:RealmKey()]
-  local items = scan and scan.items or {}
+-- Los objetos que usa una ruta: { [itemID] = true }
+local function RouteItems(plan)
   local ids = {}
   local function Recipe(r)
     if not r then return end
@@ -336,9 +336,25 @@ local function RoutePrices(plan)
   for _, c in ipairs(plan.crafted or {}) do ids[c.itemID] = true Recipe(c.recipe) end
   for _, it in ipairs(plan.shopping or {}) do ids[it.itemID] = true end
   for _, tl in ipairs(plan.tools or {}) do ids[tl.item] = true end
+  return ids
+end
+ES.RouteItems = RouteItems -- (pruebas)
+
+local function RoutePrices(plan)
+  local scan = ES.db.scans and ES.db.scans[ES:RealmKey()]
+  local items = scan and scan.items or {}
   local prices = {}
-  for id in pairs(ids) do prices[id] = items[id] end
+  for id in pairs(RouteItems(plan)) do prices[id] = items[id] end
   return prices, scan and scan.time
+end
+
+-- Opciones para rehacer una ruta ya decidida (mismas recetas en cada nivel y mismos
+-- materiales fabricados o comprados) en una sola pasada: la ruta fijada y la última
+-- ruta guardada (settings.lastRoute)
+function ES:ForcedPlanOptions(profKey, from, to, cap, choice, via)
+  local opts = self:PlanOptions(profKey, from, to, cap)
+  opts.forced, opts.via, opts.fullInfo = choice, via, true
+  return opts
 end
 
 -- La ruta fijada: la de esta sesión tal cual; tras recargar se rehace con las
@@ -348,8 +364,8 @@ function ES:LockedPlan(profKey)
   if not lock then return nil end
   local plan = self.lockedPlans[profKey]
   if plan and plan.lockStarted == lock.started and plan.lockPrices == lock.scanTime then return plan end
-  local opts = self:PlanOptions(profKey, lock.from, lock.to, lock.cap)
-  opts.owned, opts.forced, opts.excluded, opts.via, opts.fullInfo = lock.owned, lock.choice, nil, lock.via, true
+  local opts = self:ForcedPlanOptions(profKey, lock.from, lock.to, lock.cap, lock.choice, lock.via)
+  opts.owned, opts.excluded = lock.owned, nil
   opts.prices, opts.pricesTime = lock.prices, lock.scanTime
   plan = self.Planner:Plan(ES.Data[profKey], opts)
   plan.lockStarted, plan.lockPrices = lock.started, lock.scanTime
@@ -362,8 +378,8 @@ end
 function ES:RefreshRoutePrices(profKey)
   local lock = self:RouteLock(profKey)
   if not lock then return end
-  local opts = self:PlanOptions(profKey, lock.from, lock.to, lock.cap)
-  opts.owned, opts.forced, opts.excluded, opts.via, opts.fullInfo = lock.owned, lock.choice, nil, lock.via, true
+  local opts = self:ForcedPlanOptions(profKey, lock.from, lock.to, lock.cap, lock.choice, lock.via)
+  opts.owned, opts.excluded = lock.owned, nil
   local plan = self.Planner:Plan(ES.Data[profKey], opts) -- con el último escaneo
   lock.prices, lock.scanTime = RoutePrices(plan)
   plan.lockStarted, plan.lockPrices = lock.started, lock.scanTime
@@ -447,41 +463,178 @@ function ES:ProfessionPlan(profKey)
   local locked = self:LockedPlan(profKey)
   if locked then return locked, from, to end
   local cap = rank and maxRank or nil
-  local key = self:PlanKey(profKey, from, to, cap)
-  local cached = self.homePlanCache[profKey]
-  if cached and cached.key == key then return cached.plan, from, to end
+  local cached = self:CachedPlan(profKey, from, to, cap)
+  if cached then return cached, from, to end
+  local stable = self:StableRouteKey(profKey, from, to, cap)
+  local key = self:PlanKey(profKey, from, to, cap, stable)
   local plan = self.Planner:Plan(data, self:PlanOptions(profKey, from, to, cap))
-  self.homePlanCache[profKey] = { key = key, plan = plan }
-  Remember(profKey, plan)
+  self:StorePlan(profKey, key, stable, plan)
   return plan, from, to
 end
 
 -- Rutas ya calculadas, una por profesión: las comparten la portada, la página de
--- la profesión y la lista de compra de la AH. La clave recoge todo lo que cambia
--- la ruta (nivel, objetivo, escaneo, opciones); ES:ClearHomeCache (idioma, vista)
--- sube planGen para todas, y ES:InvalidatePlan (bolsas, recetas aprendidas) solo
--- para una: con cada fabricación no se recalculan las 8 profesiones.
+-- la profesión y la lista de compra de la AH. Dos niveles:
+--   en memoria: homePlanCache[prof] = { key, plan, bags }, con la clave entera
+--     (ES:PlanKey: la estable más planGen, que sube ES:ClearHomeCache, y planGens,
+--     que sube ES:InvalidatePlan solo para una profesión)
+--   guardada (por personaje): settings.lastRoute = { key, choice, via, bags, reached },
+--     con la clave estable (ES:StableRouteKey). Tras recargar, si coincide, la ruta se
+--     rehace en una sola pasada (mismas recetas, precios de ahora) en vez de buscarla
+-- Con "usar lo de las bolsas", `bags` = { [itemID] = cantidad } de los objetos de la
+-- ruta al calcularla: la ruta deja de valer si cambia alguno, no con cualquier objeto
 ES.planGen = 0
 ES.planGens = {}
+ES.knownStamp = {} -- [profesión] = recetas sabidas (HomeUI.lua, CheckLearned)
 function ES:InvalidatePlan(profKey)
   self.planGens[profKey] = (self.planGens[profKey] or 0) + 1
   self.homePlanCache[profKey] = nil
 end
-function ES:PlanKey(profKey, from, to, cap)
-  local settings = self.db.prof and self.db.prof[profKey] or {}
-  local scan = self.db.scans and self.db.scans[self:RealmKey()]
-  return table.concat({ profKey, self.planGen .. "." .. (self.planGens[profKey] or 0), scan and scan.time or 0, from, to, tostring(cap), tostring(settings.useBags),
-    tostring(settings.useQuests), self:RealmKey(), ExcludedKey(settings), tostring(settings.useFavor),
-    tostring(settings.fewerCrafts), tostring(self.Planner.SKILL_BONUS or 0), -- (Working Overtime)
-    tostring(settings.noLimited or false) }, ":")
+
+-- Recetas sabidas de una profesión (para la clave estable): las cuenta CheckLearned al
+-- entrar y al aprender; si aún no, aquí
+function ES:KnownStamp(profKey)
+  local n = self.knownStamp[profKey]
+  if n == nil and self.KnownCount and self.Data[profKey] and self.Data[profKey].recipes then
+    n = self.KnownCount(profKey)
+    self.knownStamp[profKey] = n
+  end
+  return n or 0
 end
 
--- La ruta ya calculada (fijada, o en la caché y aún válida), sin calcular nada
+local recipeCount = {} -- [profesión] = recetas en los datos (cambia al regenerarlos)
+local function RecipeCount(profKey)
+  if not recipeCount[profKey] then
+    local n = 0
+    for _ in pairs(ES.Data[profKey] and ES.Data[profKey].recipes or {}) do n = n + 1 end
+    recipeCount[profKey] = n
+  end
+  return recipeCount[profKey]
+end
+
+-- Todo lo que cambia la ruta y se puede comparar entre sesiones: escaneo, niveles,
+-- opciones de la profesión, reino, Working Overtime, recetas sabidas, precios de
+-- instructor, standing con las facciones que dan recetas y versión del addon y de
+-- sus datos
+function ES:StableRouteKey(profKey, from, to, cap)
+  local settings = self.db.prof and self.db.prof[profKey] or {}
+  local scan = self.db.scans and self.db.scans[self:RealmKey()]
+  local trainer = self.db.trainerStamp and self.db.trainerStamp[profKey] or 0
+  return table.concat({ profKey, scan and scan.time or 0, from, to, tostring(cap), tostring(settings.useBags),
+    tostring(settings.useQuests), self:RealmKey(), ExcludedKey(settings), tostring(settings.useFavor),
+    tostring(settings.fewerCrafts), tostring(self.Planner.SKILL_BONUS or 0), -- (Working Overtime)
+    tostring(settings.noLimited or false), self:KnownStamp(profKey), trainer,
+    self.RepStamp and self:RepStamp() or "", tostring(self.AddonVersion and self.AddonVersion()), RecipeCount(profKey) }, ":")
+end
+function ES:PlanKey(profKey, from, to, cap, stable)
+  return (stable or self:StableRouteKey(profKey, from, to, cap)) .. ":" .. self.planGen .. "." .. (self.planGens[profKey] or 0)
+end
+
+-- ¿Llevas lo mismo de los objetos de la ruta que al calcularla? (sin `bags`: la ruta
+-- no usa lo de las bolsas)
+local function BagsMatch(bags)
+  if bags == nil then return true end
+  if type(bags) ~= "table" then return false end
+  for itemID, n in pairs(bags) do
+    if (ES:ItemCount(itemID) or 0) ~= n then return false end
+  end
+  return true
+end
+ES.RouteBagsMatch = BagsMatch
+
+-- Lo que llevabas de cada objeto de la ruta al calcularla, si usa lo de las bolsas
+local function BagItems(plan)
+  local owned = plan and plan.ctx and plan.ctx.opts and plan.ctx.opts.owned
+  if not owned then return nil end
+  local bags = {}
+  for id in pairs(RouteItems(plan)) do bags[id] = owned[id] or 0 end
+  return bags
+end
+
+local function Copy(t)
+  if type(t) ~= "table" then return nil end
+  local c = {}
+  for k, v in pairs(t) do c[k] = v end
+  return c
+end
+
+-- Apunta una ruta recién calculada: en memoria y, si está completa, en lo guardado
+-- (sin los precios de vendedor que faltaban no se guarda: con ellos sería otra)
+function ES:StorePlan(profKey, key, stable, plan)
+  local bags = BagItems(plan)
+  self.homePlanCache[profKey] = { key = key, plan = plan, bags = bags }
+  Remember(profKey, plan)
+  if not (plan and type(plan.choice) == "table" and next(plan.choice)) then return end
+  if plan.pendingItems and next(plan.pendingItems) then return end
+  self.db.prof = self.db.prof or {}
+  self.db.prof[profKey] = self.db.prof[profKey] or {}
+  self.db.prof[profKey].lastRoute = { key = stable, choice = Copy(plan.choice), via = Copy(plan.ctx and plan.ctx.via),
+    bags = bags, reached = plan.reached }
+end
+
+-- La ruta guardada, si tiene la forma que se espera (si no: nil, y se descarta)
+local function SavedRoute(profKey)
+  local settings = ES.db.prof and ES.db.prof[profKey]
+  local saved = settings and settings.lastRoute
+  if saved == nil then return nil end
+  local ok = type(saved) == "table" and type(saved.key) == "string" and type(saved.choice) == "table"
+    and next(saved.choice) ~= nil and type(saved.reached) == "number"
+    and (saved.via == nil or type(saved.via) == "table") and (saved.bags == nil or type(saved.bags) == "table")
+  if ok then
+    for s, id in pairs(saved.choice) do
+      if type(s) ~= "number" or type(id) ~= "number" then ok = false break end
+    end
+  end
+  if not ok then
+    settings.lastRoute = nil
+    return nil
+  end
+  return saved, settings
+end
+
+-- La ruta guardada como pista del GPS (ver PlanOptions), aunque ya no valga tal cual
+function ES:SavedRouteHint(profKey)
+  local saved = SavedRoute(profKey)
+  return saved and { choice = saved.choice, via = saved.via } or nil
+end
+
+-- La ruta guardada, rehecha en una pasada si sigue valiendo (misma clave estable y,
+-- con las bolsas, lo mismo de sus objetos). Si al rehacerla no sale la misma (una
+-- receta que ya no está), se descarta y habrá que calcularla
+local function FromSaved(profKey, from, to, cap, key, stable)
+  local saved, settings = SavedRoute(profKey)
+  if not saved or saved.key ~= stable or not BagsMatch(saved.bags) then return nil end
+  local ok, plan = pcall(function()
+    return ES.Planner:Plan(ES.Data[profKey], ES:ForcedPlanOptions(profKey, from, to, cap, saved.choice, saved.via))
+  end)
+  local same = ok and type(plan) == "table" and type(plan.choice) == "table" and (plan.reached or 0) >= saved.reached
+  if same then
+    for s = from, saved.reached - 1 do
+      if plan.choice[s] ~= saved.choice[s] then same = false break end
+    end
+  end
+  if not same then
+    if not ok and ES.RecordError then ES:RecordError("rehacer la ruta guardada", plan) end
+    settings.lastRoute = nil
+    return nil
+  end
+  ES.homePlanCache[profKey] = { key = key, plan = plan, bags = saved.bags }
+  Remember(profKey, plan)
+  return plan
+end
+
+-- La ruta en memoria si sigue valiendo
+local function Fresh(profKey, key)
+  local cached = ES.homePlanCache[profKey]
+  if cached and cached.key == key and BagsMatch(cached.bags) then return cached.plan end
+end
+
+-- La ruta ya calculada (fijada, en la caché o guardada, y aún válida), sin buscarla
 function ES:CachedPlan(profKey, from, to, cap)
   local locked = self:LockedPlan(profKey)
   if locked then return locked end
-  local cached = self.homePlanCache[profKey]
-  if cached and cached.key == self:PlanKey(profKey, from, to, cap) then return cached.plan end
+  local stable = self:StableRouteKey(profKey, from, to, cap)
+  local key = self:PlanKey(profKey, from, to, cap, stable)
+  return Fresh(profKey, key) or FromSaved(profKey, from, to, cap, key, stable)
 end
 
 -- Ruta de una profesión: la de la caché si vale; si no, se calcula repartida entre
@@ -491,9 +644,10 @@ end
 function ES:RequestPlan(profKey, from, to, cap, onDone, owner)
   local locked = self:LockedPlan(profKey) -- ruta fijada: la portada enseña la misma
   if locked then return locked end
-  local key = self:PlanKey(profKey, from, to, cap)
-  local cached = self.homePlanCache[profKey]
-  if cached and cached.key == key then return cached.plan end
+  local stable = self:StableRouteKey(profKey, from, to, cap)
+  local key = self:PlanKey(profKey, from, to, cap, stable)
+  local ready = Fresh(profKey, key) or FromSaved(profKey, from, to, cap, key, stable)
+  if ready then return ready end
   -- Esta misma ruta ya dio error: no se repite (la portada la volvería a pedir con
   -- cada repintado). Cambiar algo (nivel, objetivo, escaneo, opciones) es otra clave
   if self.planFailed[profKey] == key then return nil, true end
@@ -514,17 +668,16 @@ function ES:RequestPlan(profKey, from, to, cap, onDone, owner)
       if not inline and onDone then onDone(nil, true) end
       return
     end
-    if self:PlanKey(profKey, from, to, cap) == key then
-      self.homePlanCache[profKey] = { key = key, plan = plan }
-      Remember(profKey, plan)
-    end
+    if self:PlanKey(profKey, from, to, cap) == key then self:StorePlan(profKey, key, stable, plan) end
     if not inline and onDone then onDone(plan) end
+    -- (la portada, si se ve, enseña ya su coste: ella no la pide, ver ProfessionEntries)
+    if not inline and self.RenderHome then self:RenderHome() end
   end, owner, nil, function()
     self.planRunning = nil
     self.planFailed[profKey] = key
   end)
   inline = false
-  cached = self.homePlanCache[profKey]
+  local cached = self.homePlanCache[profKey]
   if cached and cached.key == key then return cached.plan end
   if self.planFailed[profKey] == key then return nil, true end
 end
@@ -832,7 +985,9 @@ function ES:ComputeAlternatives(page, plan)
     plan.alts, plan.altsRunning = results, nil
     if page:IsVisible() and page.plan == plan then ES:RenderPlan(page) end
   end
-  Work()
+  -- (en el fotograma siguiente: la ruta recién calculada se pinta al acabar su trabajo,
+  -- con el fotograma ya gastado; empezar aquí lo alargaba otros ALT_BUDGET ms)
+  C_Timer.After(0, Work)
 end
 
 -- Las mejores alternativas del paso, con sus cifras frente a la de la ruta
@@ -1989,13 +2144,16 @@ end
 -- así un escaneo no congela el juego recalculando las 8 profesiones
 -- Cambian tus bolsas (compras, correo, fabricar): con la ruta fijada o sin "usar
 -- lo de las bolsas" la ruta no cambia y basta con repintar (la lista de la compra
--- cuenta lo que llevas); sin fijar y con bolsas, se recalcula
+-- cuenta lo que llevas); sin fijar y con bolsas, se recalcula solo si cambió algún
+-- objeto que usa la ruta (lootear otra cosa no la toca)
 function ES:RefreshAfterBags()
   if self.Assistant then self.Assistant.Refresh() end -- (el paso actual puede cambiar)
   for _, page in ipairs(self.professionPages or {}) do
     if page.initialized and page:IsVisible() and page.data then
       local settings = self.db.prof and self.db.prof[page.profKey] or {}
-      if settings.useBags and not settings.lock then self:RecalcWhenQuiet(page) else self:RenderPlan(page) end
+      local cached = self.homePlanCache[page.profKey]
+      local still = cached and cached.plan == page.plan and self.RouteBagsMatch(cached.bags)
+      if settings.useBags and not settings.lock and not still then self:RecalcWhenQuiet(page) else self:RenderPlan(page) end
     end
   end
 end

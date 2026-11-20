@@ -14,12 +14,15 @@ function ES:ClearHomeCache()
   -- quien las esperaba las vuelve a pedir: RefreshAllViews, RebuildMainFrame...)
   if self.Jobs and self.Jobs.Cancel then self.Jobs.Cancel("plan:") end
 end
--- Cuándo se rehace una ruta (solo la de esa profesión; se calcula cuando se ve):
---   cambian tus bolsas: solo las que usan lo de las bolsas y no tienen la ruta fijada
+-- Cuándo se rehace una ruta (solo la de esa profesión; se calcula al abrir su página,
+-- nunca en la portada):
+--   cambian tus bolsas: solo las que usan lo de las bolsas, sin fijar, y si cambió
+--     algún objeto que usa la ruta (ver ES:StorePlan, `bags`)
 --   aprendes una receta: solo la profesión cuyas recetas sabidas cambiaron (el
 --     instructor lanza TRAINER_UPDATE al mirar, sin aprender nada)
 --   subes de nivel: nada que borrar (el nivel va en la clave de la caché)
 --   escaneo nuevo: todas las no fijadas (su hora va en la clave; ES:RefreshAllViews)
+-- Lo mismo vale para la ruta guardada de otra sesión (ES:StableRouteKey).
 -- Las fijadas no se rehacen nunca: tienen sus recetas y precios guardados.
 local BAG_REFRESH_DELAY = 0.8 -- s sin cambios en las bolsas antes de repintar
 local knownCount = {} -- [profesión] = recetas sabidas la última vez que se miró
@@ -31,6 +34,7 @@ local function KnownCount(profKey)
   end
   return n
 end
+ES.KnownCount = KnownCount -- (la clave estable de la ruta: ES:KnownStamp)
 
 -- Profesiones del personaje cuyas recetas sabidas cambiaron: su ruta se rehace
 local function CheckLearned()
@@ -44,6 +48,7 @@ local function CheckLearned()
         changed = true
       end
       knownCount[prof.key] = n
+      ES.knownStamp[prof.key] = n
     end
   end
   return changed
@@ -78,11 +83,9 @@ do
     end
     -- Compras al vendedor, cosas sacadas del correo, fabricar...: la profesión
     -- abierta se actualiza (la lista de la compra dice cuántos tienes y cuántos
-    -- faltan). Llegan en ráfagas (una por objeto): se espera a que paren
-    for _, prof in ipairs(ES.PROFESSIONS) do
-      local settings = ES.db.prof and ES.db.prof[prof.key]
-      if settings and settings.useBags and not settings.lock then ES:InvalidatePlan(prof.key) end
-    end
+    -- faltan). Llegan en ráfagas (una por objeto): se espera a que paren. Las rutas
+    -- no se borran aquí: con "usar lo de las bolsas", cada una deja de valer sola si
+    -- cambió algún objeto que usa (antes, cualquier objeto rehacía la ruta)
     if ES.RefreshAfterBags then
       bagStamp = bagStamp + 1
       local stamp = bagStamp
@@ -446,17 +449,16 @@ local function ProfessionEntries()
   end
   -- Las tuyas primero; en cada sección, el orden fijo (el mismo que en Patterns)
   ES.SortProfessionCards(list)
-  -- Rutas: de la caché, o repartidas entre fotogramas (la tarjeta pone
-  -- "Calculando…" y se repinta al acabar). Solo las profesiones que tienes: las
-  -- demás (de 1 a 300, las más caras de calcular) se calculan al abrirlas, y la
-  -- tarjeta enseña esa ruta si sigue valiendo
+  -- Rutas: solo las que ya están (en la caché o guardadas de otra sesión) y siguen
+  -- valiendo. La portada no calcula ninguna: se calculan al abrir su profesión
+  -- (CurseForge: abrir el addon para otra cosa calculaba las rutas de todas las tuyas).
+  -- "Calculando…" si la está calculando su página
   for _, e in ipairs(list) do
     if e.from < e.target then
-      if e.learned then
-        e.plan, e.failed = ES:RequestPlan(e.key, e.from, e.target, e.cap, function() ES:RenderHome() end, "home")
-        e.pending = not e.plan and not e.failed
-      else
-        e.plan = ES:CachedPlan(e.key, e.from, e.target, e.cap)
+      e.plan = ES:CachedPlan(e.key, e.from, e.target, e.cap)
+      if not e.plan then
+        e.pending = ES:PlanProgress(e.key) ~= nil
+        e.failed = not e.pending and ES.planFailed[e.key] == ES:PlanKey(e.key, e.from, e.target, e.cap) or nil
       end
     end
   end
@@ -535,6 +537,8 @@ function ES:RenderHome()
       note = ORANGE .. L["El plan llega hasta "] .. plan.reached .. "|r"
     elseif not e.learned then
       note = GREY .. L["No la tienes|r"]
+    elseif not plan and e.from < e.target then
+      note = GREY .. L["Abrir para calcular|r"]
     elseif plan and not plan.scanTime then
       note = ORANGE .. L["Sin escaneo: precios de vendedor|r"]
     end

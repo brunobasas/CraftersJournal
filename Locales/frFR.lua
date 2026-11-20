@@ -515,6 +515,7 @@ ES.Locales.fr = {
   ["Faltan precios: escanea la AH|r"] = "Prix manquants : analysez l'HV|r",
   ["El plan llega hasta "] = "Le plan atteint",
   ["No la tienes|r"] = "Non appris|r",
+  ["Abrir para calcular|r"] = "Ouvrir pour calculer|r",
   ["Sin escaneo: precios de vendedor|r"] = "Pas d'analyse : prix des marchands|r",
   ["Al máximo"] = "Au maximum",
   ["Objetivo cumplido"] = "Objectif atteint",

@@ -321,6 +321,285 @@ test("con el pergamino en la AH, deja de ser motivo de parada", function()
   note("llega a %d", plan.reached)
 end)
 
+-- Cuándo se calcula la ruta (spec route-recalculation) ----------------------------
+-- CurseForge: "cada vez que abro el addon se calculan las rutas"
+
+-- Como al salir del juego y volver a entrar: lo guardado se queda, la memoria no
+local function Reload()
+  ES.homePlanCache, ES.lastRoutes, ES.lockedPlans, ES.planFailed, ES.knownStamp = {}, {}, {}, {}, {}
+  ES.planGen, ES.planGens = 0, {}
+end
+
+-- La ruta de la página de una profesión (nivel `from`, tope `cap`), ya calculada
+local function PageRoute(prof, from, cap)
+  SKILLS[ES.Data[prof].skillLine] = { from, cap }
+  OpenPage(prof)
+  local page = ProfessionPage(prof)
+  RunTimers()
+  local plan = expect(page.plan, "%s: la página no tiene ruta", prof)
+  expect(#plan.steps > 0, "%s: la ruta no tiene pasos: la prueba no prueba nada", prof)
+  return page, plan, page.detected and page.detected.cap
+end
+
+-- Búsquedas completas de ruta (el GPS) desde ahora. (Planner.passes no sirve para esto:
+-- cada cálculo en segundo plano lo pone a 0 para su barra de progreso)
+local function CountSearches()
+  local P, n = ES.Planner, 0
+  local gps = P.PlanGPS
+  P.PlanGPS = function(...) n = n + 1 return gps(...) end
+  return function() return n end
+end
+
+local function Card(prof)
+  for _, c in ipairs(ES.homePage and ES.homePage.cards or {}) do
+    if c.key == prof and c:IsShown() then return c end
+  end
+end
+local function Plain(s) return (tostring(s or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
+local OPEN_TO_CALC = Plain(ES.L["Abrir para calcular|r"])
+
+test("la portada no calcula rutas: dice «Abrir para calcular»", function()
+  SKILLS[ES.Data.Tailoring.skillLine] = { 50, 75 }
+  SKILLS[ES.Data.Leatherworking.skillLine] = { 60, 75 }
+  local passes, searches = ES.Planner.passes, CountSearches()
+  OpenPage("home")
+  expect_eq(ES.Planner.passes - passes, 0, "pasadas del planificador al abrir la portada")
+  expect_eq(searches(), 0, "rutas buscadas al abrir la portada")
+  expect(not ES.Jobs.Queued("plan:"), "hay rutas en cola al abrir la portada")
+  for _, prof in ipairs({ "Tailoring", "Leatherworking" }) do
+    local card = expect(Card(prof), "no hay tarjeta de %s", prof)
+    expect_eq(Plain(card.note:GetText()), OPEN_TO_CALC, "nota de la tarjeta de " .. prof)
+  end
+end, { state = "scan" })
+
+test("la portada enseña el coste de una ruta ya calculada sin calcularla", function()
+  local _, plan = PageRoute("Tailoring", 50, 75)
+  local passes, searches = ES.Planner.passes, CountSearches()
+  OpenPage("home")
+  expect_eq(ES.Planner.passes - passes, 0, "pasadas del planificador al abrir la portada")
+  expect_eq(searches(), 0, "rutas buscadas al abrir la portada")
+  local card = expect(Card("Tailoring"), "no hay tarjeta de Sastrería")
+  expect(Plain(card.note:GetText()) ~= OPEN_TO_CALC, "la tarjeta dice «%s» con la ruta calculada", OPEN_TO_CALC)
+  expect(Plain(card.cost:GetText()):find("%d"), "la tarjeta no enseña el coste: «%s»", Plain(card.cost:GetText()))
+  -- Tras recargar: la guardada, rehecha en una pasada
+  Reload()
+  passes = ES.Planner.passes
+  ES:RenderHome()
+  expect_eq(ES.Planner.passes - passes, 1, "pasadas para enseñar la ruta guardada")
+  expect_eq(searches(), 0, "rutas buscadas tras recargar")
+  expect(Plain(card.cost:GetText()):find("%d"), "tras recargar, la tarjeta no enseña el coste")
+  note("coste: %s (%.0f)", Plain(card.cost:GetText()), plan.net)
+end, { state = "scan" })
+
+test("volver a abrir una profesión ya calculada no la calcula", function()
+  PageRoute("Tailoring", 50, 75)
+  ES:HideMainFrame()
+  local searches = CountSearches()
+  OpenPage("Tailoring")
+  expect_eq(searches(), 0, "rutas buscadas al volver a abrirla")
+end, { state = "scan" })
+
+test("clave estable: cambia con las recetas sabidas, el instructor, el standing y la versión", function()
+  SKILLS[ES.Data.Tailoring.skillLine] = { 50, 75 }
+  SKILLS[ES.Data.Leatherworking.skillLine] = { 50, 75 }
+  local function K(prof) return ES:StableRouteKey(prof or "Tailoring", 50, 75, 75) end
+  local base, lw = K(), K("Leatherworking")
+  expect_eq(K(), base, "sin cambiar nada")
+  -- Recetas sabidas
+  for id, r in pairs(ES.Data.Tailoring.recipes) do
+    if r.fee and not KNOWN_SPELLS[id] then KNOWN_SPELLS[id] = true break end
+  end
+  ES.CheckLearned()
+  local known = K()
+  expect(known ~= base, "aprender una receta no cambia la clave")
+  -- Precios de instructor (solo los de esa profesión)
+  local recipes = {}
+  for id, r in pairs(ES.Data.Tailoring.recipes) do
+    if r.fee and #recipes < 2 then recipes[#recipes + 1] = { id = id, r = r } end
+  end
+  local services = {}
+  for i, x in ipairs(recipes) do
+    services[i] = { name = x.r.nameEN or x.r.name, kind = "available", cost = 4321 + i, skill = x.r.train or 1, spell = x.id }
+  end
+  GetNumTrainerServices = function() return #services end
+  GetTrainerServiceInfo = function(i) local s = services[i] return s.name, "", s.kind end
+  GetTrainerServiceCost = function(i) return services[i].cost end
+  GetTrainerServiceSkillReq = function(i) return "Tailoring", services[i].skill, true end
+  GetTrainerServiceSkillLine = function() return ES:ProfLabel("Tailoring") end
+  GetTrainerServiceItemLink = function() return nil end
+  GetTrainerServiceLink = function(i) return "|Hspell:" .. services[i].spell .. "|h[x]|h" end
+  GetTrainerServiceTypeFilter = function() return true end
+  SetTrainerServiceTypeFilter = function() end
+  FireEvent("TRAINER_SHOW")
+  RunTimers()
+  FireEvent("TRAINER_CLOSED")
+  RunTimers()
+  local trainer = K()
+  expect(trainer ~= known, "un precio de instructor nuevo no cambia la clave")
+  expect_eq(K("Leatherworking"), lw, "clave de Peletería tras el instructor de Sastrería")
+  -- Standing con las facciones que dan recetas
+  local standing = ES.Standing
+  ES.Standing = function() return 8 end
+  expect(K() ~= trainer, "cambiar el standing no cambia la clave")
+  ES.Standing = standing
+  expect_eq(K(), trainer, "con el standing de antes")
+  -- Versión del addon
+  GetAddOnMetadata = function(_, field) if field == "Version" then return "99.0.0" end end
+  expect(K() ~= trainer, "otra versión del addon no cambia la clave")
+end, { state = "scan" })
+
+test("ruta guardada: tras recargar se rehace en una pasada, con las mismas recetas y coste", function()
+  local _, plan, cap = PageRoute("Tailoring", 150, 225)
+  local saved = expect(ES.db.prof.Tailoring.lastRoute, "no se guardó la ruta")
+  expect_eq(saved.key, ES:StableRouteKey("Tailoring", plan.from, plan.to, cap), "clave guardada")
+  Reload()
+  local passes = ES.Planner.passes
+  local again = expect(ES:CachedPlan("Tailoring", plan.from, plan.to, cap), "tras recargar no se usa la ruta guardada")
+  expect_eq(ES.Planner.passes - passes, 1, "pasadas del planificador para rehacerla")
+  expect_eq(#again.steps, #plan.steps, "pasos")
+  for i, s in ipairs(plan.steps) do
+    expect_eq(again.steps[i].id, s.id, "receta del paso " .. i)
+  end
+  expect_near(again.net, plan.net, 1, "coste")
+  -- Y la página la enseña sin buscarla
+  Reload()
+  ES:HideMainFrame()
+  local searches = CountSearches()
+  OpenPage("Tailoring")
+  expect(ProfessionPage("Tailoring").plan, "la página no tiene ruta tras recargar")
+  expect_eq(searches(), 0, "rutas buscadas al abrir la página tras recargar")
+end, { state = "scan" })
+
+test("ruta guardada: no se guarda si faltaban precios de vendedor", function()
+  ES:StorePlan("Cooking", "k", "stable", { choice = { [1] = 2538 }, reached = 2, steps = {}, pendingItems = { [159] = true } })
+  expect(not (ES.db.prof.Cooking and ES.db.prof.Cooking.lastRoute), "se guardó una ruta con precios pendientes")
+  ES:StorePlan("Cooking", "k", "stable", { choice = { [1] = 2538 }, reached = 2, steps = {} })
+  expect(ES.db.prof.Cooking.lastRoute, "no se guardó una ruta completa")
+end, { state = "scan" })
+
+test("ruta guardada que no se puede rehacer: se descarta y se calcula", function()
+  local _, plan, cap = PageRoute("Tailoring", 50, 75)
+  local saved = ES.db.prof.Tailoring.lastRoute
+  saved.choice[plan.from] = 999999 -- (una receta que ya no está en los datos)
+  Reload()
+  expect(ES:CachedPlan("Tailoring", plan.from, plan.to, cap) == nil, "se usó una ruta guardada que no se puede rehacer")
+  expect(ES.db.prof.Tailoring.lastRoute == nil, "la ruta guardada que no vale sigue guardada")
+  ES:RequestPlan("Tailoring", plan.from, plan.to, cap)
+  RunTimers()
+  local again = expect(ES:CachedPlan("Tailoring", plan.from, plan.to, cap), "no se calcula una ruta nueva")
+  expect(#again.steps > 0, "la ruta nueva no tiene pasos")
+  expect(ES.db.prof.Tailoring.lastRoute, "no se guardó la ruta nueva")
+end, { state = "scan" })
+
+test("ruta guardada: deja de valer con escaneo nuevo, receta aprendida, otro nivel u otra versión", function()
+  local _, plan, cap = PageRoute("Tailoring", 50, 75)
+  local saved = ES.db.prof.Tailoring.lastRoute
+  local function Reused(from)
+    Reload()
+    ES.db.prof.Tailoring.lastRoute = saved
+    return ES:CachedPlan("Tailoring", from or plan.from, plan.to, cap) ~= nil
+  end
+  expect(Reused(), "sin cambios no se reutiliza")
+  -- Subir de nivel
+  expect(not Reused(plan.from + 1), "se reutiliza la ruta de %d para %d", plan.from, plan.from + 1)
+  -- Escaneo nuevo
+  local scan = ES.db.scans[ES:RealmKey()]
+  scan.time = scan.time + 60
+  expect(not Reused(), "se reutiliza tras un escaneo nuevo")
+  scan.time = scan.time - 60
+  expect(Reused(), "con el escaneo de antes no se reutiliza")
+  -- Receta aprendida entre sesiones
+  local learned
+  for id, r in pairs(ES.Data.Tailoring.recipes) do
+    if r.fee and not KNOWN_SPELLS[id] then learned = id break end
+  end
+  KNOWN_SPELLS[learned] = true
+  expect(not Reused(), "se reutiliza tras aprender una receta")
+  KNOWN_SPELLS[learned] = nil
+  -- Versión nueva del addon
+  GetAddOnMetadata = function(_, field) if field == "Version" then return "99.0.0" end end
+  expect(not Reused(), "se reutiliza con otra versión del addon")
+end, { state = "scan" })
+
+test("ruta guardada que ya no vale: sirve de pista y no hace buscar más", function()
+  local _, plan = PageRoute("Tailoring", 150, 225)
+  local scan = ES.db.scans[ES:RealmKey()]
+  scan.time = scan.time + 60 -- (la guardada ya no vale tal cual)
+  Reload()
+  local passes = ES.Planner.passes
+  PlanRoute("Tailoring", plan.from, plan.to)
+  local withHint = ES.Planner.passes - passes
+  Reload()
+  ES.db.prof.Tailoring.lastRoute = nil
+  passes = ES.Planner.passes
+  PlanRoute("Tailoring", plan.from, plan.to)
+  local without = ES.Planner.passes - passes
+  note("pasadas con la pista: %d · sin ella: %d", withHint, without)
+  expect(withHint <= without, "con la pista guardada busca más (%d pasadas) que sin ella (%d)", withHint, without)
+end, { state = "scan" })
+
+-- Con "usar lo de las bolsas": solo los objetos de la ruta la invalidan
+local function BagRoute(prof, from, cap)
+  ES.db.prof[prof] = ES.db.prof[prof] or {}
+  ES.db.prof[prof].useBags = true
+  return PageRoute(prof, from, cap)
+end
+
+test("bolsas: lootear un objeto que la ruta no usa no la recalcula", function()
+  local page, plan = BagRoute("Tailoring", 50, 75)
+  local items = ES.RouteItems(plan)
+  local other = 999001
+  expect(not items[other], "el objeto de prueba está en la ruta")
+  local searches = CountSearches()
+  BAGS[other] = 5
+  FireEvent("BAG_UPDATE_DELAYED")
+  RunTimers()
+  expect_eq(searches(), 0, "rutas buscadas tras lootear otra cosa")
+  expect(page.plan == plan, "la ruta de la página cambió")
+end, { state = "scan" })
+
+test("bolsas: cambiar un material de la ruta la invalida solo en su profesión", function()
+  local _, lwPlan, lwCap = BagRoute("Leatherworking", 50, 75)
+  local lwItems = ES.RouteItems(lwPlan)
+  local page, plan = BagRoute("Tailoring", 50, 75)
+  local item
+  for id in pairs(ES.RouteItems(plan)) do
+    if not lwItems[id] then item = id break end
+  end
+  expect(item, "todos los objetos de Sastrería están en la ruta de Peletería: la prueba no prueba nada")
+  local searches = CountSearches()
+  BAGS[item] = (BAGS[item] or 0) + 3
+  FireEvent("BAG_UPDATE_DELAYED")
+  RunTimers()
+  expect_eq(searches(), 1, "rutas buscadas tras conseguir " .. item .. " (de la ruta de Sastrería)")
+  expect(page.plan ~= plan, "la página sigue con la ruta de antes")
+  expect(ES:CachedPlan("Leatherworking", lwPlan.from, lwPlan.to, lwCap) == lwPlan, "la ruta de Peletería dejó de valer")
+end, { state = "scan" })
+
+test("bolsas: con la opción desactivada, nada de las bolsas invalida la ruta", function()
+  local page, plan = PageRoute("Tailoring", 50, 75)
+  expect(not ES.db.prof.Tailoring.useBags, "la opción está activada: la prueba no prueba nada")
+  local item = next(ES.RouteItems(plan))
+  local searches = CountSearches()
+  BAGS[item] = (BAGS[item] or 0) + 3
+  FireEvent("BAG_UPDATE_DELAYED")
+  RunTimers()
+  expect_eq(searches(), 0, "rutas buscadas tras cambiar un material de la ruta")
+  expect(page.plan == plan, "la ruta de la página cambió")
+end, { state = "scan" })
+
+test("bolsas: la ruta guardada no vale si al entrar llevas otra cantidad de un material suyo", function()
+  local _, plan, cap = BagRoute("Tailoring", 50, 75)
+  local saved = expect(ES.db.prof.Tailoring.lastRoute, "no se guardó la ruta")
+  expect(saved.bags, "la ruta guardada no apunta lo que llevabas")
+  Reload()
+  expect(ES:CachedPlan("Tailoring", plan.from, plan.to, cap), "con lo mismo en las bolsas no se reutiliza")
+  local item = next(saved.bags)
+  BAGS[item] = (BAGS[item] or 0) + 3
+  Reload()
+  expect(ES:CachedPlan("Tailoring", plan.from, plan.to, cap) == nil, "se reutiliza con otra cantidad de %d", item)
+end, { state = "scan" })
+
 test("la comprobación de rutas detecta un nivel que baja", function()
   local plan = PlanRoute("FirstAid", 1, 75)
   expect(#plan.steps >= 2, "la ruta de prueba tiene pocos pasos")
