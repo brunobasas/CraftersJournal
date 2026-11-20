@@ -1,7 +1,9 @@
 local _, ES = ...
 local L = ES.L
 
--- Escaneo completo de la AH. Soporta dos APIs:
+-- Escaneo completo de la AH. El addon no lo pide: lo pide Auctionator (el botón
+-- Escanear lanza el suyo) u otro addon, y el addon lee esas mismas subastas cuando
+-- llegan, con cualquiera de las dos APIs:
 --  * Clásica: QueryAuctionItems(getAll) + AUCTION_ITEM_LIST_UPDATE
 --  * Moderna: C_AuctionHouse.ReplicateItems + REPLICATE_ITEM_LIST_UPDATE
 -- Ambas devuelven los mismos campos en el mismo orden por subasta.
@@ -21,12 +23,14 @@ local SERVER_LIMIT = 15 * 60
 
 -- Límite del servidor: el de Forever no responde a un escaneo completo si el
 -- anterior fue hace menos de 15 min, aunque el cliente diga que se puede. Así que
--- se cuentan 15 min desde cada petición y el botón muestra la cuenta atrás: mejor
--- esperar viendo el tiempo que pulsar y que no pase nada.
--- El límite es de la CUENTA, no del personaje: un escaneo con un personaje (o el de
--- otro addon, como el automático de ForeverForge_Auction) gasta el de todos.
--- CraftersJournalDB.lastFullScan[personaje u "otro addon"] = hora de la última petición;
--- cuenta la más reciente de todas.
+-- se cuentan 15 min desde cada petición (la de Auctionator o la de otro addon, que
+-- ve el gancho: OnForeignScan) y el botón muestra la cuenta atrás: mejor esperar
+-- viendo el tiempo que pulsar y que no pase nada.
+-- El límite es de la CUENTA, no del personaje: un escaneo con un personaje gasta el
+-- de todos.
+-- CraftersJournalDB.lastFullScan["otro addon"] = hora de la última petición (de
+-- versiones anteriores, cuando el addon escaneaba por su cuenta, puede haber también
+-- una por personaje); cuenta la más reciente de todas.
 local OTHER_ADDON = "otro addon"
 local function LastFullScan()
   if type(ES.db.lastFullScan) ~= "table" then ES.db.lastFullScan = {} end
@@ -49,6 +53,7 @@ end
 
 local frame = CreateFrame("Frame")
 
+-- (qué API seguir si no hay ganchos, ver StartWithAuctionator)
 local function UseLegacyAPI()
   return QueryAuctionItems ~= nil
 end
@@ -72,24 +77,6 @@ local function SetProgress(p)
   if ES.OnScanProgress then ES:OnScanProgress(p) end
 end
 
--- Silencia a otros frames (la UI de Blizzard, otros addons) mientras llega el
--- getAll: intentar pintar decenas de miles de subastas congela el juego.
-function Scanner:MuteOthers(event)
-  self.muted = { GetFramesRegisteredForEvent(event) }
-  self.mutedEvent = event
-  for _, f in ipairs(self.muted) do
-    if f ~= frame then f:UnregisterEvent(event) end
-  end
-end
-
-function Scanner:UnmuteOthers()
-  if not self.muted then return end
-  for _, f in ipairs(self.muted) do
-    if f ~= frame then f:RegisterEvent(self.mutedEvent) end
-  end
-  self.muted, self.mutedEvent = nil, nil
-end
-
 function Scanner:Start()
   if self:IsBusy() then
     ES:Print(L["Ya hay un escaneo en curso."])
@@ -109,72 +96,92 @@ function Scanner:Start()
     return
   end
 
-  local api
-  if UseLegacyAPI() then
-    local _, canGetAll = CanSendAuctionQuery()
-    if not canGetAll then
-      local msg = L["El servidor aún no permite un escaneo completo (quizá otro addon escaneó hace poco). Inténtalo más tarde."]
-      ES:Print(msg)
-      SetStatus(msg)
-      return
-    end
-    api = "legacy"
-  elseif C_AuctionHouse and C_AuctionHouse.ReplicateItems then
-    api = "modern"
-  else
-    ES:Print(L["No se encontró ninguna API de subastas compatible en este cliente."])
+  -- El escaneo lo pide Auctionator y el addon lee esos mismos datos: un solo escaneo
+  -- para los dos (el servidor solo deja uno cada 15 min, y si escanean los dos uno se
+  -- queda sin respuesta), y Auctionator guarda su historial de precios, el que usa la
+  -- pestaña Inversiones. Sin Auctionator no se escanea (el addon ya no pide el suyo)
+  local problem = Scanner.AuctionatorProblem()
+  if problem then
+    ES:Print(problem)
+    SetStatus(problem)
     return
   end
-  self:Begin(api)
+  self:StartWithAuctionator(Scanner.AuctionatorFrame())
 end
 
--- Pide los datos al servidor y empieza a esperarlos. Con `follow`, no pide nada:
--- otro addon acaba de pedir el escaneo completo y se leen los mismos datos cuando
--- lleguen (ver OnForeignScan)
-function Scanner:Begin(api, follow, before)
+---------------------------------------------------------------------------
+-- Escanear con Auctionator. Su escaneo completo es el que lanza su botón Escanear
+-- (Auctionator.State.FullScanFrameRef:InitiateScan; el marco lo crea al abrir la AH).
+-- El gancho de QueryAuctionItems / ReplicateItems (OnForeignScan) lo sigue y lee esos
+-- datos para todo el addon, como el escaneo de cualquier otro addon
+---------------------------------------------------------------------------
+function Scanner.AuctionatorFrame()
+  local st = Auctionator and Auctionator.State
+  local f = type(st) == "table" and st.FullScanFrameRef
+  if type(f) == "table" and type(f.InitiateScan) == "function" then return f end
+end
+
+-- ¿Auctionator aún no deja otro escaneo? (su propia cuenta atrás, o ya escaneando)
+function Scanner.AuctionatorWaits()
+  local f = Scanner.AuctionatorFrame()
+  if not f or type(f.CanInitiate) ~= "function" then return false end
+  local ok, can = pcall(f.CanInitiate, f)
+  return ok and not can
+end
+
+-- ¿Qué falta en Auctionator para poder escanear? nil si nada (la AH abierta y el
+-- límite de 15 min se miran aparte)
+function Scanner.AuctionatorProblem()
+  if type(Auctionator) ~= "table" then
+    return L["Instala Auctionator para escanear la AH: el addon lee su escaneo completo."]
+  elseif not Scanner.AuctionatorFrame() then
+    -- (su marco de escaneo lo crea al abrirse la AH)
+    return L["Auctionator aún no está listo para escanear: espera un momento o vuelve a abrir la AH."]
+  elseif Scanner.AuctionatorWaits() then
+    return L["Auctionator aún no deja otro escaneo completo: espera a que acabe su cuenta atrás."]
+  end
+end
+
+function Scanner:StartWithAuctionator(f)
+  ES:ScanLog("escaneo con Auctionator")
+  -- (el gancho sigue su escaneo en cuanto lo pide; launchingAuctionator: es tu escaneo,
+  -- con sus mensajes en el chat)
+  self.launchingAuctionator = true
+  local ok, err = pcall(f.InitiateScan, f)
+  -- Sin ganchos (hooksecurefunc no está), se sigue a mano
+  if ok and not self:IsBusy() then self:OnForeignScan(UseLegacyAPI() and "legacy" or "modern") end
+  self.launchingAuctionator = nil
+  if not ok then ES:RecordError("scan", err) end
+  ES:RefreshScanButtons()
+end
+
+-- Empieza a esperar los datos del escaneo completo que acaba de pedir Auctionator u
+-- otro addon, para leerlos cuando lleguen (ver OnForeignScan). No pide nada ni silencia
+-- a nadie: ese addon necesita su evento. `before`: las subastas que había cuando lo pidió
+function Scanner:Begin(api, before)
   self.api = api
   self.event = api == "legacy" and "AUCTION_ITEM_LIST_UPDATE" or "REPLICATE_ITEM_LIST_UPDATE"
-  self.follow = follow or nil
+  self.follow = true
+  -- (el escaneo de Auctionator que pediste con Escanear: es tu escaneo)
+  self.viaAuctionator = self.launchingAuctionator or nil
 
-  ES:ScanLog((follow and "leyendo el escaneo de otro addon, API " or "pedido, API ") .. self.api)
+  ES:ScanLog((self.viaAuctionator and "leyendo el escaneo de Auctionator, API "
+    or "leyendo el escaneo de otro addon, API ") .. self.api)
   self.state = "waiting"
   self.scanID = (self.scanID or 0) + 1
   self.key = ES:RealmKey() -- AH en la que empezó el escaneo
   self.requestTime = time()
   self.waited = 0
   self.gotEvent = false
-  if not follow then
-    -- La barrera cuenta desde la petición: el servidor la cuenta aunque no responda
-    -- (la del otro addon ya la anotó OnForeignScan)
-    LastFullScan()[ES:CharKey()] = self.requestTime
-    -- Siguiendo a otro addon no se silencia a nadie: ese addon necesita su evento
-    self:MuteOthers(self.event)
-  end
   ES.SafeRegister(frame, self.event) -- si no existe, el sondeo de cada segundo detecta los datos igual
   ES:RefreshScanButtons()
   SetProgress(WAIT_PROGRESS)
 
-  -- (siguiendo a otro addon, lo que había cuando lo pidió: lo anota OnForeignScan)
   before = before or self:CountResults()
-
-  if not follow then
-    self.ownRequest = true -- para que el gancho no lo tome por otro addon
-    if self.api == "legacy" then
-      -- Evita un error conocido de la UI clásica con calidad -1
-      if ITEM_QUALITY_COLORS and not ITEM_QUALITY_COLORS[-1] then
-        ITEM_QUALITY_COLORS[-1] = { r = 0, g = 0, b = 0 }
-      end
-      pcall(QueryAuctionItems, "", nil, nil, 0, nil, nil, true, false, nil)
-    else
-      pcall(C_AuctionHouse.ReplicateItems)
-    end
-    self.ownRequest = false
-  end
 
   -- Contador visible + sondeo por si el evento no llega
   local id = self.scanID
   local started = GetTime()
-  local apiName = self.api == "legacy" and L["clásica"] or L["moderna"]
   local lastCount, stableTicks, changed = before, 0, false
 
   local function Tick()
@@ -214,8 +221,8 @@ function Scanner:Begin(api, follow, before)
     end
     lastCount = count
 
-    SetStatus(self.follow and string.format(L["Leyendo el escaneo que pidió otro addon... %d s"], elapsed)
-      or string.format(L["Pidiendo los datos de la AH al servidor... %d s (API %s, /es cancel para cancelar)"], elapsed, apiName))
+    SetStatus(self.viaAuctionator and string.format(L["Escaneando con Auctionator... %d s"], elapsed)
+      or string.format(L["Leyendo el escaneo que pidió otro addon... %d s"], elapsed))
     C_Timer.After(1, Tick)
   end
   Tick()
@@ -232,10 +239,9 @@ function Scanner:Abort(reason)
   -- (guardando lo ya leído, ver Finish: no hace falta la AH y se termina)
   if not self:IsBusy() or self.state == "saving" then return end
   frame:UnregisterAllEvents()
-  self:UnmuteOthers()
   self.state = "idle"
   self.scanID = (self.scanID or 0) + 1 -- invalida lotes pendientes
-  if self.follow then
+  if self.follow and not self.viaAuctionator then
     -- Leyendo el escaneo de otro addon: no lo pediste tú, así que ni aviso en el chat
     -- ni "Cancelado" junto al último escaneo; solo el estado y el registro
     self.follow = nil
@@ -248,6 +254,7 @@ function Scanner:Abort(reason)
   -- (si no, "hace 2 días" parece un fallo al guardar)
   if type(ES.db.lastScanFail) ~= "table" then ES.db.lastScanFail = {} end
   ES.db.lastScanFail[self.key or ES:RealmKey()] = { time = time(), reason = reason }
+  self.follow, self.viaAuctionator = nil, nil
   if reason then
     ES:Print(reason)
     SetStatus(reason)
@@ -411,8 +418,6 @@ end
 -- escanea ni se anuncia con los precios de antes) pero cerrar la AH no lo cancela,
 -- los datos ya están leídos
 function Scanner:Finish(items, sigs, total)
-  self:UnmuteOthers()
-
   -- Un escaneo vacío es un fallo del servidor: guardarlo borraría los precios
   -- buenos y haría creer que todo se ha vendido
   if total == 0 then
@@ -496,35 +501,35 @@ function Scanner:Save(saved, unique, knownOwners, sigs, total)
 
   local msg = string.format(L["Escaneo completado: %d subastas, %d objetos distintos."], total, unique)
   local followed = self.follow
-  if followed then msg = msg .. L[" (con el escaneo que pidió otro addon)"] end
-  self.follow = nil
-  if scans < 3 and not followed then
+  local viaAuctionator = self.viaAuctionator
+  if viaAuctionator then
+    msg = msg .. L[" (con el escaneo de Auctionator)"]
+  elseif followed then
+    msg = msg .. L[" (con el escaneo que pidió otro addon)"]
+  end
+  self.follow, self.viaAuctionator = nil, nil
+  if scans < 3 and viaAuctionator then
     msg = msg .. L[" Las alertas de mercado necesitan unos días de escaneos: con 1-2 al día basta."]
   end
-  -- El escaneo de otro addon (ForeverForge, cada vez que abres la AH) no escribe en el
-  -- chat: se repetía en cada visita. Se ve en "Último escaneo: hace 0 min" y el estado
-  if not followed then ES:Print(msg) end
+  -- El escaneo de otro addon (el automático de Auctionator o de ForeverForge, cada vez
+  -- que abres la AH) no escribe en el chat: se repetía en cada visita. Se ve en "Último
+  -- escaneo: hace 0 min" y el estado. El de Auctionator que pediste con Escanear, sí
+  if viaAuctionator then ES:Print(msg) end
   SetStatus(msg)
   ES:RefreshScanButtons()
   ES:OnScanComplete(scan, followed)
 end
 
--- Otro addon (ForeverForge_Auction escanea solo al abrir la AH, Auctionator, TSM...)
--- pide un escaneo completo: gasta los 15 min de la cuenta. Se anota la barrera (el
--- botón muestra la cuenta atrás real) y se leen esos mismos datos cuando lleguen
--- (Begin con follow): si ese addon se adelanta siempre al abrir la AH, Crafter's
--- Journal no podría escanear nunca. Sin otro addon, se escanea solo al pulsar
--- Escanear: Crafter's Journal nunca pide un escaneo por su cuenta.
+-- Auctionator (con su botón, el de Crafter's Journal o su escaneo automático),
+-- ForeverForge_Auction, TSM... piden un escaneo completo: gasta los 15 min de la
+-- cuenta. Se anota la barrera (el botón muestra la cuenta atrás real) y se leen esos
+-- mismos datos cuando lleguen (Begin): es la única forma de tener los precios de la
+-- AH, Crafter's Journal nunca pide un escaneo por su cuenta
 function Scanner:OnForeignScan(api)
-  if self.ownRequest or not ES.db then return end
+  if not ES.db then return end
   LastFullScan()[OTHER_ADDON] = time()
   ES:ScanLog("otro addon pidió un escaneo completo (API " .. api .. ")")
-  -- Opción "Leer los escaneos de otros addons" desactivada (ES.db.noForeignScans,
-  -- Options.lua): no se lee, pero la barrera de 15 min sí se anota (arriba): si no,
-  -- el botón diría Escanear y el servidor no respondería
-  local read = not ES.db.noForeignScans
-  if not read then ES:ScanLog("no se lee: opción desactivada") end
-  if read and not self:IsBusy() then
+  if not self:IsBusy() then
     -- Lo que hay ahora, antes de que lleguen los datos nuevos (para no tomar por
     -- nuevas las subastas de un escaneo anterior)
     local saved = self.api
@@ -536,7 +541,7 @@ function Scanner:OnForeignScan(api)
     -- abierta: se mira otra vez un momento después)
     local function Follow()
       if self:IsBusy() then return end
-      if ES:IsAuctionHouseOpen() then self:Begin(api, true, before) end
+      if ES:IsAuctionHouseOpen() then self:Begin(api, before) end
     end
     if ES:IsAuctionHouseOpen() then Follow() return end
     C_Timer.After(0.3, Follow)

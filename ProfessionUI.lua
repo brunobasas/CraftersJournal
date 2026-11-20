@@ -227,9 +227,32 @@ local function ListPanel(page, anchor, gap)
   return list
 end
 
+-- La paleta de las filas de las rutas: fondo marrón de fila, borde fino ocre, brillo
+-- dorado suave al pasar el ratón y la línea secundaria en beige apagado. La usan las
+-- fichas y la lista de Inversiones y la categoría Pestañas de las opciones. Quien la
+-- use pone el borde ROW_BORDER_HOVER al entrar el ratón y ROW_BORDER al salir
+local ROW_BORDER, ROW_BORDER_HOVER = { 0.40, 0.29, 0.13, 1 }, { 0.80, 0.62, 0.26, 1 }
+local SUB_COLOR = { 0.75, 0.72, 0.65 }
+local function RowStyle(frame)
+  frame:SetBackdrop({
+    bgFile = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 10,
+    insets = { left = 2, right = 2, top = 2, bottom = 2 },
+  })
+  local B = BROWN.row
+  frame:SetBackdropColor(B[1], B[2], B[3], B[4])
+  frame:SetBackdropBorderColor(unpack(ROW_BORDER))
+  local hl = frame:CreateTexture(nil, "HIGHLIGHT")
+  hl:SetPoint("TOPLEFT", 2, -2)
+  hl:SetPoint("BOTTOMRIGHT", -2, 2)
+  hl:SetColorTexture(1, 0.82, 0.25, 0.08)
+end
+
 ES.UI = { Label = Label, CheckBox = CheckBox, ItemLabel = ItemLabel, Panel = Panel, WheelScroll = WheelScroll,
   ScrollIndicator = ScrollIndicator,
-  BROWN = BROWN, GroupPanel = GroupPanel, PAD = PAD, CardHead = CardHead, ListPanel = ListPanel }
+  BROWN = BROWN, GroupPanel = GroupPanel, PAD = PAD, CardHead = CardHead, ListPanel = ListPanel,
+  RowStyle = RowStyle, ROW_BORDER = ROW_BORDER, ROW_BORDER_HOVER = ROW_BORDER_HOVER, SUB_COLOR = SUB_COLOR }
 
 -- Objetivo de una profesión (editable en su detalle). Por defecto, el final del tope
 -- en el que estás: 150 si tienes menos de 150, 225 hasta 224 y si no 300 (antes era tu
@@ -2780,12 +2803,24 @@ end
 -- Qué filas de compra salen: { { source, items } }. Orden: banco (lo tuyo, gratis),
 -- AH, vendedor. En la AH, una fila por material (el clic abre la compra de ese; con
 -- todos en una, el clic siempre abría el primero y el asistente no llegaba al
--- segundo). El banco y el vendedor, en una: su clic ya lo saca o lo compra todo
+-- segundo). El banco, en una: su clic ya lo saca todo. El vendedor, una por cada grupo
+-- que vende entero un mismo vendedor (WP.VendorGroups; Discord: la de Mild Spices y
+-- Bottle of Dalaran Noir llevaba a Barkeep Morag, que solo vende el Bottle)
 local function BuyGroups(buy)
   local groups = {}
   for _, source in ipairs({ "bank", "ah", "vendor" }) do
     if source == "ah" then
       for _, it in ipairs(buy.ah) do groups[#groups + 1] = { source, { it } } end
+    elseif source == "vendor" and buy.vendor[1] and WP and WP.VendorGroups then
+      local byID, ids = {}, {}
+      for _, it in ipairs(buy.vendor) do
+        if not byID[it.itemID] then byID[it.itemID] = it ids[#ids + 1] = it.itemID end
+      end
+      for _, g in ipairs(WP.VendorGroups(ids)) do
+        local items = {}
+        for _, id in ipairs(g) do items[#items + 1] = byID[id] end
+        groups[#groups + 1] = { source, items }
+      end
     elseif buy[source][1] then
       groups[#groups + 1] = { source, buy[source] }
     end
@@ -2998,13 +3033,21 @@ local function AddBuyLines(lines, plan, page, level)
     -- por el chat, el banco de hermandad, un alter...). La fila queda como hecha
     -- ("Saltado"): con ◀ se vuelve a ella y "Recuperar" la devuelve. Cada fila de la AH
     -- es un material: se salta solo ese. Se olvida al cambiar de tramo o de sesión
-    local gkey = source == "ah" and ("ah:" .. items[1].itemID) or source
-    local had = visits and visits.had and visits.had[gkey]
+    -- (el vendedor, por material: hay una fila por grupo de WP.VendorGroups, y saltar
+    -- una no salta las demás ni se pierde si los grupos cambian)
+    local gkeys = {}
+    if source == "vendor" then
+      for _, it in ipairs(items) do gkeys[#gkeys + 1] = "vendor:" .. it.itemID end
+    else
+      gkeys[1] = source == "ah" and ("ah:" .. items[1].itemID) or source
+    end
+    local had = visits and visits.had and true or false
+    for _, k in ipairs(gkeys) do had = had and visits.had[k] and true or false end
     local function SetHad(on)
       local v = ES.routeBuyVisits[profKey]
       if not v or v.key ~= key then v = { key = key } ES.routeBuyVisits[profKey] = v end
       v.had = v.had or {}
-      v.had[gkey] = on or nil
+      for _, k in ipairs(gkeys) do v.had[k] = on or nil end
     end
     if had then
       local line = BuyLine(source, items, buy, level, nil, profKey)
@@ -3013,7 +3056,15 @@ local function AddBuyLines(lines, plan, page, level)
       line.unmarkHave = function() SetHad(false) end
       new[#new + 1] = line
     else
+      -- (el vendedor: visitada si cerraste uno que vendía algo de esta fila; ver el
+      -- manejador de MERCHANT_CLOSED, vendorSeen)
       local visited = visits and visits[source]
+      if source == "vendor" then
+        visited = false
+        for _, it in ipairs(items) do
+          if visits and visits.vendorSeen and visits.vendorSeen[it.itemID] then visited = true end
+        end
+      end
       local line = BuyLine(source, items, buy, level, visited, profKey)
       if source ~= "bank" then line.markHave = function() SetHad(true) end end
       -- Con la lista de la ruta entera, la compra es la de toda la ruta: se dice
@@ -3208,7 +3259,16 @@ do
           local key = VisitKey(p.key, buy.phase)
           local v = ES.routeBuyVisits[p.key]
           if not v or v.key ~= key then v = { key = key } ES.routeBuyVisits[p.key] = v end
-          v[source] = true
+          if source == "vendor" then
+            -- Por material: solo lo que vendía este vendedor (cerrar a Barkeep Morag, que
+            -- vende el Bottle, no da por visitada la fila de las Mild Spices)
+            v.vendorSeen = v.vendorSeen or {}
+            for _, it in ipairs(buy.vendor) do
+              if ES.buyTried.sells[it.itemID] then v.vendorSeen[it.itemID] = true end
+            end
+          else
+            v[source] = true
+          end
         end
       end
     end

@@ -123,6 +123,15 @@ GetAuctionItemInfo = function(_, i) local a = AUCTIONS[i] if not a then return e
   return nil, nil, a.count, 1, true, 1, nil, 0, 0, a.buyout, 0, nil, nil, a.owner, a.owner, 0, a.item, true end
 GetAuctionItemTimeLeft = function(_, i) return AUCTIONS[i] and AUCTIONS[i].tl end
 AuctionFrame = Mock("AuctionFrame")
+-- Auctionator simulado: el addon escanea con su escaneo completo (Scanner.lua), que
+-- pide el escaneo con la API que haya, como el de verdad
+Auctionator = { State = { FullScanFrameRef = {
+  InitiateScan = function()
+    if QueryAuctionItems then QueryAuctionItems("", nil, nil, 0, nil, nil, true, false, nil)
+    else C_AuctionHouse.ReplicateItems() end
+  end,
+  CanInitiate = function() return true end,
+} } }
 """)
 
 lua.execute(SV.read_text(encoding="utf-8"))

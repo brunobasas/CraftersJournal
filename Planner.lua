@@ -1061,6 +1061,9 @@ local function LadderCost(ladder, used, qty)
   return nil
 end
 
+-- (también la Calculadora: el coste de los materiales de la AH, subiendo por la escalera)
+Planner.Ladder, Planner.LadderSupply, Planner.LadderCost = Ladder, LadderSupply, LadderCost
+
 local function NewContext(data, opts)
   Annotate(data)
   local scan = ES.db.scans[ES:RealmKey()]
@@ -1263,6 +1266,12 @@ local function Acquire(ctx, itemID, qty, depth, extra, actions, why, skip)
       local r = ctx.data.recipes[rid]
       local crafts = qty / r.out[2]
       local subExtra, subActions, total = Copy(extra), {}, 0
+      -- Con enfriamiento (Mooncloth, transmutaciones: Planner.Cooldown) no se fabrica lo
+      -- que se puede comprar: es una cada pocos días. La Mooncloth salía a 93s (2
+      -- Felcloth) en vez de los 60g de la AH, y la Mooncloth Bag con 47g de beneficio
+      -- (Calculadora: Calc.DefaultMode). Si no se puede comprar, se fabrica igual
+      if best and Planner.Cooldown(r, rid) then
+        total = nil
       -- Una receta que aún da puntos a tu nivel (Rough Blasting Powder a 1) no se
       -- fabrica a escondidas como preparación: la ruta diría "fabrica 133 a nivel 1" y
       -- esas fabricaciones subirían la profesión sin contar. Tiene que ser un paso de la
@@ -1275,7 +1284,7 @@ local function Acquire(ctx, itemID, qty, depth, extra, actions, why, skip)
       -- mitad de ese paso pediría fabricar algo que sube puntos (los tornillos de las
       -- bombas). Si ya está en gris al empezarlo, se fabrica ahí como preparación, no
       -- todo de golpe en un paso de hace 100 niveles (el Light Leather de las botas)
-      if ctx.skill and ctx.made and ctx.made[rid]
+      elseif ctx.skill and ctx.made and ctx.made[rid]
         and Planner.Chance(r.t, ctx.stepStart or ctx.skill) > 0 then
         ahead = rid
       elseif ctx.skill and not r.intermediate and not r.conversion and Planner.Chance(r.t, ctx.skill) > 0 then

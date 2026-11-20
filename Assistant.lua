@@ -1724,9 +1724,9 @@ A.SetBankOpen = function(v) bankOpen = v end -- (para pruebas)
 function A.TakeFromBank(items)
   if not bankOpen then return end
   if CursorHasItem and CursorHasItem() then ClearCursor() end
-  -- Huecos libres de tus bolsas (0 a NUM_BAG_SLOTS)
+  -- Huecos libres de tus bolsas (las normales y, al final, la de componentes)
   local free = {}
-  for bag = 0, NUM_BAG_SLOTS or 4 do
+  for _, bag in ipairs(ES.CarriedBags()) do
     for slot = 1, NumSlots(bag) do
       if not SlotItem(bag, slot) then free[#free + 1] = { bag, slot } end
     end

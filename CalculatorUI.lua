@@ -362,6 +362,9 @@ local function MadeRow(page, i)
     GameTooltip:AddDoubleLine(L["Comprarlo hecho"], m.buyCost and ES.Money(m.buyCost) or (ORANGE .. L["sin precio"] .. "|r"), unpack(W))
     local cheapest = (m.buyCost and (not m.craftCost or m.buyCost < m.craftCost)) and "buy" or "craft"
     GameTooltip:AddLine(cheapest == "buy" and L["Lo más barato: comprarlo hecho."] or L["Lo más barato: fabricarlo."], 0.8, 0.8, 0.8)
+    if m.cooldown then
+      GameTooltip:AddLine(L["Tiene enfriamiento (una cada pocos días): se compra hecho si se puede."], 1, 0.6, 0.2, true)
+    end
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(m.mode == "craft" and L["Clic: comprarlo hecho en vez de fabricarlo."] or L["Clic: fabricarlo en vez de comprarlo hecho."], 0.5, 0.8, 1, true)
     GameTooltip:Show()
@@ -740,9 +743,12 @@ function ES:RenderCalculator()
       if pending then page.pendingItems = true end
       row.icon:SetTexture(texture or 134400)
       row.name:SetText(Qty(m.qty) .. "× " .. label)
+      -- (lo de por defecto: lo más barato, salvo lo que tiene enfriamiento: Calc.DefaultMode)
       local cheapest = (m.buyCost and (not m.craftCost or m.buyCost < m.craftCost)) and "buy" or "craft"
-      row.source:SetText((m.mode == "craft" and L["lo fabricas"] or L["lo compras hecho"])
-        .. (m.mode ~= cheapest and (ORANGE .. L[" · no es lo más barato"] .. "|r") or (GREY .. L[" · clic para cambiar"] .. "|r")))
+      local note = m.cooldown and (GREY .. L[" · con enfriamiento"] .. "|r")
+        or m.mode ~= cheapest and (ORANGE .. L[" · no es lo más barato"] .. "|r")
+        or (GREY .. L[" · clic para cambiar"] .. "|r")
+      row.source:SetText((m.mode == "craft" and L["lo fabricas"] or L["lo compras hecho"]) .. note)
       local cost = m.mode == "craft" and m.craftCost or m.buyCost
       row.total:SetText(cost and Money(cost) or (ORANGE .. "?|r"))
       row:Show()

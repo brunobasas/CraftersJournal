@@ -340,18 +340,77 @@ end
 
 local NEAR_YARDS = 100 -- "al lado del instructor": como mucho esto (si no, el más cercano a ti)
 
--- El vendedor para una fila de compra con varios materiales: el que vende más de ellos
--- (los datos del addon: WP.Vendors; sin los que no los tenían al abrirlos) y, de esos,
--- el más cercano a `refID` (el instructor al que vas igualmente) si está a menos de
--- NEAR_YARDS de él; si no, el más cercano a ti
+-- Vendedores de tu bando que venden un objeto según los datos del addon (WP.Vendors),
+-- sin los que no lo tenían al abrirlos. Los del otro bando no cuentan: uno de la
+-- Alianza que vendía más de la fila ganaba y la fila de la Horda se quedaba sin destino
+local function SellersOf(itemID)
+  local out = {}
+  for _, v in ipairs(WP.Vendors(itemID) or {}) do
+    if not (WP.vendorLacks[v] and WP.vendorLacks[v][itemID]) then
+      local npc = WP.NPC(v)
+      if npc and Usable(npc) then out[#out + 1] = v end
+    end
+  end
+  return out
+end
+
+-- Reparte los materiales de una compra al vendedor en grupos que vende entero un mismo
+-- vendedor de tu bando: { { itemID, ... }, ... }. Discord: la fila de Mild Spices y
+-- Bottle of Dalaran Noir llevaba a Barkeep Morag, que solo vende el Bottle. Solo con
+-- los datos (no con dónde estás): las filas no cambian al moverte. Voraz: el que vende
+-- más de lo que queda (empate: el que vende el itemID más bajo; luego, npcID más bajo).
+-- Lo que no vende nadie de tu bando, en un último grupo (sin destino)
+function WP.VendorGroups(itemIDs)
+  local rest, none, sellers, pos = {}, {}, {}, {}
+  for _, id in ipairs(itemIDs or {}) do
+    if not pos[id] then
+      pos[id] = #rest + #none + 1
+      local set = {}
+      for _, v in ipairs(SellersOf(id)) do set[v] = true end
+      sellers[id] = set
+      if next(set) then rest[#rest + 1] = id else none[#none + 1] = id end
+    end
+  end
+  local groups = {}
+  while #rest > 0 do
+    local count, low = {}, {}
+    for _, id in ipairs(rest) do
+      for v in pairs(sellers[id]) do
+        count[v] = (count[v] or 0) + 1
+        if not low[v] or id < low[v] then low[v] = id end
+      end
+    end
+    local best
+    for v, n in pairs(count) do
+      if not best or n > count[best] or (n == count[best] and (low[v] < low[best]
+          or (low[v] == low[best] and v < best))) then
+        best = v
+      end
+    end
+    local group, left = {}, {}
+    for _, id in ipairs(rest) do
+      if sellers[id][best] then group[#group + 1] = id else left[#left + 1] = id end
+    end
+    groups[#groups + 1] = group
+    rest = left
+  end
+  -- (en el orden en que llegaron: el de su primer material)
+  table.sort(groups, function(a, b) return pos[a[1]] < pos[b[1]] end)
+  if none[1] then groups[#groups + 1] = none end
+  return groups
+end
+
+-- El vendedor para una fila de compra con varios materiales: el de tu bando que vende
+-- más de ellos (los datos del addon: WP.Vendors; sin los que no los tenían al abrirlos;
+-- con una fila de WP.VendorGroups, uno que los vende todos) y, de esos, el más cercano
+-- a `refID` (el instructor al que vas igualmente) si está a menos de NEAR_YARDS de él;
+-- si no, el más cercano a ti
 function WP.VendorFor(itemIDs, refID)
   local cover, all = {}, {}
   for _, itemID in ipairs(itemIDs or {}) do
-    for _, v in ipairs(WP.Vendors(itemID) or {}) do
-      if not (WP.vendorLacks[v] and WP.vendorLacks[v][itemID]) then
-        if not cover[v] then cover[v] = 0 all[#all + 1] = v end
-        cover[v] = cover[v] + 1
-      end
+    for _, v in ipairs(SellersOf(itemID)) do
+      if not cover[v] then cover[v] = 0 all[#all + 1] = v end
+      cover[v] = cover[v] + 1
     end
   end
   local most = 0

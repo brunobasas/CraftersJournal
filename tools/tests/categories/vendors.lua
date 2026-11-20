@@ -84,3 +84,173 @@ test("instructor abierto: apunta los precios que enseña", function()
   expect_eq(seen, #recipes, "recetas con el precio del instructor")
   FireEvent("TRAINER_CLOSED")
 end, { state = "scan" })
+
+-- Filas de compra al vendedor: cada una lleva a quien vende todo lo suyo ------------
+-- Discord: First Aid 140-150 (Simple Poultice, Horda) mandaba a Barkeep Morag a por
+-- Mild Spices y Bottle of Dalaran Noir; Morag solo vende el Bottle
+
+local MILD_SPICES, DALARAN_NOIR, MORAG = 2678, 2723, 5611
+-- Vendedores inventados: A1 de la Alianza; H1, H2, H3 de la Horda
+local A1, H1, H2, H3 = 990001, 990002, 990003, 990004
+
+-- Personaje de la Horda con el escaneo de la AH (el escaneo se guarda por reino y
+-- bando: hay que elegir el bando antes de arrancar)
+local function BootHorde()
+  FACTION = "Horde"
+  Boot("scan")
+end
+
+-- Posiciones simuladas (sin ellas, entre varios vendedores no se elige ninguno): un
+-- continente; cada mapa, 10 unidades más allá. Estás en `map` (x, y)
+local function MockPositions(map, x, y)
+  CreateVector2D = function(a, b) return { x = a, y = b } end
+  C_Map = C_Map or {}
+  C_Map.GetWorldPosFromMapPos = function(m, v)
+    local wx, wy = m * 10 + v.x, v.y
+    return 1, { GetXY = function() return wx, wy end }
+  end
+  UnitPosition = function() return map * 10 + x, y, 0, 1 end
+end
+
+-- Materiales inventados: 900001 lo venden A1 y H1; 900002, A1 y H2 (juntos, solo A1);
+-- 900003 solo A1; 900004 solo H3; 900005, H3 y H2
+local function FakeVendors()
+  local N, M = ES.Data.NPCs, ES.Data.MatVendors
+  N[A1] = { "Vendedor de la Alianza", "A", 1453, 0.5, 0.5 }
+  N[H1] = { "Vendedor de la Horda 1", "H", 1454, 0.4, 0.4 }
+  N[H2] = { "Vendedor de la Horda 2", "H", 1454, 0.6, 0.6 }
+  N[H3] = { "Vendedor de la Horda 3", "H", 1454, 0.7, 0.7 }
+  M[900001], M[900002], M[900003] = { A1, H1 }, { A1, H2 }, { A1 }
+  M[900004], M[900005] = { H3 }, { H3, H2 }
+end
+
+local function Has(list, x)
+  for _, v in ipairs(list or {}) do if v == x then return true end end
+  return false
+end
+
+local function GroupsText(groups)
+  local parts = {}
+  for _, g in ipairs(groups) do parts[#parts + 1] = "{" .. table.concat(g, ",") .. "}" end
+  return table.concat(parts, " ")
+end
+
+test("vendedor de una fila: solo cuentan los de tu bando", function()
+  BootHorde()
+  MockPositions(1454, 0.5, 0.5)
+  FakeVendors()
+  -- Solo A1 (Alianza) vende los dos: antes ganaba él y la fila se quedaba sin destino
+  local v = ES.Waypoints.VendorFor({ 900001, 900002 })
+  expect(v == H1 or v == H2, "la fila lleva a %s, no a un vendedor de la Horda", tostring(v))
+end, { boot = false })
+
+test("materiales de vendedor: un grupo por vendedor que los vende", function()
+  BootHorde()
+  MockPositions(1454, 0.544, 0.68) -- (en la posada de Orgrimmar, al lado de Morag)
+  FakeVendors()
+  local WP = ES.Waypoints
+  local groups = WP.VendorGroups({ MILD_SPICES, DALARAN_NOIR })
+  expect_eq(GroupsText(groups), "{2678} {2723}", "Mild Spices y Bottle (nadie vende los dos)")
+  local spices = WP.VendorFor(groups[1])
+  expect(spices and spices ~= MORAG and Has(WP.Vendors(MILD_SPICES), spices),
+    "la fila de Mild Spices lleva a %s, que no las vende", tostring(spices))
+  expect(Has(WP.Vendors(DALARAN_NOIR), WP.VendorFor(groups[2])), "la fila del Bottle no lleva a quien lo vende")
+  -- Morag vende los dos: una sola fila
+  expect_eq(GroupsText(WP.VendorGroups({ DALARAN_NOIR, 2596 })), "{2723,2596}", "dos que vende Morag")
+  -- Lo que solo vende la Alianza, aparte y al final, sin destino
+  groups = WP.VendorGroups({ 900003, 900004 })
+  expect_eq(GroupsText(groups), "{900004} {900003}", "material sin vendedor de la Horda")
+  expect_eq(WP.VendorFor(groups[2]), nil, "destino del grupo sin vendedor")
+  -- Siempre el mismo reparto
+  local ids = { MILD_SPICES, DALARAN_NOIR, 2596, 900001, 900002, 900005 }
+  expect_eq(GroupsText(WP.VendorGroups(ids)), GroupsText(WP.VendorGroups(ids)), "dos llamadas iguales")
+  note("%s", GroupsText(WP.VendorGroups(ids)))
+end, { boot = false })
+
+test("materiales de vendedor: lo que un vendedor no tenía pasa a otro grupo", function()
+  BootHorde()
+  MockPositions(1454, 0.5, 0.5)
+  FakeVendors()
+  local WP = ES.Waypoints
+  expect_eq(GroupsText(WP.VendorGroups({ 900004, 900005 })), "{900004,900005}", "H3 vende los dos")
+  WP.MarkVendorLacks(H3, 900005)
+  local groups = WP.VendorGroups({ 900004, 900005 })
+  expect_eq(GroupsText(groups), "{900004} {900005}", "H3 no tenía 900005")
+  expect_eq(WP.VendorFor(groups[2]), H2, "900005, al otro que lo vende")
+end, { boot = false })
+
+test("filas de compra: una por vendedor cuando nadie lo vende todo", function()
+  BootHorde()
+  local function It(id) return { itemID = id, quantity = 1, need = 1, unit = 1, total = 1, source = "vendor" } end
+  local groups = ES.UI.BuyGroups({ bank = {}, ah = {}, vendor = { It(MILD_SPICES), It(DALARAN_NOIR) } })
+  local parts = {}
+  for _, g in ipairs(groups) do
+    local ids = {}
+    for _, it in ipairs(g[2]) do ids[#ids + 1] = it.itemID end
+    parts[#parts + 1] = g[1] .. ":" .. table.concat(ids, ",")
+  end
+  expect_eq(table.concat(parts, " "), "vendor:2678 vendor:2723", "filas")
+end, { boot = false })
+
+-- La ruta de First Aid de 140 a 150 por Simple Poultice (Horda, en Orgrimmar): la lana y
+-- la Bruiseweed muy caras, para que no salgan Heavy Wool Bandage ni Healing Potion.
+-- `known`: Simple Poultice ya aprendida (sin ella, la ruta pasa antes por el instructor
+-- y lo del vendedor se compra al de al lado: ArrangeTrip)
+local function PoulticeRoute(known)
+  FACTION = "Horde"
+  Fixtures.FIXED[2592], Fixtures.FIXED[2453], Fixtures.FIXED[3174] = 100000, 100000, 1
+  if known then KNOWN_SPELLS[1259342] = true end
+  Boot("scan")
+  MockPositions(1454, 0.544, 0.68)
+  local _, plan = StartRoute("FirstAid", 140, 150)
+  expect_eq(plan.steps[1] and plan.steps[1].id, 1259342, "la ruta de prueba va por Simple Poultice")
+end
+
+-- Las filas de compra al vendedor de la ruta: [itemID] = fila (la de su material)
+local function VendorRows()
+  local rows = {}
+  for _, l in ipairs(ES:RouteLines("FirstAid", { buy = true }) or {}) do
+    if l.buyRow == "vendor" then
+      for _, it in ipairs(l.buyItems) do rows[it.itemID] = l end
+    end
+  end
+  return rows
+end
+
+for _, known in ipairs({ false, true }) do
+  test("Simple Poultice: cada fila del vendedor lleva a quien vende lo suyo" .. (known and " (receta aprendida)" or " (al lado del instructor)"), function()
+    PoulticeRoute(known)
+    local WP = ES.Waypoints
+    local rows = VendorRows()
+    local spices, noir = rows[MILD_SPICES], rows[DALARAN_NOIR]
+    expect(spices and noir, "faltan filas de Mild Spices o de Bottle")
+    expect(spices ~= noir, "Mild Spices y Bottle en la misma fila: nadie vende los dos")
+    local to = spices.go and spices.go()
+    expect(to and to ~= MORAG and Has(WP.Vendors(MILD_SPICES), to), "la fila de Mild Spices lleva a %s", tostring(to))
+    local toNoir = noir.go and noir.go()
+    expect(Has(WP.Vendors(DALARAN_NOIR), toNoir), "la fila del Bottle lleva a %s", tostring(toNoir))
+    note("Mild Spices: %s · Bottle: %s%s", WP.NPC(to).name, WP.NPC(toNoir).name, spices.nearTrainer and " (al lado del instructor)" or "")
+  end, { boot = false })
+end
+
+test("Simple Poultice: saltar la fila de Mild Spices no salta la del Bottle", function()
+  PoulticeRoute(true)
+  local rows = VendorRows()
+  expect(rows[MILD_SPICES].markHave, "la fila de Mild Spices no se puede saltar")
+  rows[MILD_SPICES].markHave()
+  rows = VendorRows()
+  expect(rows[MILD_SPICES].skipped, "la fila de Mild Spices no sale como saltada")
+  expect(not rows[DALARAN_NOIR].done, "la fila del Bottle también se saltó")
+end, { boot = false })
+
+test("Simple Poultice: cerrar a Morag no da por visitada la fila de Mild Spices", function()
+  PoulticeRoute(true)
+  local notEnough = ES.L["No había suficiente"]
+  OpenMerchant({ { item = DALARAN_NOIR, price = 50 } }) -- (Morag: vende el Bottle, no las Mild Spices)
+  CloseMerchant()
+  local rows = VendorRows()
+  local spices, noir = rows[MILD_SPICES], rows[DALARAN_NOIR]
+  expect(not spices.sub:find(notEnough, 1, true), "la fila de Mild Spices dice «No había suficiente»: %s", spices.sub)
+  expect(not spices.done, "la fila de Mild Spices dejó de estar pendiente")
+  expect(noir.sub:find(notEnough, 1, true), "la fila del Bottle no se dio por visitada: %s", noir.sub)
+end, { boot = false })

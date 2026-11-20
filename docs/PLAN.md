@@ -104,7 +104,8 @@ Comparado con los datos anteriores:
   - **Revertido en 0.30.2:** el servidor de Forever no contesta a un segundo escaneo antes de 15 min aunque el cliente diga que sí. Vuelve la barrera de 15 min desde cada petición, con cuenta atrás en el botón, y se abandona a los 60 s sin respuesta.
 - [ ] **Historial diario de 30 días**, aparte del detallado de 7 (pendiente de decidir).
 - [ ] **Guardar también las búsquedas sueltas** en la AH en el historial (pendiente de decidir).
-- [ ] **Auctionator como respaldo opcional del historial** (descartado por ahora: lee su base interna, no una interfaz pública).
+- [x] **Auctionator como respaldo opcional del historial:** hecho en 0.66.0 para la pestaña Inversiones (su historial de precios por día y su API pública para el último mínimo).
+- [x] **Escanear con Auctionator (0.66.0):** el addon ya no pide su propio escaneo completo. Escanear lanza el de Auctionator y el addon lee esas subastas para todas las pestañas; sin Auctionator el botón sale en gris. Los escaneos que pida cualquier addon se leen siempre (fuera la opción de no leerlos). Change de OpenSpec `scan-only-with-auctionator`.
 
 ## F. La 1.0 (actualizado el 2026-10-15, versión 0.34.0)
 

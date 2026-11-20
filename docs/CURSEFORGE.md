@@ -47,7 +47,7 @@ Crafter's Journal plans the **cheapest route** for every profession using **real
 ## 🚀 Start in 30 seconds
 
 1. Type **/cj** (or click the minimap button).
-2. Open the **Auction House** and press **Scan** to load real prices.
+2. Have **Auctionator** installed, open the **Auction House** and press **Scan** to load real prices (Crafter's Journal reads Auctionator's full scan).
 3. Pick a profession → **Start route** → follow the steps. That's it.
 
 ---
@@ -73,6 +73,8 @@ Crafter's Journal plans the **cheapest route** for every profession using **real
 - Windows next to the AH and vendors with exactly what to buy and sell there. Each one can be turned off in the options.
 - *Inventory* tab: what to sell from your bags, where, and for how much — keeping what your routes need. Right-click anything to never sell it.
 - *Calculator*: the cost and profit of any recipe. Buy intermediates (like Bolts of Mageweave) ready-made or craft them, and type your own prices.
+- *Investments*: note down what you buy to resell and see your average price and your profit, net of the AH cut, with Auctionator's price history.
+- AH prices come from Auctionator's full scan (recommended dependency): one scan for both addons.
 
 **English & Español** — switch any time, recipe and item names included.
 

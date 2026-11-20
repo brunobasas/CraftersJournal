@@ -6,7 +6,10 @@ local function OpenAH()
   RunTimers()
 end
 
+-- (el addon no escanea por su cuenta: Escanear lanza el escaneo de Auctionator y el
+-- addon lee esas subastas, ver Scanner.lua)
 test("escaneo completo: guarda el precio por unidad más bajo de cada objeto", function()
+  InstallAuctionator()
   AUCTIONS = {
     { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 },  -- 25 c/u
     { item = 2318, count = 10, buyout = 300, owner = "Pepe", tl = 4 }, -- 30 c/u
@@ -27,29 +30,143 @@ test("escaneo completo: guarda el precio por unidad más bajo de cada objeto", f
 end, { state = "empty" })
 
 test("el servidor devuelve 0 subastas: no se borra el escaneo bueno", function()
+  InstallAuctionator()
   local before = ES.db.scans[ES:RealmKey()]
   AUCTIONS = {}
   OpenAH()
   ES.Scanner:Start()
   RunTimers()
+  expect_eq(AUCTIONATOR_FULL_SCANS, 1, "escaneos de Auctionator lanzados")
   expect(ES.db.scans[ES:RealmKey()] == before, "el escaneo vacío sustituyó al bueno")
 end, { state = "scan" })
 
 test("no se escanea dos veces en 15 minutos", function()
+  InstallAuctionator()
   AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
   OpenAH()
   ES.Scanner:Start()
   RunTimers()
+  expect_eq(AUCTIONATOR_FULL_SCANS, 1, "primer escaneo")
+  OpenMain()
+  ES:RefreshScanButtons()
+  expect(ES:GetMainFrame().scanButton._enabled == false, "el botón Escanear se puede pulsar antes de 15 min")
+  ES.Scanner:Start()
+  expect_eq(AUCTIONATOR_FULL_SCANS, 1, "pidió otra vez antes de 15 min")
+  NOW = NOW + 16 * 60
+  ES.Scanner:Start()
+  expect_eq(AUCTIONATOR_FULL_SCANS, 2, "pasados 15 min no deja escanear")
+  RunTimers()
+end, { state = "empty" })
+
+test("sin Auctionator, Escanear en gris, no pide nada y dice que lo instales", function()
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  OpenAH()
+  OpenMain()
+  ES:RefreshScanButtons()
+  expect(ES:GetMainFrame().scanButton._enabled == false, "el botón Escanear se puede pulsar sin Auctionator")
   local queried = false
   local saved = QueryAuctionItems
   QueryAuctionItems = function(...) queried = true return saved(...) end
   ES.Scanner:Start()
-  expect(not queried, "pidió otra vez antes de 15 min")
-  NOW = NOW + 16 * 60
-  ES.Scanner:Start()
-  expect(queried, "pasados 15 min no deja escanear")
   RunTimers()
   QueryAuctionItems = saved
+  expect(not queried, "el addon pidió su propio escaneo")
+  expect(not ES.Scanner:IsBusy(), "se quedó escaneando")
+  expect(ES.db.scans[ES:RealmKey()] == nil, "guardó un escaneo sin Auctionator")
+  local msg = ES.L["Instala Auctionator para escanear la AH: el addon lee su escaneo completo."]
+  expect(table.concat(PRINTS, "\n"):find(msg, 1, true), "el chat no dice que instales Auctionator")
+  -- El tooltip del botón también lo dice
+  local lines = {}
+  local add = GameTooltip.AddLine
+  GameTooltip.AddLine = function(_, text) lines[#lines + 1] = tostring(text) end
+  ES:GetMainFrame().scanButton._scripts.OnEnter(ES:GetMainFrame().scanButton)
+  GameTooltip.AddLine = add
+  expect(table.concat(lines, "\n"):find(msg, 1, true), "el tooltip de Escanear no dice que instales Auctionator")
+end, { state = "empty" })
+
+test("con Auctionator sin su marco de escaneo aún: en gris y no se lanza nada", function()
+  InstallAuctionator()
+  Auctionator.State.FullScanFrameRef = nil -- (lo crea al abrirse la AH)
+  OpenAH()
+  OpenMain()
+  ES:RefreshScanButtons()
+  expect(ES:GetMainFrame().scanButton._enabled == false, "el botón Escanear se puede pulsar")
+  ES.Scanner:Start()
+  RunTimers()
+  expect(not ES.Scanner:IsBusy(), "se quedó escaneando")
+  expect(table.concat(PRINTS, "\n"):find(ES.L["Auctionator aún no está listo para escanear: espera un momento o vuelve a abrir la AH."], 1, true),
+    "el chat no dice que espere a Auctionator")
+end, { state = "empty" })
+
+test("el escaneo automático de Auctionator se lee y pone la cuenta atrás", function()
+  InstallAuctionator()
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  OpenAH()
+  local printed = #PRINTS
+  -- Auctionator lo pide por su cuenta al abrir la AH (el gancho de QueryAuctionItems)
+  QueryAuctionItems("", nil, nil, 0, nil, nil, true, false, nil)
+  ES.Scanner:OnForeignScan("legacy")
+  expect(ES.Scanner:IsBusy(), "no sigue el escaneo de Auctionator")
+  RunTimers()
+  local scan = expect(ES.db.scans[ES:RealmKey()], "no se guardó el escaneo")
+  expect_eq(scan.items[2318].minUnit, 25, "Light Leather")
+  expect(ES.Scanner:SecondsUntilNextScan() > 0, "no cuenta para el límite de 15 min")
+  for i = printed + 1, #PRINTS do
+    expect(not PRINTS[i]:find(ES.L["Escaneo completado: %d subastas, %d objetos distintos."]:sub(1, 10), 1, true),
+      "el escaneo automático escribió en el chat: %s", PRINTS[i])
+  end
+end, { state = "empty" })
+
+test("con Auctionator, si el servidor no responde en 2 min se deja de esperar", function()
+  InstallAuctionator()
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  AH_RESPONDS = false
+  OpenAH()
+  ES.Scanner:Start()
+  expect(ES.Scanner:IsBusy(), "no espera el escaneo de Auctionator")
+  RunTimers(60)
+  expect(ES.Scanner:IsBusy(), "a los 60 s ya no espera (los reinos llenos tardan)")
+  RunTimers(70)
+  AH_RESPONDS = true
+  expect(not ES.Scanner:IsBusy(), "sigue esperando sin respuesta")
+  expect(ES:LastScanFail(), "no avisa junto al último escaneo")
+  expect(ES.Scanner:SecondsUntilNextScan() > 0, "sin cuenta atrás tras no responder")
+  expect(ES.db.scans[ES:RealmKey()] == nil, "guardó un escaneo sin respuesta")
+end, { state = "empty" })
+
+test("con Auctionator, Escanear lanza su escaneo y el addon lo lee para todas las pestañas", function()
+  InstallAuctionator()
+  AUCTIONS = {
+    { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 },
+    { item = 2589, count = 20, buyout = 400, owner = "Luis", tl = 3 },
+  }
+  OpenAH()
+  local own = 0
+  local saved = QueryAuctionItems
+  QueryAuctionItems = function(...) if not AUCTIONATOR_FULL_SCANS then own = own + 1 end return saved(...) end
+  ES.Scanner:Start()
+  expect_eq(AUCTIONATOR_FULL_SCANS, 1, "escaneos de Auctionator lanzados")
+  expect_eq(own, 0, "el addon pidió su propio escaneo además del de Auctionator")
+  RunTimers()
+  QueryAuctionItems = saved
+  expect(not ES.Scanner:IsBusy(), "no termina de leer el escaneo de Auctionator")
+  local scan = expect(ES.db.scans[ES:RealmKey()], "no se guardó el escaneo")
+  expect_eq(scan.items[2318].minUnit, 25, "Light Leather, del escaneo de Auctionator")
+  expect(table.concat(PRINTS, "\n"):find(ES.L[" (con el escaneo de Auctionator)"], 1, true), "el chat no dice que fue con Auctionator")
+  -- Y cuenta para el límite de 15 min
+  expect(ES.Scanner:SecondsUntilNextScan() > 0, "el escaneo de Auctionator no cuenta para el límite")
+end, { state = "empty" })
+
+test("con Auctionator, Escanear en gris si Auctionator aún no deja otro escaneo", function()
+  InstallAuctionator()
+  AUCTIONATOR_WAITING = true
+  OpenAH()
+  OpenMain()
+  ES:RefreshScanButtons()
+  expect(ES:GetMainFrame().scanButton._enabled == false, "el botón Escanear se puede pulsar")
+  ES.Scanner:Start()
+  expect_eq(AUCTIONATOR_FULL_SCANS, nil, "lanzó el escaneo de Auctionator sin poder")
+  expect(not ES.Scanner:IsBusy(), "se quedó escaneando")
 end, { state = "empty" })
 
 test("historial: tres escaneos y lo que se vendió entre ellos", function()

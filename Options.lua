@@ -22,8 +22,6 @@ local L = ES.L
 --   ES.db.noAuctionSellWindow = true: no sale la ventana de vender en la AH lo de tus
 --                            bolsas (AuctionSellUI.lua). Antes iba con noAuctionWindows:
 --                            quien la tenía desactivada sigue sin las dos (ver Migrate)
---   ES.db.noForeignScans   = true: no se lee el escaneo que pide otro addon (Scanner.lua,
---                            OnForeignScan); su barrera de 15 min se sigue anotando
 --   ES.db.noPostConfirm    = true: anunciar en la AH sin preguntar antes (AuctionSellUI.lua,
 --                            Sell.Post). Se apaga también con "No volver a preguntar"
 -- Todas salen por defecto (es lo normal del addon); la primera vez que sale cada una
@@ -232,8 +230,6 @@ local OPTIONS = {
     desc = "Al abrir la AH: una ventana con lo de tus bolsas que se vende mejor en la AH. Clic en una fila para anunciarlo." },
   { key = "noPostConfirm", cat = "auction", label = "Confirmar antes de anunciar en la AH",
     desc = "Al anunciar más de una unidad de golpe (ventana de vender, Inventario, ruta), pregunta antes cuántas y a qué precio. Así un clic sin querer no anuncia un montón." },
-  { key = "noForeignScans", cat = "auction", label = "Leer los escaneos de otros addons",
-    desc = "Si otro addon (Auctionator...) escanea la AH, se leen sus precios y no hace falta escanear dos veces. Desactivada, si ese addon escanea al abrir la AH casi nunca podrás escanear tú (uno cada 15 min)." },
   -- Vendedor
   { key = "noVendorWindow", cat = "vendor", label = "Ventana junto al vendedor",
     desc = "Al abrir un vendedor: lo que te falta de la lista de compra y lo que puedes venderle, con los botones Comprar todo y Vender todo." },
@@ -253,6 +249,12 @@ local OPTIONS = {
     desc = "Al pulsar el botón de vender al vendedor de la pestaña Inventario, pregunta antes cuántos objetos vende y por cuánto." },
   { key = "noAddonPrices", cat = "inventory", label = "Usar los precios de Auctionator o TSM",
     desc = "Si tu escaneo no tiene un objeto de tus bolsas, se usa el precio que guarda Auctionator o TSM para decidir si va a la AH o al vendedor. Tu escaneo siempre manda." },
+  -- Inversiones (Invest.lua; la cartera es siempre de la cuenta: todos tus personajes).
+  -- Cómo se escribe el precio al apuntar una compra o venta (InvestUI.lua, OpenEntry):
+  -- el total (por defecto) o por unidad; en la ventana se cambia para cada una
+  { key = "investPriceMode", cat = "invest", kind = "segmented", label = "Precio al apuntar una compra o venta",
+    desc = "Lo que escribes en el precio: el total (lo que pagaste por todo) o el precio por unidad. En la ventana de compra o venta lo puedes cambiar cada vez.",
+    choices = { { value = "total", text = "Total" }, { value = "unit", text = "Por unidad" } }, default = "total" },
   -- Ganar dinero (la ventana junto a la profesión enseña lo que propone esa pestaña)
   { key = "noCraftWindow", cat = "earn", label = "Ventana junto a la profesión",
     desc = "Al abrir una profesión: lo que la pestaña Ganar dinero propone fabricar de esa profesión. Clic en una fila para fabricarlo." },
@@ -289,14 +291,20 @@ end
 ES.OPTIONS = OPTIONS -- (el menú del engranaje saca de aquí el nombre de cada ventana)
 
 -- Categorías de la ventana, en el orden de la lista de la izquierda: General y una por
--- pestaña o ventana que tiene opciones (cada opción dice la suya en `cat`)
+-- pestaña o ventana que tiene opciones (cada opción dice la suya en `cat`). Con
+-- `build`, la página es propia (no de casillas): build(ventana, padre, ancho) la crea
+-- con su :Refresh() y, si tiene, su `header` (botones en la línea del título)
 local CATEGORIES = {
   { key = "general",   label = "General" },
+  -- Orden y visibilidad de las pestañas de la ventana principal (TabsOptionsUI.lua)
+  { key = "tabs",      label = "Pestañas",
+    build = function(f, parent, width) return ES:CreateTabsOptionsPage(f, parent, width) end },
   { key = "shopping",  label = "Lista de compra" },
   { key = "auction",   label = "Casa de Subastas" },
   { key = "vendor",    label = "Vendedor" },
   { key = "inventory", label = "Inventario" },
   { key = "earn",      label = "Ganar dinero" },
+  { key = "invest",    label = "Inversiones" },
 }
 ES.OPTION_CATEGORIES = CATEGORIES
 
@@ -444,6 +452,43 @@ local function CreateSlider(page, o)
   return row
 end
 
+-- Un selector de segmentos (o.kind == "segmented"): nombre, qué hace y, debajo, un botón
+-- por opción (ES.UI.Segmented, InvestUI.lua). Guarda ES.db[o.key] (nada si es la de por
+-- defecto). o = { choices = { { value, text } }, default, apply() opcional }
+local function SegmentedValue(o)
+  local v = ES.db[o.key]
+  for _, c in ipairs(o.choices) do if c.value == v then return v end end
+  return o.default
+end
+
+local function CreateSegmented(page, o)
+  local row = CreateFrame("Frame", nil, page)
+  row:SetSize(CONTENT_W, 60)
+  row.option, row.isRow = o, true
+  row.label = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  row.label:SetPoint("TOPLEFT", 32, -5)
+  row.label:SetWidth(DESC_W)
+  row.label:SetJustifyH("LEFT")
+  row.desc = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  row.desc:SetPoint("TOPLEFT", row.label, "BOTTOMLEFT", 0, -5)
+  row.desc:SetWidth(DESC_W)
+  row.desc:SetJustifyH("LEFT")
+  row.desc:SetTextColor(0.78, 0.74, 0.66)
+  row.select = ES.UI.Segmented(row, o.choices, function(v)
+    ES.db[o.key] = v ~= o.default and v or nil
+    if o.apply then o.apply(v) end
+  end, 110, 22)
+  row.select:SetPoint("TOPLEFT", row.desc, "BOTTOMLEFT", 0, -8)
+  function row.Refresh()
+    row.label:SetText(L[o.label])
+    row.desc:SetText(L[o.desc])
+    row.select:SetValue(SegmentedValue(o))
+    local descH = tonumber(row.desc:GetStringHeight()) or 0
+    return 5 + 14 + 5 + descH + 8 + 24 + 4
+  end
+  return row
+end
+
 -- Textos y marcas de una categoría (el idioma o las opciones pueden haber cambiado) y
 -- las filas una debajo de otra: cada una mide lo que ocupe su descripción
 local function RefreshPage(page)
@@ -452,7 +497,7 @@ local function RefreshPage(page)
     local o = cb.option
     cb:ClearAllPoints()
     cb:SetPoint("TOPLEFT", 6, y)
-    if cb.isSlider then
+    if cb.isSlider or cb.isRow then
       local h = cb.Refresh()
       cb:SetHeight(h)
       y = y - h - 14
@@ -606,16 +651,22 @@ local function CreateWindow()
   -- Una página por categoría, con sus casillas. f.checks: todas, en el orden de OPTIONS
   f.pages, f.checks = {}, {}
   for _, cat in ipairs(CATEGORIES) do
-    local page = CreateFrame("Frame", nil, f.scroll)
-    page:SetSize(CONTENT_W, 1)
+    local page
+    if cat.build then
+      page = cat.build(f, f.scroll, CONTENT_W)
+    else
+      page = CreateFrame("Frame", nil, f.scroll)
+      page:SetSize(CONTENT_W, 1)
+      page.Refresh = RefreshPage
+    end
     page:Hide()
     page.key, page.label, page.checks = cat.key, cat.label, {}
-    page.Refresh = RefreshPage
     f.pages[cat.key] = page
   end
   for _, o in ipairs(OPTIONS) do
     local page = f.pages[o.cat] or f.pages.general
-    local cb = o.kind == "slider" and CreateSlider(page, o) or CreateCheck(page, o)
+    local cb = o.kind == "slider" and CreateSlider(page, o)
+      or o.kind == "segmented" and CreateSegmented(page, o) or CreateCheck(page, o)
     page.checks[#page.checks + 1] = cb
     f.checks[#f.checks + 1] = cb
   end
@@ -630,9 +681,12 @@ local function CreateWindow()
       b.bar:SetShown(on)
       if on then b.text:SetTextColor(1, 1, 1) else b.text:SetTextColor(GOLD[1], GOLD[2], GOLD[3]) end
     end
-    for _, p in pairs(self.pages) do p:SetShown(p == page) end
+    for _, p in pairs(self.pages) do
+      p:SetShown(p == page)
+      if p.header then p.header:SetShown(p == page) end
+    end
     self.heading:SetText(L[page.label])
-    RefreshPage(page)
+    page:Refresh()
     self.scroll:SetScrollChild(page)
     if self.scroll.UpdateScrollChildRect then self.scroll:UpdateScrollChildRect() end
     self.scroll:SetVerticalScroll(0)

@@ -29,10 +29,12 @@ local function NumSlots(bag) local f = CC("GetContainerNumSlots") return f and f
 local function ContainerItemID(bag, slot) local f = CC("GetContainerItemID") return f and f(bag, slot) end
 local function UseItem(bag, slot) local f = CC("UseContainerItem") if f then f(bag, slot) end end
 
--- Una casilla libre en una bolsa normal (no de hierbas, de encantamiento...): bag, slot
+-- Una casilla libre en una bolsa normal (no de hierbas, de encantamiento...): bag, slot.
+-- Si están llenas, la de componentes (solo admite materiales: si no lo acepta, el
+-- objeto se queda en el cursor y quien lo deja allí lo devuelve)
 local function EmptySlot()
   local free = CC("GetContainerNumFreeSlots")
-  for bag = 0, 4 do
+  for bag = 0, NUM_BAG_SLOTS or 4 do
     local n, family = 1, 0
     if free then n, family = free(bag) end
     if (n or 0) > 0 and (family or 0) == 0 then
@@ -41,7 +43,14 @@ local function EmptySlot()
       end
     end
   end
+  local reagent = ES.ReagentBag()
+  if reagent then
+    for slot = 1, NumSlots(reagent) do
+      if not ContainerItemID(reagent, slot) then return reagent, slot end
+    end
+  end
 end
+Ledger.EmptySlot = EmptySlot -- (pruebas)
 
 -- Unidades de un objeto en una casilla de las bolsas
 local function SlotCount(bag, slot)
@@ -659,6 +668,12 @@ function Ledger:SellToVendor(itemID, n)
     if from and bag and split and pickup and not (CursorHasItem and CursorHasItem()) then
       split(from.bag, from.slot, left)
       pickup(bag, slot)
+      if CursorHasItem and CursorHasItem() then
+        -- (la bolsa de componentes no lo admite: vuelve a su pila)
+        ClearCursor()
+        ES:Print(string.format(L["Vendidos %d de %d: para vender el resto hace falta un hueco libre en la bolsa (se parte la pila)."], sold, n))
+        return sold
+      end
       -- (el juego tarda un momento en dejar la pila nueva en su casilla)
       C_Timer.After(0.5, function()
         if self:MerchantOpen() and ContainerItemID(bag, slot) == itemID then QueueSell(bag, slot, itemID) end

@@ -7,6 +7,11 @@ manual-changelog:
   filename: CHANGELOG.md
   markup-type: markdown
 
+# Auctionator, dependencia opcional en CurseForge: el botón Escanear lanza su escaneo
+# completo y el addon lo lee (Scanner.lua); sin él no se escanea
+optional-dependencies:
+  - auctionator
+
 ignore:
   - tools
   - docs

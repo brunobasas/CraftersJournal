@@ -242,7 +242,7 @@ test("cambiar de idioma: textos, recetas y números", function()
 end)
 
 -- Cambiar de idioma con cada pestaña abierta (la ventana se vuelve a crear)
-for _, page in ipairs({ "home", "shopping", "money", "inventory", "favor", "calc", "patterns", "Leatherworking", "pattern:Tailoring" }) do
+for _, page in ipairs({ "home", "shopping", "money", "inventory", "invest", "favor", "calc", "patterns", "Leatherworking", "pattern:Tailoring" }) do
   test("cambiar de idioma con la página «" .. page .. "» abierta", function()
     OpenPage(page)
     for _, l in ipairs(ES.LANGS) do

@@ -114,6 +114,39 @@ test("instructores, vendedores, buzones y banqueros tienen sitio", function()
   snapshot("PNJ sin sitio", bad)
 end, { boot = false })
 
+-- Los vendedores a los que puede llevar una ruta no mandan a nadie a la capital del otro
+-- bando: la ruta solo elige los de tu bando o neutrales (WP.Usable), así que un neutral
+-- ("") dentro de una capital llevaría allí a los dos bandos, y uno de un bando en la
+-- capital del otro es un dato mal generado. Los de bando raro ("X") no salen en ninguna
+-- ruta: solo se cuentan
+local CAPITALS = { [1453] = "A", [1455] = "A", [1457] = "A", [1454] = "H", [1456] = "H", [1458] = "H" }
+test("vendedores: ninguno lleva a la capital del otro bando", function()
+  local bad, odd, seen = {}, {}, {}
+  local function Check(npc, what)
+    if seen[npc] then return end
+    seen[npc] = true
+    local e = ES.Data.NPCs[npc]
+    if not e then return end -- (lo mira «instructores, vendedores... tienen sitio»)
+    local capital, side = CAPITALS[e[3]], e[2]
+    if capital and side ~= capital then
+      bad[#bad + 1] = string.format("%s %d %s: bando %q en una capital de %s (mapa %d)", what, npc, tostring(e[1]), tostring(side), capital, e[3])
+    elseif side ~= "A" and side ~= "H" and side ~= "" then
+      odd[#odd + 1] = string.format("%d %s (%s)", npc, tostring(e[1]), tostring(side))
+    end
+  end
+  for item, list in pairs(ES.Data.MatVendors or {}) do
+    for _, npc in ipairs(list) do Check(npc, "vendedor de " .. item) end
+  end
+  for item, s in pairs(ES.Data.ItemSources or {}) do
+    for _, npc in ipairs(s.v or {}) do Check(npc, "vendedor de " .. item) end
+  end
+  local n = 0
+  for _ in pairs(seen) do n = n + 1 end
+  table.sort(odd)
+  note("%d vendedores; de bando raro, nunca en rutas: %s", n, #odd > 0 and table.concat(odd, ", ") or "ninguno")
+  Report(bad, "vendedores que mandarían a la capital del otro bando")
+end, { boot = false })
+
 test("fuentes: vendedores y misiones que existen", function()
   local bad = {}
   for item, s in pairs(ES.Data.ItemSources) do

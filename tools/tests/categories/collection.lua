@@ -51,6 +51,35 @@ test("una receta de instructor que no tienes: dónde y si ya puedes aprenderla",
   expect(#res.next > 0, "sin «siguientes recetas»")
 end)
 
+-- Mooncloth Bag pide 1 Mooncloth, que se fabrica con 2 Felcloth pero tiene enfriamiento
+-- (una cada pocos días). Salía a 93s (2 Felcloth) en vez de los 60g de la AH
+local function SetPrice(itemID, price)
+  ES.db.scans[ES:RealmKey()].items[itemID] = { listings = 5, quantity = 50, minUnit = price, avgUnit = price,
+    sellers = 3, topShare = 0.3, median = price, ladder = { price, 50 } }
+end
+
+local function MoonclothCost()
+  for _, e in ipairs(ES.Collection:Build("Tailoring").entries) do
+    if e.id == 18445 then -- Mooncloth Bag
+      for _, rg in ipairs(e.reagents or {}) do
+        if rg.item == 14342 then return rg.cost, rg.kinds end
+      end
+    end
+  end
+end
+
+test("un material con enfriamiento (Mooncloth) se compra en la AH, no se fabrica", function()
+  SetPrice(14256, 4694)    -- Felcloth: 46s 94c
+  SetPrice(14342, 609999)  -- Mooncloth: 60g 99s 99c
+  local cost, kinds = MoonclothCost()
+  expect_eq(cost, 609999, "Mooncloth de la Mooncloth Bag")
+  expect(kinds and kinds.ah, "la Mooncloth no sale comprada en la AH")
+  -- Si no hay ninguna a la venta, se fabrica igual (2 Felcloth)
+  ES.db.scans[ES:RealmKey()].items[14342] = nil
+  cost = MoonclothCost()
+  expect_eq(cost, 2 * 4694, "sin Mooncloth en la AH: fabricada")
+end)
+
 test("las recetas sabidas se guardan por personaje", function()
   SKILLS[ES.Data.Cooking.skillLine] = { 50, 75 }
   for id in pairs(ES.Data.Cooking.recipes) do KNOWN_SPELLS[id] = true break end

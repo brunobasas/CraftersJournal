@@ -930,14 +930,24 @@ step("escanear con barrera de 15 min", function()
   local f = ES:GetMainFrame()
   ES.ahOpen = true
   ES.db.lastFullScan = nil
+  -- Sin Auctionator no se escanea: en gris y no se pide nada
+  f.scanButton.SetEnabled = function(self, on) self._enabled = on and true or false end
+  local started
+  QueryAuctionItems = function() started = true end
+  GetNumAuctionItems = function() return 0 end
+  Auctionator = nil
+  ES:RefreshScanButtons()
+  assert(f.scanButton._enabled == false, "sin Auctionator el botón Escanear no debe poder pulsarse")
+  ES.Scanner:Start()
+  assert(not started and not ES.Scanner:IsBusy(), "sin Auctionator no debe pedirse un escaneo")
+  -- Con Auctionator: Escanear lanza su escaneo (con la API clásica) y el addon lo lee
+  local atrWaiting = false
+  Auctionator = { State = { FullScanFrameRef = {
+    InitiateScan = function() QueryAuctionItems("", nil, nil, 0, nil, nil, true, false, nil) end,
+    CanInitiate = function() return not atrWaiting end,
+  } } }
   ES:RefreshScanButtons()
   assert(f.scanButton._text == "Escanear", "sin escaneos previos se puede escanear")
-  -- Escaneo de verdad con la API clásica: arranca y el botón pasa a %
-  local started
-  GetFramesRegisteredForEvent = function() end
-  QueryAuctionItems = function() started = true end
-  CanSendAuctionQuery = function() return true, true end
-  GetNumAuctionItems = function() return 0 end
   local pending
   C_Timer.After = function(_, fn) pending = fn end
   local realGetTime = GetTime
@@ -972,16 +982,18 @@ step("escanear con barrera de 15 min", function()
   clock = clock + 60 pending()
   assert(not ES.Scanner:IsBusy(), "debería abandonar sin respuesta")
   assert(f.scanButton._text:match("^1[345]:%d%d$"), "cuenta atrás tras no responder: " .. tostring(f.scanButton._text))
-  -- Si el cliente dice que no se puede, no se pide
-  ES.db.lastFullScan = nil
-  CanSendAuctionQuery = function() return true, false end
+  -- Si Auctionator aún no deja otro escaneo, no se pide
+  ES.db.lastFullScan, ES.db.lastScanFail = nil, nil
+  atrWaiting = true
   started = false
+  ES:RefreshScanButtons()
+  assert(f.scanButton._enabled == false, "con Auctionator en su cuenta atrás el botón no debe poder pulsarse")
   ES.Scanner:Start()
-  assert(not started and not ES.Scanner:IsBusy(), "con canGetAll = false no debe pedirse")
+  assert(not started and not ES.Scanner:IsBusy(), "con Auctionator en su cuenta atrás no debe pedirse")
   GetTime = realGetTime
   C_Timer.After = function() end
   ES.db.lastFullScan, ES.countdownTicking = nil, false
-  QueryAuctionItems, CanSendAuctionQuery, GetNumAuctionItems = nil, nil, nil
+  QueryAuctionItems, CanSendAuctionQuery, GetNumAuctionItems, Auctionator = nil, nil, nil, nil
   ES.ahOpen = false
   ES:RefreshScanButtons()
 end)
@@ -1496,7 +1508,7 @@ step("portada: tarjetas de profesiones", function()
   assert(tostring(lw.level._text):find("%d+|r / %d+"), "nivel no mostrado: " .. tostring(lw.level._text))
   -- Pestañas laterales: cada una abre su página y queda marcada
   local mf = ES:GetMainFrame()
-  assert(#mf.tabs == 7, "pestañas: " .. #mf.tabs)
+  assert(#mf.tabs == 8, "pestañas: " .. #mf.tabs)
   for _, tab in ipairs(mf.tabs) do
     tab._scripts.OnClick(tab)
     assert(ES.db.lastPage == tab.key, "la pestaña " .. tab.key .. " no abre su página")
@@ -4511,7 +4523,9 @@ step("novedades: una vez por versión, y en vista de desarrollo cuando quieras",
   assert(tostring(f.sub._text):find(version, 1, true), "la cabecera dice la versión: " .. tostring(f.sub._text))
   local items = 0
   for _, l in ipairs(f.lines) do if l._shown ~= false and l.icon._shown ~= false and tostring(l.text._text) ~= "" then items = items + 1 end end
-  assert(items == #ES.WHATS_NEW[1].items, "una fila por novedad: " .. items)
+  -- (las de imagen, una página cada una en vez de una fila)
+  if f.page and f.page._shown and f.pages then items = items + #f.pages end
+  assert(items == #ES.WHATS_NEW[1].items, "una fila o una página por novedad: " .. items)
   assert(tostring(f.devTag._text) == "", "sin vista de desarrollo, no lo dice")
   Hide()
   -- Otra vez con la misma versión: no sale
@@ -4686,7 +4700,7 @@ end)
 step("sin modo desarrollo: ni Subastas, ni Flipping, ni Pesca, ni buscador", function()
   assert(ES.DEV == nil and ES.DEV_BUILD == nil, "queda el modo desarrollo")
   local f = ES:GetMainFrame()
-  assert(#f.tabs == 7, "pestañas: " .. #f.tabs) -- portada, lista de compra, ganar dinero, inventario, Merchant's Favor, calculadora y colección
+  assert(#f.tabs == 8, "pestañas: " .. #f.tabs) -- portada, lista de compra, ganar dinero, inventario, inversiones, Merchant's Favor, calculadora y colección
   assert(not f.globalSearch, "queda el buscador de la cabecera")
   assert(not ES.optionsPanel, "queda el panel de Opciones (con el interruptor de vista de jugador)")
   -- Lo guardado de versiones anteriores (la última página) vuelve a la portada
@@ -5574,8 +5588,15 @@ step("opciones: engranaje de la cabecera y categorías", function()
   GameTooltip.AddLine = savedAddL
   assert(tip[1] == ES.L["Opciones"], "el tooltip del engranaje: " .. table.concat(tip, " | "))
   -- Cada opción, en una categoría que existe; ninguna categoría vacía; todas en la ventana
+  -- (las de página propia, como Pestañas, no tienen casillas: su página, sí)
   local count = {}
-  for _, c in ipairs(ES.OPTION_CATEGORIES) do count[c.key] = 0 end
+  for _, c in ipairs(ES.OPTION_CATEGORIES) do
+    if c.build then
+      assert(w.pages[c.key] and w.pages[c.key].Refresh, "categoría sin página: " .. c.key)
+    else
+      count[c.key] = 0
+    end
+  end
   for _, o in ipairs(ES.OPTIONS) do
     assert(count[o.cat], "opción sin categoría: " .. o.key)
     count[o.cat] = count[o.cat] + 1
@@ -6238,7 +6259,10 @@ step("ruta: filas de compra (paran al empezar el tramo o sin poder fabricar)", f
       ES.lockedPlans.Leatherworking = plan
       ES.db.prof.Leatherworking.stocked = nil
     end
-    ES.routeBuyVisits.Leatherworking = { key = ES.UI.BuyVisitKey("Leatherworking", buy.phase), ah = true, vendor = true }
+    -- (lo del vendedor, por material: cada fila de vendedor es un grupo de WP.VendorGroups)
+    local seen = {}
+    for _, it in ipairs(buy.vendor) do seen[it.itemID] = true end
+    ES.routeBuyVisits.Leatherworking = { key = ES.UI.BuyVisitKey("Leatherworking", buy.phase), ah = true, vendorSeen = seen }
     local savedCraftable = ES.CraftableFromBags
     ES.CraftableFromBags = function() return 5 end
     local _, visitedBuys, cur3 = Lines()

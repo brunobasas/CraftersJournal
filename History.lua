@@ -35,6 +35,9 @@ local HISTORY_MAX = 200
 local tracked
 
 function History:IsTracked(itemID)
+  -- (también lo que tienes en la cartera de inversiones: su escalera de precios da el
+  -- precio del día sin que cuente una subasta suelta, Invest.lua)
+  if ES.Invest and ES.Invest.IsTracked(itemID) then return true end
   if not tracked then
     tracked = {}
     for _, data in pairs(ES.Data) do

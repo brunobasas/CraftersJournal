@@ -5,8 +5,13 @@
 -- (oneProf: solo la página de una profesión; las 8 cuestan, con precios, varios segundos)
 local function VisitAllTabs(oneProf)
   OpenMain()
-  for _, key in ipairs({ "home", "shopping", "money", "inventory", "favor", "calc", "patterns" }) do
+  for _, key in ipairs({ "home", "shopping", "money", "inventory", "invest", "favor", "calc", "patterns" }) do
     ES:SelectPage(key)
+    RunTimers()
+  end
+  -- El detalle de cada inversión (si hay cartera)
+  for itemID in pairs(ES.Invest.Book()) do
+    ES:ShowInvestItem(itemID)
     RunTimers()
   end
   for _, prof in ipairs(oneProf and { "Leatherworking" } or ProfessionKeys()) do
@@ -50,6 +55,7 @@ test("formatos antiguos: se migran al cargar", function()
     charsMigrated = true,
     sellSeen = { [2318] = 10 }, sellSeenCleaned = true,
     mail = { x = 1 }, earnBudget = 100, activeAH = "Realm-Neutral", sellGear = true, useGPS = true,
+    noForeignScans = true, -- (opción "Leer los escaneos de otros addons": ya se leen siempre)
     characters = { [guid] = {
       prof = { Leatherworking = { target = 225, useAH = false }, Tailoring = { target = 152 } },
       shopping = { { kind = "route", key = "Leatherworking", title = "vieja", items = {} },
@@ -59,6 +65,7 @@ test("formatos antiguos: se migran al cargar", function()
   local db = ES.db
   expect(db.chars == nil and db.charsMigrated == nil, "chars sigue ahí")
   expect(db.sellSeen == nil and db.mail == nil and db.earnBudget == nil and db.activeAH == nil, "claves antiguas sin quitar")
+  expect(db.noForeignScans == nil, "la opción de no leer los escaneos de otros addons sigue guardada")
   local c = db.characters[guid]
   expect_eq(c.prof.Leatherworking.target, nil, "objetivo 225 antiguo")
   expect_eq(c.prof.Leatherworking.useAH, nil, "useAH")
@@ -183,6 +190,79 @@ test("eventos sin profesiones ni escaneo (usuario nuevo)", function()
   FireAll(false)
   FireAll(true)
 end, { state = "empty" })
+
+-- Registro de errores (Core.lua) ------------------------------------------------
+-- El addon no se pone delante del manejador de errores del juego: si no, su código
+-- corría en los errores de otros addons y el juego le prohibía lo que venía después
+-- (UseContainerItem al abrir una caja desde las bolsas, junto a EllesmereUI)
+test("el addon no cambia el manejador de errores del juego", function()
+  expect(geterrorhandler() == GAME_ERROR_HANDLER, "al cargar, el manejador es el del addon")
+  FireEvent("PLAYER_ENTERING_WORLD")
+  RunTimers()
+  expect(geterrorhandler() == GAME_ERROR_HANDLER, "al entrar en el mundo, el manejador es el del addon")
+end)
+
+-- Lo que apuntó ES:RecordError a propósito en la prueba (si no, el lanzador lo da por fallo)
+local function TakeRecorded()
+  local list = {}
+  for i = 1, #RECORDED_ERRORS do list[i] = RECORDED_ERRORS[i] end
+  for i = #RECORDED_ERRORS, 1, -1 do RECORDED_ERRORS[i] = nil end
+  return list
+end
+
+local L = ES.L
+
+local function Printed(text)
+  for _, p in ipairs(PRINTS) do if p:find(text, 1, true) then return true end end
+  return false
+end
+
+test("/cj errores grabar: graba los errores de Lua del addon, no los ajenos", function()
+  debugstack = function() return "pila de prueba" end
+  SlashCmdList.CRAFTERSJOURNAL("errores grabar")
+  local handler = geterrorhandler()
+  expect(handler ~= GAME_ERROR_HANDLER and ES.RecordingLuaErrors(), "no se enganchó el manejador")
+  expect(Printed(L["Grabando los errores de Lua del addon hasta la próxima recarga (/reload). Repite lo que fallaba y mira /cj errores."]),
+    "no avisó de que graba")
+  handler("Interface/AddOns/CraftersJournal/Core.lua:1: error de prueba")
+  handler("Interface/AddOns/OtroAddon/OtroAddon.lua:1: error ajeno")
+  -- Otra vez el comando: no se pone delante de sí mismo (si no, se llamaría en bucle)
+  SlashCmdList.CRAFTERSJOURNAL("errors record")
+  geterrorhandler()("Interface/AddOns/OtroAddon/OtroAddon.lua:2: otro ajeno")
+  local log = ES.db.errorLog or {}
+  expect_eq(#log, 1, "errores apuntados (solo el del addon)")
+  expect_eq(log[1].kind, "lua", "tipo")
+  expect(log[1].msg:find("error de prueba", 1, true), "mensaje apuntado: %s", log[1].msg)
+  expect_eq(log[1].stack, "pila de prueba", "pila")
+  expect_eq(#GAME_ERRORS, 3, "errores que llegan al manejador del juego")
+  expect_eq(#TakeRecorded(), 1, "errores apuntados con ES:RecordError")
+  PRINTS = {}
+  SlashCmdList.CRAFTERSJOURNAL("errores")
+  expect(Printed(L["Grabando los errores de Lua del addon hasta la próxima recarga (/reload)."]), "/cj errores no dice que está grabando")
+end)
+
+test("/cj errores sin grabar: no se apuntan errores de Lua y dice cómo grabarlos", function()
+  -- (en una sesión normal nadie llama al manejador del addon: no está puesto)
+  expect(not ES.RecordingLuaErrors(), "graba sin pedirlo")
+  SlashCmdList.CRAFTERSJOURNAL("errores")
+  expect(Printed(L["Ningún error registrado."]), "no dice que no hay errores")
+  expect(Printed(L["Los errores de Lua del addon solo se graban con /cj errores grabar (hasta la próxima recarga)."]),
+    "no dice cómo grabar los errores de Lua")
+end)
+
+test("acción prohibida al addon: se apunta siempre, sin grabar", function()
+  FireEvent("ADDON_ACTION_FORBIDDEN", "CraftersJournal", "UseContainerItem()")
+  FireEvent("ADDON_ACTION_FORBIDDEN", "CraftersJournal", "UseContainerItem()")
+  FireEvent("ADDON_ACTION_FORBIDDEN", "OtroAddon", "UseContainerItem()")
+  local log = ES.db.errorLog or {}
+  expect_eq(#log, 1, "entradas")
+  expect_eq(log[1].kind, "prohibida", "tipo")
+  expect_eq(log[1].msg, "UseContainerItem()", "función")
+  expect_eq(log[1].count, 2, "veces")
+  expect_eq(#TakeRecorded(), 2, "apuntadas con ES:RecordError")
+  SlashCmdList.CRAFTERSJOURNAL("errores")
+  expect(Printed("[prohibida]|r x2"), "/cj errores no la lista")
+end)
 
 test("salir del juego guarda lo del personaje", function()
   OpenPage("Leatherworking")

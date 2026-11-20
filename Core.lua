@@ -258,12 +258,25 @@ end
 -- Las bolsas que llevas encima: 0 a NUM_BAG_SLOTS y, en Forever, la de componentes
 -- (Enum.BagIndex.ReagentBag = 5). Sin ella, las hierbas que caían ahí no contaban: el
 -- paso "Recoge el correo" no se completaba al recogerlas
+-- (sin Enum.BagIndex, NUM_TOTAL_EQUIPPED_BAG_SLOTS: las normales más la de componentes.
+-- No se da por hecho que la 5 lo sea: en los clientes clásicos es la 1.ª del banco)
 function ES.CarriedBags()
   local list = {}
   for bag = 0, NUM_BAG_SLOTS or 4 do list[#list + 1] = bag end
   local reagent = Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag
-  if reagent and reagent > list[#list] then list[#list + 1] = reagent end
+  if reagent then
+    if reagent > list[#list] then list[#list + 1] = reagent end
+  else
+    for bag = list[#list] + 1, NUM_TOTAL_EQUIPPED_BAG_SLOTS or 0 do list[#list + 1] = bag end
+  end
   return list
+end
+
+-- La bolsa de componentes (o nil): solo admite materiales
+function ES.ReagentBag()
+  local list = ES.CarriedBags()
+  local last = list[#list]
+  if last > (NUM_BAG_SLOTS or 4) then return last end
 end
 
 -- ¿El personaje ya sabe esta receta? (las recetas son hechizos del libro de hechizos)
@@ -642,10 +655,11 @@ end
 ES.LoadCharacterData, ES.SaveCharacterData = LoadCharacterData, SaveCharacterData -- para pruebas
 
 ---------------------------------------------------------------------------
--- Registro de errores: los errores de Lua de este addon y las acciones que el
--- juego le bloquea se apuntan en CraftersJournalDB.errorLog (los mismos juntos,
--- con cuántas veces), para revisarlos después (/cj errores, o el archivo de
--- SavedVariables). Siguen saliendo como siempre (ventana de errores, BugSack...).
+-- Registro de errores: las acciones que el juego le bloquea o prohíbe a este addon
+-- (siempre) y sus errores de Lua (solo con /cj errores grabar, ver abajo) se apuntan
+-- en CraftersJournalDB.errorLog (los mismos juntos, con cuántas veces), para
+-- revisarlos después (/cj errores, o el archivo de SavedVariables). Los errores siguen
+-- saliendo como siempre (ventana de errores, BugSack...).
 ---------------------------------------------------------------------------
 local MAX_ERRORS = 50
 
@@ -678,10 +692,14 @@ function ES:RecordError(kind, msg, stack)
 end
 
 do
-  -- Errores de Lua: solo los que pasan por los archivos de este addon. Se apunta
-  -- y se pasa al manejador que hubiera (el del juego, BugGrabber...). Si otro addon
-  -- de errores se carga después y pone el suyo, al entrar al mundo se vuelve a
-  -- enganchar delante (busy: por si los dos se llaman entre sí)
+  -- Errores de Lua: SOLO si el jugador lo pide (/cj errores grabar), hasta la próxima
+  -- recarga. Antes el manejador se ponía siempre (al cargar y al entrar al mundo) y el
+  -- código del addon corría en los errores de otros addons y del juego: lo que el
+  -- juego hacía después quedaba contaminado (taint) a nombre de Crafter's Journal y le
+  -- prohibía acciones protegidas (UseContainerItem al abrir una caja desde las bolsas,
+  -- junto a EllesmereUI). Grabando, se apuntan solo los que pasan por los archivos de
+  -- este addon y se pasan al manejador que hubiera (el del juego, BugGrabber...)
+  -- (busy: por si los dos se llaman entre sí)
   local previous, busy
   -- Errores ya vistos que no son de este addon: no se vuelven a mirar. Un addon que da
   -- el mismo error en cada fotograma (yendo montado, por ejemplo) hacía que aquí se
@@ -704,22 +722,25 @@ do
     if previous then pcall(previous, msg, ...) end
     busy = false
   end
-  local function Install()
-    if not (geterrorhandler and seterrorhandler) then return end
+  -- Empieza a grabar (/cj errores grabar). Devuelve true si se pudo
+  function ES.RecordLuaErrors()
+    if not (geterrorhandler and seterrorhandler) then return false end
     local current = geterrorhandler()
     if current ~= Handler then
       previous = current
       seterrorhandler(Handler)
     end
+    return true
   end
-  Install()
-  -- Acciones bloqueadas por el juego (funciones protegidas)
+  function ES.RecordingLuaErrors()
+    return geterrorhandler ~= nil and geterrorhandler() == Handler
+  end
+  -- Acciones bloqueadas y prohibidas por el juego (funciones protegidas): siempre. Solo
+  -- escuchan eventos, no se meten en la ejecución de nadie
   local f = CreateFrame("Frame")
   ES.SafeRegister(f, "ADDON_ACTION_BLOCKED")
   ES.SafeRegister(f, "ADDON_ACTION_FORBIDDEN")
-  ES.SafeRegister(f, "PLAYER_ENTERING_WORLD")
   f:SetScript("OnEvent", function(_, event, addon, func)
-    if event == "PLAYER_ENTERING_WORLD" then Install() return end
     if addon == ADDON_NAME then
       ES:RecordError(event == "ADDON_ACTION_FORBIDDEN" and "prohibida" or "bloqueada", tostring(func),
         debugstack and debugstack(2) or nil)
@@ -763,6 +784,12 @@ events:SetScript("OnEvent", function(_, event, arg1)
     -- Precios de vendedor "aprendidos" de tus ventas: ya no se usan (Ledger.lua; dos
     -- ventas cobradas juntas dejaban el doble). Fuera, con lo que se hubiera apuntado mal
     ES.db.sellSeen, ES.db.sellSeenCleaned = nil, nil
+    -- (opción "Leer los escaneos de otros addons": ahora se leen siempre, el addon ya no
+    -- escanea por su cuenta, ver Scanner.lua)
+    ES.db.noForeignScans = nil
+    -- (opciones de Inversiones de versiones de desarrollo: la cartera es siempre de la
+    -- cuenta, y el precio se elige con investPriceMode)
+    ES.db.investPerChar, ES.db.investPriceTotal = nil, nil
     ES.ApplyLocalization()
     ES:LocalizeRecipeNames()
   elseif event == "PLAYER_LOGOUT" then
@@ -843,6 +870,11 @@ SlashCmdList.CRAFTERSJOURNAL = function(msg)
     ES.Assistant.Toggle()
   elseif msg == "minimap" then
     ES:SetMinimapShown(ES.db.minimap.hide and true or false)
+  elseif msg == "errores grabar" or msg == "errors record" then
+    -- Graba los errores de Lua del addon hasta la próxima recarga (ver arriba)
+    if ES.RecordLuaErrors() then
+      ES:Print(L["Grabando los errores de Lua del addon hasta la próxima recarga (/reload). Repite lo que fallaba y mira /cj errores."])
+    end
   elseif msg == "errores" or msg == "errors" or msg == "errores borrar" or msg == "errors clear" then
     -- Lo apuntado por ES:RecordError (ver arriba)
     if msg:find(" ") then
@@ -853,14 +885,19 @@ SlashCmdList.CRAFTERSJOURNAL = function(msg)
     local log = ES.db.errorLog or {}
     if #log == 0 then
       ES:Print(L["Ningún error registrado."])
-      return
+    else
+      ES:Print(string.format(L["%d errores distintos registrados (el más reciente al final):"], #log))
+      for _, e in ipairs(log) do
+        print(string.format("|cffff6060[%s]|r x%d %s %s%s", e.kind, e.count, date and date("%d/%m %H:%M", e.last) or "",
+          e.msg, ""))
+      end
+      ES:Print(L["Detalle completo en CraftersJournalDB.errorLog (SavedVariables, tras /reload). /cj errores borrar para vaciarlo."])
     end
-    ES:Print(string.format(L["%d errores distintos registrados (el más reciente al final):"], #log))
-    for _, e in ipairs(log) do
-      print(string.format("|cffff6060[%s]|r x%d %s %s%s", e.kind, e.count, date and date("%d/%m %H:%M", e.last) or "",
-        e.msg, ""))
+    if ES.RecordingLuaErrors() then
+      ES:Print(L["Grabando los errores de Lua del addon hasta la próxima recarga (/reload)."])
+    else
+      ES:Print(L["Los errores de Lua del addon solo se graban con /cj errores grabar (hasta la próxima recarga)."])
     end
-    ES:Print(L["Detalle completo en CraftersJournalDB.errorLog (SavedVariables, tras /reload). /cj errores borrar para vaciarlo."])
   else
     ES:ToggleMainFrame()
   end

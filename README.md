@@ -6,6 +6,7 @@ A World of Warcraft: Forever addon to **level every profession the cheapest way*
 - Trainers by rank, with a waypoint to the nearest one.
 - Every recipe of each profession: which you know, which you can learn now, and where to get the rest.
 - English and Spanish.
+- AH prices come from Auctionator's full scan: install Auctionator to scan (the Scan button starts its scan and the addon reads it).
 
 Download it from CurseForge (link coming soon).
 

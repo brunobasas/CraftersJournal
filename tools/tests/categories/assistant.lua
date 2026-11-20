@@ -9,6 +9,27 @@ local function Steps()
   return lines, current
 end
 
+test("sacar del banco: con las bolsas normales llenas, va a la de componentes", function()
+  A = ES.Assistant
+  local CC, moves = C_Container, {}
+  -- Banco (-1): 20 Linen Cloth; bolsa 0: una casilla, ocupada; bolsa de componentes: vacía
+  CC.GetContainerNumSlots = function(bag)
+    if bag == -1 or bag == 0 then return 1 end
+    if bag == 5 then return 16 end
+    return 0
+  end
+  CC.GetContainerItemInfo = function(bag, slot)
+    if bag == -1 and slot == 1 then return { itemID = 2589, stackCount = 20 } end
+    if bag == 0 and slot == 1 then return { itemID = 2318, stackCount = 1 } end
+  end
+  CC.PickupContainerItem = function(bag, slot) moves[#moves + 1] = bag .. ":" .. slot end
+  CursorHasItem = function() return false end
+  A.SetBankOpen(true)
+  local left = A.TakeFromBank({ { itemID = 2589, quantity = 20 } })
+  expect_eq(left, 0, "unidades que no cupieron")
+  expect_eq(table.concat(moves, " "), "-1:1 5:1", "movimientos (del banco a la bolsa de componentes)")
+end)
+
 test("sin ruta empezada no sale", function()
   A = ES.Assistant
   A.Update()

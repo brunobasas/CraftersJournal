@@ -61,6 +61,59 @@ test("lo que pide tu ruta empezada se guarda", function()
   expect(e.keep >= math.ceil(n.need - 0.001), "guarda %d y la ruta pide %s", e.keep, tostring(n.need))
 end)
 
+---------------------------------------------------------------------------
+-- Bolsa de componentes (la 5 en Forever): cuenta como las demás bolsas
+---------------------------------------------------------------------------
+test("bolsa de componentes: CarriedBags la incluye, y sin Enum no se toma la 1.ª del banco", function()
+  local bags = ES.CarriedBags()
+  expect_eq(bags[#bags], 5, "última bolsa con Enum.BagIndex.ReagentBag")
+  expect_eq(ES.ReagentBag(), 5, "ES.ReagentBag")
+  Enum = nil
+  NUM_TOTAL_EQUIPPED_BAG_SLOTS = 5
+  bags = ES.CarriedBags()
+  expect_eq(#bags, 6, "bolsas con NUM_TOTAL_EQUIPPED_BAG_SLOTS = 5")
+  expect_eq(bags[#bags], 5, "última bolsa con NUM_TOTAL_EQUIPPED_BAG_SLOTS = 5")
+  NUM_TOTAL_EQUIPPED_BAG_SLOTS = nil
+  bags = ES.CarriedBags()
+  expect_eq(#bags, 5, "bolsas de un cliente sin bolsa de componentes")
+  expect(ES.ReagentBag() == nil, "sin bolsa de componentes, ES.ReagentBag da %s", tostring((ES.ReagentBag())))
+end)
+
+test("bolsa de componentes: lo que hay en ella sale en la pestaña y se cuenta", function()
+  BAGS[2589] = 10
+  REAGENT_BAG[2589], REAGENT_BAG[2318] = 30, 12
+  local cloth = expect(Entry(ES.Inventory:List(), 2589), "Linen Cloth no sale en la lista")
+  expect_eq(cloth.count, 40, "Linen Cloth en las dos bolsas")
+  local leather = expect(Entry(ES.Inventory:List(), 2318), "Light Leather (solo en la de componentes) no sale")
+  expect_eq(leather.count, 12, "Light Leather")
+  expect_eq(ES.Ledger.BagCount(2318), 12, "BagCount (lo que se anuncia en la AH)")
+end)
+
+test("bolsa de componentes: el vendedor vende lo que hay en ella", function()
+  REAGENT_BAG[4306] = 7
+  BAG_FLAGS[4306] = { quality = 0 }
+  OpenPage("inventory")
+  OpenMerchant({})
+  local list = ES.VendorShop:SellList()
+  local e = expect(Entry(list, 4306), "la ventana del vendedor no propone lo de la bolsa de componentes")
+  expect_eq(e.n, 7, "unidades a vender")
+  ES.VendorShop:Sell(list)
+  RunTimers()
+  expect(REAGENT_BAG[4306] == 0, "no se vendió (quedan %s)", tostring(REAGENT_BAG[4306]))
+end)
+
+test("bolsa de componentes: con las normales llenas, la pila partida va a ella", function()
+  local free = C_Container.GetContainerNumFreeSlots
+  C_Container.GetContainerNumFreeSlots = function(bag)
+    if bag <= 4 then return 0, 0 end
+    return free(bag)
+  end
+  REAGENT_BAG[2589] = 3
+  local bag, slot = ES.Ledger.EmptySlot()
+  expect_eq(bag, 5, "bolsa del hueco libre")
+  expect_eq(slot, 2, "casilla del hueco libre (la 1 está ocupada)")
+end)
+
 test("vender al vendedor: con él abierto, el botón vende lo de esa sección", function()
   BAGS[4306] = 7
   BAG_FLAGS[4306] = { quality = 0 }

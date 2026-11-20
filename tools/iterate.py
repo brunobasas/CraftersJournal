@@ -417,17 +417,6 @@ step("H. escaneo con API moderna", function()
       "leer el escaneo de otro addon escribió en el chat: %s", PRINTS[i])
   end
   log("      siguiendo a otro addon: %d subastas, sin pedir otro escaneo", followed and followed.total or 0)
-  -- Opción "Leer los escaneos de otros addons" desactivada: no se lee, pero la barrera sí
-  NOW = NOW + 3600
-  CraftersJournalDB.scans[ES:RealmKey()] = nil
-  CraftersJournalDB.noForeignScans = true
-  C_AuctionHouse.ReplicateItems()
-  check(not ES.Scanner:IsBusy(), "con la opción desactivada siguió el escaneo de otro addon")
-  check(ES.Scanner:SecondsUntilNextScan() > 0, "con la opción desactivada no anotó la barrera de 15 min")
-  RunTimers()
-  check(CraftersJournalDB.scans[ES:RealmKey()] == nil, "con la opción desactivada guardó el escaneo de otro addon")
-  CraftersJournalDB.noForeignScans = nil
-  log("      opción desactivada: no lee el escaneo de otro addon, la barrera sí cuenta")
   -- Guardando (resumen por tandas, Scanner:Finish): cerrar la AH no lo cancela
   NOW = NOW + 3600
   local realFinish = ES.Scanner.Finish

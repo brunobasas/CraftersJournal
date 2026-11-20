@@ -101,7 +101,7 @@ end
 -- Ayudas para la interfaz ----------------------------------------------------
 -- Las pestañas de la ventana, y la página que abre cada una
 TAB_PAGES = { home = "home", shopping = "shopping", money = "money", inventory = "inventory",
-  favor = "favor", calc = "calc", patterns = "patterns" }
+  invest = "invest", favor = "favor", calc = "calc", patterns = "patterns" }
 
 function OpenMain()
   ES:ShowMainFrame()

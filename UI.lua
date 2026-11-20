@@ -230,6 +230,8 @@ local function CreateMainFrame()
   ES:CreateHomePage(AddPage("home", L["Subir profesiones"]))
   ES:CreateEarnPage(AddPage("money", ""))
   ES:CreateInventoryPage(AddPage("inventory", ""))
+  ES:CreateInvestPage(AddPage("invest", ""))
+  ES:CreateInvestItemPage(AddPage("investItem", ""))
   ES:CreateFavorPage(AddPage("favor", ""))
   ES:CreateCalculatorPage(AddPage("calc", ""))
   ES:CreateShoppingPage(AddPage("shopping", ""))
@@ -246,7 +248,8 @@ local function CreateMainFrame()
   f:SetScript("OnShow", function(self)
     ES.Jobs.Resume() -- rutas pendientes de cuando estaba cerrada (Jobs.lua)
     ES:RefreshScanButtons()
-    ES:SelectPage(self.openPage or ES.sessionPage or "home")
+    -- (la primera vez en la sesión, la pestaña de arriba: ES.Tabs, se elige en opciones)
+    ES:SelectPage(self.openPage or ES.sessionPage or ES.Tabs.StartKey())
     self.openPage = nil
     ES:KeepTabsOnScreen() -- (sin pestañas a la vista no se puede cambiar de página)
   end)
@@ -278,6 +281,8 @@ local TABS = ES.Localize({
     desc = "Qué fabricar hoy con tus recetas porque da beneficio." },
   { key = "inventory", label = "Inventario",          icon = "Interface\\Icons\\INV_Misc_Bag_08",
     desc = "Qué vender de tus bolsas, dónde y cuánto sacas; y lo que ha subido de precio." },
+  { key = "invest",   label = "Inversiones",          icon = ES.Invest.ICON,
+    desc = "Tu cartera de inversiones en la AH: lo que compraste, a qué precio medio y cuánto ganas o pierdes con cada objeto." },
   { key = "favor",    label = "Merchant's Favor",     icon = "Interface\\Icons\\INV_Misc_Coin_17",
     desc = "Las Waylaid Crates: con qué llenar las tuyas y qué cajas de la AH dan el Favor más barato." },
   { key = "calc",     label = "Calculadora",          icon = "Interface\\Icons\\INV_Misc_Note_02",
@@ -286,10 +291,151 @@ local TABS = ES.Localize({
     desc = "Todas las recetas de cada profesión: cuántas tienes y dónde conseguir las demás." },
 }, "label")
 ES.Localize(TABS, "desc")
+ES.TABS = TABS -- (la categoría Pestañas de las opciones: TabsOptionsUI.lua)
+
+---------------------------------------------------------------------------
+-- Orden y visibilidad de las pestañas: se eligen en las opciones, categoría Pestañas
+-- (TabsOptionsUI.lua). Se guardan para la cuenta:
+--   ES.db.tabOrder   = { "shopping", "home", ... }: el orden elegido (nada si es el de
+--                      siempre, el de TABS)
+--   ES.db.hiddenTabs = { [clave] = true }: las ocultas (nada si no hay ninguna)
+-- Ocultar quita solo el icono: la página sigue abriéndose desde la AH, el asistente de
+-- ruta... Siempre queda al menos una visible, y la primera visible es la de inicio
+---------------------------------------------------------------------------
+local Tabs = {}
+ES.Tabs = Tabs
+
+function Tabs.Info(key)
+  for _, t in ipairs(TABS) do if t.key == key then return t end end
+end
+
+local function DefaultOrder()
+  local out = {}
+  for i, t in ipairs(TABS) do out[i] = t.key end
+  return out
+end
+
+local function IndexOf(list, key)
+  for i, k in ipairs(list) do if k == key then return i end end
+end
+
+-- Claves en el orden efectivo: el guardado, sin las que ya no existen y con las que
+-- falten (pestañas nuevas de una versión posterior) tras la que las precede en el de
+-- siempre (o la primera, si no las precede ninguna)
+function Tabs.Order()
+  local saved = ES.db and ES.db.tabOrder
+  if type(saved) ~= "table" then return DefaultOrder() end
+  local out, seen = {}, {}
+  for _, key in ipairs(saved) do
+    if type(key) == "string" and not seen[key] and Tabs.Info(key) then
+      out[#out + 1] = key
+      seen[key] = true
+    end
+  end
+  for i, t in ipairs(TABS) do
+    if not seen[t.key] then
+      local prev = i > 1 and IndexOf(out, TABS[i - 1].key)
+      table.insert(out, prev and prev + 1 or 1, t.key)
+      seen[t.key] = true
+    end
+  end
+  return out
+end
+
+-- Las visibles, en orden. Nunca ninguna: si lo guardado las oculta todas (a mano o
+-- roto), se ve la primera
+function Tabs.Visible()
+  local hidden = ES.db and type(ES.db.hiddenTabs) == "table" and ES.db.hiddenTabs or {}
+  local order, out = Tabs.Order(), {}
+  for _, key in ipairs(order) do
+    if not hidden[key] then out[#out + 1] = key end
+  end
+  if #out == 0 then out[1] = order[1] end
+  return out
+end
+
+function Tabs.IsHidden(key)
+  return Tabs.Info(key) ~= nil and not IndexOf(Tabs.Visible(), key)
+end
+
+-- La pestaña en la que se abre el addon (la primera visible)
+function Tabs.StartKey()
+  return Tabs.Visible()[1]
+end
+
+-- Aplica lo elegido: las pestañas de la ventana principal, si ya existe
+local function Apply()
+  if ES.LayoutTabs then ES:LayoutTabs() end
+end
+
+-- Guarda un orden (nada si es el de siempre)
+local function SaveOrder(order)
+  local default = DefaultOrder()
+  local same = #order == #default
+  for i = 1, #default do if order[i] ~= default[i] then same = false end end
+  ES.db.tabOrder = (not same) and order or nil
+end
+
+-- Mueve la pestaña del puesto `from` al `to` (en el orden efectivo). Sin cambio real
+-- (mismo puesto o fuera de la lista) no hace nada y devuelve false
+function Tabs.Move(from, to)
+  local order = Tabs.Order()
+  local n = #order
+  if type(from) ~= "number" or type(to) ~= "number" or from < 1 or from > n or to < 1 or to > n or from == to then
+    return false
+  end
+  table.insert(order, to, table.remove(order, from))
+  SaveOrder(order)
+  Apply()
+  return true
+end
+
+-- Oculta (on) o vuelve a mostrar una pestaña. No deja ocultar la última visible:
+-- devuelve false, "last"
+function Tabs.SetHidden(key, on)
+  if not Tabs.Info(key) then return false end
+  local db = ES.db
+  if on then
+    if Tabs.IsHidden(key) then return true end
+    if #Tabs.Visible() <= 1 then return false, "last" end
+    if type(db.hiddenTabs) ~= "table" then db.hiddenTabs = {} end
+    db.hiddenTabs[key] = true
+  elseif type(db.hiddenTabs) == "table" then
+    db.hiddenTabs[key] = nil
+    if next(db.hiddenTabs) == nil then db.hiddenTabs = nil end
+  end
+  Apply()
+  return true
+end
+
+-- El orden de siempre, con todas visibles
+function Tabs.Reset()
+  ES.db.tabOrder, ES.db.hiddenTabs = nil, nil
+  Apply()
+end
+
+-- Arrastrar una fila (TabsOptionsUI.lua): `mids` son las alturas del centro de cada
+-- fila de arriba abajo (decrecen: la pantalla cuenta hacia arriba) y `y` la del ratón.
+-- Devuelve el hueco donde cae: 1 = encima de la primera, #mids + 1 = debajo de la última
+function Tabs.DropIndex(y, mids)
+  local gap = 1
+  for _, mid in ipairs(mids) do
+    if y < mid then gap = gap + 1 end
+  end
+  return gap
+end
+
+-- Puesto final de la fila `from` soltada en el hueco `gap` (para Tabs.Move): al
+-- quitarla de su sitio, los huecos de debajo suben uno
+function Tabs.GapToIndex(from, gap)
+  if gap > from then return gap - 1 end
+  return gap
+end
 
 -- Pestaña a la que pertenece cada página, y adónde vuelve "Volver"
 local function TabOf(key)
   if key:match("^pattern:") then return "patterns", "patterns" end
+  if key == "investItem" then return "invest", "invest" end -- detalle de una inversión
   if ES.Data[key] then return "home", "home" end -- página de una profesión
   return key, nil
 end
@@ -381,13 +527,9 @@ end
 
 function ES:CreateSideTabs(f)
   f.tabs = {}
+  -- (todas, también las ocultas: dónde va cada una lo decide ES:LayoutTabs)
   for _, t in ipairs(TABS) do
     local tab = CreateTab(f, t.icon == "skills" and ES.SKILLS_ICON or t.icon)
-    if #f.tabs == 0 then
-      tab:SetPoint("TOPLEFT", f, "TOPRIGHT", 0, TAB_TOP)
-    else
-      tab:SetPoint("TOPLEFT", f.tabs[#f.tabs], "BOTTOMLEFT", 0, -TAB_GAP)
-    end
     tab.key = t.key
     -- Vuelve a donde estabas en esa pestaña (la profesión que mirabas), no a su portada;
     -- a la portada se va con el botón "Profesiones" / "Colección"
@@ -406,12 +548,40 @@ function ES:CreateSideTabs(f)
   -- fuera de la pantalla y no había forma de salir de la página (informe de la 0.60,
   -- atascado en la Lista de compra). Que cuenten para mantenerla dentro
   if f.SetClampRectInsets then f:SetClampRectInsets(0, TAB_SIZE, 0, 0) end
+  ES:LayoutTabs(f)
+end
+
+-- Coloca las pestañas en el orden elegido: cada visible bajo la visible anterior (la
+-- primera, TAB_TOP bajo la esquina) y las ocultas escondidas. main.visibleTabs: las
+-- visibles, de arriba abajo. Se llama al crearlas y al cambiar el orden o las ocultas
+function ES:LayoutTabs(f)
+  f = f or main
+  if not (f and f.tabs) then return end
+  local byKey = {}
+  for _, tab in ipairs(f.tabs) do byKey[tab.key] = tab end
+  local shown = {}
+  f.visibleTabs = {}
+  for _, key in ipairs(Tabs.Visible()) do
+    local tab = byKey[key]
+    if tab then
+      local prev = f.visibleTabs[#f.visibleTabs]
+      tab:ClearAllPoints()
+      if prev then
+        tab:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -TAB_GAP)
+      else
+        tab:SetPoint("TOPLEFT", f, "TOPRIGHT", 0, TAB_TOP)
+      end
+      f.visibleTabs[#f.visibleTabs + 1] = tab
+      shown[tab] = true
+    end
+  end
+  for _, tab in ipairs(f.tabs) do tab:SetShown(shown[tab] or false) end
 end
 
 -- Por si acaso (escala, resolución que cambia, marco colocado antes de ajustarse):
 -- si la primera pestaña sale por la derecha de la pantalla, la ventana vuelve al centro
 function ES:KeepTabsOnScreen()
-  local tab = main and main.tabs and main.tabs[1]
+  local tab = main and main.visibleTabs and main.visibleTabs[1]
   local right = tab and tab:GetRight()
   local width = GetScreenWidth and GetScreenWidth()
   if type(right) ~= "number" or type(width) ~= "number" then return end
@@ -425,7 +595,8 @@ end
 ES.tabLastPage = {} -- [pestaña] = última página vista en ella (solo esta sesión)
 function ES:SelectPage(key)
   if key == "lw" or key == "profit" then key = "Leatherworking" end -- nombres de versiones anteriores
-  if not main or not main.pages[key] then key = "home" end -- (también pestañas que ya no existen)
+  -- (también pestañas que ya no existen: a la de inicio, la primera visible)
+  if not main or not main.pages[key] then key = Tabs.StartKey() end
   self.db.lastPage = key
   self.sessionPage = key -- lo que recuerda la ventana al volver a abrirla (solo esta sesión)
   for k, page in pairs(main.pages) do page:SetShown(k == key) end
@@ -436,7 +607,7 @@ function ES:SelectPage(key)
   local inner = key ~= tab
   main.back:SetShown(inner)
   main.backTarget = back
-  main.back:SetText(back == "patterns" and L["Colección"] or L["Profesiones"])
+  main.back:SetText(back == "patterns" and L["Colección"] or back == "invest" and L["Inversiones"] or L["Profesiones"])
   -- Flechas: solo dentro de una profesión, y si hay otra a la que pasar
   local siblings = inner and #self:SiblingPages(key) > 1
   main.prevPage:SetShown(siblings)
@@ -478,6 +649,7 @@ end
 -- Páginas hermanas de una página interior, en el orden de la portada: primero las
 -- profesiones que tienes y luego el resto (las profesiones, o sus colecciones)
 function ES:SiblingPages(key)
+  if key == "investItem" then return {} end -- (el detalle de una inversión no tiene hermanas)
   local prefix = key:match("^pattern:") and "pattern:" or ""
   local mine, others = {}, {}
   for _, p in ipairs(self.PROFESSIONS or {}) do
@@ -523,6 +695,7 @@ function ES:RebuildMainFrame()
   self.professionPages, self.patternPages = nil, nil
   self.homePage, self.earnPage, self.patternsPage = nil, nil, nil
   self.shoppingPage = nil
+  self.investPage, self.investItemPage = nil, nil
   if wasShown then self:ShowMainFrame(page) end
 end
 
@@ -553,6 +726,11 @@ end
 -- Cada parte en su fotograma (todo junto era un tirón al acabar el escaneo), y lo que
 -- tarda cada una al registro de escaneos (/cj, Informar de un error)
 function ES:OnScanComplete(scan, followed)
+  -- Precio del día de lo que tienes en la cartera de inversiones (Invest.lua)
+  if self.Invest then
+    local ok, err = pcall(self.Invest.RecordScan, scan)
+    if not ok then self:RecordError("invest", err) end
+  end
   if not followed then self:ShowMainFrame() end
   local function Timed(label, f)
     local t = debugprofilestop and debugprofilestop()
@@ -583,10 +761,10 @@ end
 ---------------------------------------------------------------------------
 local ahButton
 
--- Estado de los botones de escanear (cabecera y ventana de la AH), como en
--- Auctionator: sin límite propio; se escanea cuando el cliente lo permite.
+-- Estado de los botones de escanear (cabecera y ventana de la AH). Escanear lanza el
+-- escaneo de Auctionator (ver Scanner:Start):
 --   escaneando -> el % de progreso, en gris
---   si no      -> "Escanear", pulsable solo con la AH abierta
+--   si no      -> "Escanear", pulsable solo con la AH abierta y Auctionator listo
 -- Junto al botón de la cabecera, en pequeño: "Último escaneo: hace 3 min".
 -- "14:21": lo que falta para poder pedir otro escaneo completo al servidor
 local function Countdown(seconds)
@@ -598,7 +776,21 @@ function ES:RefreshScanButtons()
   local busy = self.Scanner:IsBusy()
   -- Límite de 15 min del servidor (ver Scanner): cuenta atrás en gris
   local wait = busy and 0 or self.Scanner:SecondsUntilNextScan()
-  local enabled = self:IsAuctionHouseOpen() and not busy and wait == 0
+  -- (el escaneo lo pide Auctionator: sin él no se puede, y también cuenta su propia
+  -- cuenta atrás)
+  local ahOpen = self:IsAuctionHouseOpen()
+  local problem = self.Scanner.AuctionatorProblem()
+  local enabled = ahOpen and not busy and wait == 0 and not problem
+  -- Auctionator crea su marco de escaneo al abrirse la AH, quizá después que nosotros:
+  -- se mira otra vez en un momento (unas pocas veces)
+  if ahOpen and type(Auctionator) == "table" and not self.Scanner.AuctionatorFrame() then
+    self.auctionatorRetries = (self.auctionatorRetries or 0) + 1
+    if self.auctionatorRetries <= 5 then
+      C_Timer.After(1, function() if ES:IsAuctionHouseOpen() then ES:RefreshScanButtons() end end)
+    end
+  else
+    self.auctionatorRetries = nil
+  end
   local progress
   if busy then
     progress = string.format("%d%%", math.floor((self.Scanner.progress or 0) * 100))
@@ -624,7 +816,9 @@ function ES:RefreshScanButtons()
     -- Siempre pulsable con la AH abierta: abre el addon aunque no se pueda escanear
     -- (CurseForge: con la cuenta atrás en gris no había forma de abrirlo desde la AH)
     ahButton:SetEnabled(self:IsAuctionHouseOpen())
-    ahButton:SetText(progress and ("Crafter's Journal: " .. progress) or L["Crafter's Journal: Escanear"])
+    -- (sin Auctionator no escanea: solo abre el addon)
+    ahButton:SetText(progress and ("Crafter's Journal: " .. progress)
+      or type(Auctionator) ~= "table" and "Crafter's Journal" or L["Crafter's Journal: Escanear"])
   end
   self:UpdatePostStatus()
   -- Mientras dure el límite, la cuenta atrás avanza cada segundo
@@ -713,8 +907,11 @@ function ES:OnAuctionHouseShow()
       GameTooltip:AddLine("Crafter's Journal")
       GameTooltip:AddLine(L["Descarga todas las subastas y muestra el análisis."], 1, 1, 1, true)
       local wait = not ES.Scanner:IsBusy() and ES.Scanner:SecondsUntilNextScan() or 0
+      local problem = ES.Scanner.AuctionatorProblem()
       if wait > 0 then
         GameTooltip:AddLine(string.format(L["El servidor solo permite un escaneo completo cada 15 min: podrás volver a escanear en %s."], ES.Countdown(wait)), 1, 0.6, 0.2, true)
+      elseif problem then
+        GameTooltip:AddLine(problem, 1, 0.6, 0.2, true)
       end
       GameTooltip:Show()
     end)

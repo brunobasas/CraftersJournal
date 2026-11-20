@@ -135,15 +135,29 @@ function Calc.AHPrice(itemID, scan)
   return nil
 end
 
--- Precio automático de un material: lo más barato entre el vendedor (con el descuento
--- de ciudad) y la subasta más barata (Calc.AHPrice). Devuelve precio y fuente
--- ("vendor" o "ah"), o nil si no hay ninguno
-function Calc.AutoPrice(itemID, scan, discount)
+-- Lo que cuestan `n` unidades en la AH: subiendo por la escalera de precios del escaneo,
+-- de la más barata a la más cara, como las rutas (Planner.LadderCost); si hace falta más
+-- de lo que hay a la venta, el resto a la mediana. nil sin precio. (Antes era la más
+-- barata por la cantidad: con cantidades grandes el coste salía por debajo del real)
+function Calc.AHCost(itemID, n, scan)
+  local entry = scan and scan.items and scan.items[itemID]
+  local P = ES.Planner
+  local ladder = P.Ladder(entry)
+  if not ladder or n <= 0 then return nil end
+  local fromAH = math.min(n, P.LadderSupply(ladder))
+  local median = (entry and entry.median) or P.MedianPrice(ladder)
+  local cost = fromAH > 0 and (P.LadderCost(ladder, 0, fromAH) or fromAH * median) or 0
+  return cost + (n - fromAH) * median
+end
+
+-- Lo que cuestan `n` de un material: lo más barato entre el vendedor (con el descuento
+-- de ciudad) y la AH (Calc.AHCost). Devuelve el total y la fuente ("vendor" o "ah"), o nil
+function Calc.AutoCost(itemID, n, scan, discount)
   local vendor = ES.Data.VendorPrices and ES.Data.VendorPrices[itemID]
-  if vendor then vendor = math.floor(vendor * (1 - (discount or 0)) + 0.5) end
-  local ah, source = Calc.AHPrice(itemID, scan)
-  if vendor and (not ah or vendor <= ah) then return vendor, "vendor" end
-  if ah then return ah, source end
+  local vendorTotal = vendor and math.floor(vendor * (1 - (discount or 0)) + 0.5) * n
+  local ah = Calc.AHCost(itemID, n, scan)
+  if vendorTotal and (not ah or vendorTotal <= ah) then return vendorTotal, "vendor" end
+  if ah then return ah, "ah" end
   return nil
 end
 
@@ -184,16 +198,27 @@ end
 -- Receta de la profesión que fabrica un objeto y sabes (para desglosarlo en crudo)
 local function Producer(data, itemID)
   for spellID, r in pairs(data.recipes) do
-    if r.out and r.out[1] == itemID and not r.conversion and ES:IsRecipeKnown(spellID) then return r end
+    if r.out and r.out[1] == itemID and not r.conversion and ES:IsRecipeKnown(spellID) then
+      return r, ES.Planner.Cooldown(r, spellID) and true or nil
+    end
   end
+end
+
+-- Cómo se consigue un intermedio si no lo eliges tú: lo más barato, salvo lo que tiene
+-- enfriamiento (Mooncloth: una cada pocos días), que se compra si se puede. Igual que
+-- las rutas, la Colección y Ganar dinero (Acquire en Planner.lua)
+function Calc.DefaultMode(m)
+  return (m.buyCost and (m.cooldown or not m.craftCost or m.buyCost < m.craftCost)) and "buy" or "craft"
 end
 
 -- Lo intermedio que sabes fabricar (Bolt of Mageweave, Cured Light Hide...): comprarlo
 -- hecho o fabricarlo con sus materiales. Por defecto, lo más barato; en la hoja se
 -- cambia con un clic y se guarda en el cálculo: c.via[itemID] = "craft" | "buy"
 -- ctx = { scan, discount, prices (los escritos a mano), via }
-local function UnitPrice(ctx, id)
-  return ctx.prices[id] or (Calc.AutoPrice(id, ctx.scan, ctx.discount))
+-- Lo que cuesta comprar `n` de un objeto: a tu precio escrito a mano, o Calc.AutoCost
+local function BuyCost(ctx, id, n)
+  if ctx.prices[id] then return ctx.prices[id] * n end
+  return (Calc.AutoCost(id, n, ctx.scan, ctx.discount))
 end
 
 local ItemCost
@@ -210,21 +235,20 @@ end
 
 -- Comprarlo hecho o fabricarlo: lo elegido, o si no lo más barato (sin precio de
 -- compra, se fabrica; sin poder costear la fabricación, se compra)
-local function Mode(ctx, id, buyCost, craftCost)
+local function Mode(ctx, id, buyCost, craftCost, cooldown)
   local chosen = ctx.via[id]
   if chosen == "craft" or chosen == "buy" then return chosen, true end
-  if buyCost and (not craftCost or buyCost < craftCost) then return "buy", false end
-  return "craft", false
+  return Calc.DefaultMode({ buyCost = buyCost, craftCost = craftCost, cooldown = cooldown }), false
 end
 
 -- Lo que cuesta conseguir `n` de un objeto (a tu manera: comprado o fabricado)
 function ItemCost(ctx, data, id, n, depth)
-  local buy = UnitPrice(ctx, id)
-  local buyCost = buy and buy * n
-  local sub = depth < MAX_DEPTH and Producer(data, id)
+  local buyCost = BuyCost(ctx, id, n)
+  local sub, cooldown
+  if depth < MAX_DEPTH then sub, cooldown = Producer(data, id) end
   if not sub then return buyCost end
   local craftCost = RecipeRaw(ctx, data, sub, n / ((sub.out and sub.out[2]) or 1), depth + 1)
-  return Mode(ctx, id, buyCost, craftCost) == "craft" and craftCost or buyCost
+  return Mode(ctx, id, buyCost, craftCost, cooldown) == "craft" and craftCost or buyCost
 end
 
 -- Suma a `need` lo que hay que conseguir para `crafts` fabricaciones; `made` apunta
@@ -236,17 +260,17 @@ end
 local function Expand(ctx, data, recipe, crafts, need, order, made, depth, display, parent)
   for _, rq in ipairs(recipe.r or {}) do
     local id, n = rq[1], rq[2] * crafts
-    local sub = depth < MAX_DEPTH and Producer(data, id)
+    local sub, cooldown
+    if depth < MAX_DEPTH then sub, cooldown = Producer(data, id) end
     local mode, m
     if sub then
-      local buy = UnitPrice(ctx, id)
-      local buyCost = buy and buy * n
+      local buyCost = BuyCost(ctx, id, n)
       local subCrafts = n / ((sub.out and sub.out[2]) or 1)
       local craftCost = RecipeRaw(ctx, data, sub, subCrafts, depth + 1)
       local chosen
-      mode, chosen = Mode(ctx, id, buyCost, craftCost)
+      mode, chosen = Mode(ctx, id, buyCost, craftCost, cooldown)
       m = { itemID = id, qty = n, mode = mode, chosen = chosen, buyCost = buyCost, craftCost = craftCost,
-        depth = depth }
+        cooldown = cooldown, depth = depth }
       made[#made + 1] = m
       display[#display + 1] = { made = m, depth = depth }
       if mode == "craft" then Expand(ctx, data, sub, subCrafts, need, order, made, depth + 1, display, m) end
@@ -269,12 +293,11 @@ local function Expand(ctx, data, recipe, crafts, need, order, made, depth, displ
 end
 
 -- Cambia cómo se consigue un intermedio en un cálculo (clic en su fila de la hoja):
--- de lo que sale ahora a lo otro. Si lo otro es lo más barato, deja de estar elegido
+-- de lo que sale ahora a lo otro. Si lo otro es lo de por defecto, deja de estar elegido
 function Calc:ToggleVia(c, m)
   c.via = c.via or {}
   local other = m.mode == "craft" and "buy" or "craft"
-  local cheapest = (m.buyCost and (not m.craftCost or m.buyCost < m.craftCost)) and "buy" or "craft"
-  c.via[m.itemID] = other ~= cheapest and other or nil
+  c.via[m.itemID] = other ~= Calc.DefaultMode(m) and other or nil
 end
 
 -- Todo el cálculo de una receta guardada:
@@ -313,11 +336,18 @@ function Calc:Compute(c)
   display.byItem = nil
   local res = { recipe = recipe, rows = {}, made = made, display = display, cost = 0, missing = false, discount = discount, city = city }
   for _, id in ipairs(order) do
-    local price, source = c.prices[id], "manual"
-    if not price then price, source = Calc.AutoPrice(id, scan, discount) end
+    -- (a mano: tu precio por la cantidad; si no, la AH por la escalera o el vendedor:
+    -- row.price es entonces el precio medio por unidad)
+    local price, source, total = c.prices[id], "manual", nil
+    if price then
+      total = need[id] * price
+    else
+      total, source = Calc.AutoCost(id, need[id], scan, discount)
+      price = total and need[id] > 0 and total / need[id] or nil
+    end
     local row = { itemID = id, qty = need[id], price = price, source = price and source or nil }
     if price then
-      row.total = need[id] * price
+      row.total = total
       res.cost = res.cost + row.total
     else
       res.missing = true

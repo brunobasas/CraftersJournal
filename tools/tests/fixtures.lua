@@ -200,4 +200,15 @@ function Fixtures.After(name)
   })
   -- Bolsas con algo de todo
   BAGS[2318], BAGS[2589], BAGS[2592] = 4, 30, 12
+  -- Inversiones: Auctionator con historial (un día dudoso) y una cartera con compras,
+  -- una venta y un objeto sin precio
+  InstallAuctionator()
+  AUCTIONATOR_DAYS[4306] = { { ago = 0, max = 199 }, { ago = 2, max = 169 }, { ago = 4, max = 190 },
+    { ago = 5, max = 20 }, { ago = 6, max = 196 }, { ago = 14, max = 120 } }
+  AUCTIONATOR_DAYS[13468] = { { ago = 0, max = 108800 }, { ago = 4, max = 122200 } }
+  ES.Invest:Add(4306, "buy", 20, 200)
+  ES.Invest:Add(4306, "buy", 20, 400)
+  ES.Invest:Add(4306, "sell", 15, 500)
+  ES.Invest:Add(13468, "buy", 5, 450000, true)
+  ES.Invest:Add(9258, "buy", 10, 233)
 end

@@ -9,7 +9,7 @@
 ## IconTexture: Interface\Icons\Trade_BlackSmithing
 ## X-Curse-Project-ID: 1752523
 ## AddonCompartmentFunc: CraftersJournal_OnAddonCompartmentClick
-## OptionalDeps: QuestieDB, Questie, TomTom, ShortestPathForever
+## OptionalDeps: Auctionator, QuestieDB, Questie, TomTom, ShortestPathForever
 
 Libs\LibStub\LibStub.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
@@ -48,6 +48,8 @@ Earn.lua
 Favor.lua
 Shopping.lua
 Collection.lua
+PriceHistory.lua
+Invest.lua
 UI.lua
 ProfessionUI.lua
 HomeUI.lua
@@ -58,6 +60,7 @@ ShoppingUI.lua
 Disenchant.lua
 InventoryUI.lua
 FavorUI.lua
+InvestUI.lua
 Calculator.lua
 CalculatorUI.lua
 CollectionUI.lua
@@ -65,6 +68,7 @@ PatternsUI.lua
 VendorUI.lua
 AuctionSellUI.lua
 CraftWindowUI.lua
+TabsOptionsUI.lua
 Options.lua
 WhatsNew.lua
 #@do-not-package@

@@ -37,6 +37,7 @@ REQUIRED = {
     "inventory": "Inventario",
     "favor": "Merchant's Favor",
     "collection": "Colección de recetas",
+    "invest": "Inversiones",
     "assistant": "Asistente",
     "auction": "Casa de Subastas",
     "vendors": "Vendedores e instructores",

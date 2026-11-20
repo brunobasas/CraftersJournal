@@ -67,6 +67,8 @@ local function Mock(name)
     end end
     if k == "SetShown" then return function(self, v) if v then self:Show() else self:Hide() end end end
     if k == "IsShown" or k == "IsVisible" then return function(self) return self._shown end end
+    if k == "SetEnabled" then return function(self, v) self._enabled = v and true or false end end
+    if k == "IsEnabled" then return function(self) return self._enabled ~= false end end
     if k == "GetChecked" then return function(self) return self._checked end end
     if k == "SetChecked" then return function(self, v) self._checked = v and true or false end end
     -- Desplazamiento de un ScrollFrame: se recuerda (como en el juego, no se limita
@@ -178,8 +180,10 @@ GetProfessionInfo = function(line)
 end
 
 BAGS = {}          -- [itemID] = cantidad (GetItemCount)
+REAGENT_BAG = {}   -- [itemID] = cantidad en la bolsa de componentes (la 5, como en Forever)
 KNOWN_SPELLS = {}  -- [spellID] = true (IsPlayerSpell)
-GetItemCount = function(id) return BAGS[id] or 0 end
+Enum = { BagIndex = { ReagentBag = 5 } }
+GetItemCount = function(id) return (BAGS[id] or 0) + (REAGENT_BAG[id] or 0) end
 IsPlayerSpell = function(id) return KNOWN_SPELLS[id] or false end
 -- Objetos: como un cliente con todo en caché (nombre en inglés de los datos y precio
 -- de venta al vendedor). ITEM_INFO[id] = { name =, sell = } cambia uno;
@@ -188,7 +192,8 @@ ITEM_INFO, UNCACHED = {}, {}
 GetItemInfo = function(id)
   if type(id) ~= "number" or UNCACHED[id] then return nil end
   local i = ITEM_INFO[id]
-  if i then return i.name, nil, i.quality or 1, nil, nil, nil, nil, nil, nil, 134400, i.sell end
+  -- (i.bind: 1 ligado al recogerlo, 4 de misión; es el 14.º valor, como en el juego)
+  if i then return i.name, nil, i.quality or 1, nil, nil, nil, nil, nil, nil, 134400, i.sell, nil, nil, i.bind end
   local D = ES and ES.Data
   local name = D and D.ItemNames and D.ItemNames[id] or ("Item " .. id)
   local sell = D and D.SellPrices and D.SellPrices[id] or 0
@@ -201,31 +206,47 @@ end
 ITEM_QUALITY_COLORS = {}
 for q = -1, 7 do ITEM_QUALITY_COLORS[q] = { r = 1, g = 1, b = 1, hex = "|cffffffff" } end
 
--- Bolsas: lo de BAGS, una pila por objeto en la bolsa 0 (en orden de número).
+-- Bolsas: lo de BAGS, una pila por objeto en la bolsa 0 (en orden de número), y lo de
+-- REAGENT_BAG igual en la bolsa de componentes (la 5, 16 casillas).
 -- BAG_FLAGS[id] = { bound = true, quality = 0 } para ligados o grises
 BAG_FLAGS = {}
-local function BagIDs()
-  local ids = {}
-  for id, n in pairs(BAGS) do if n > 0 then ids[#ids + 1] = id end end
+local REAGENT_SLOTS = 16
+local function BagTable(bag)
+  if bag == 0 then return BAGS end
+  if bag == Enum.BagIndex.ReagentBag then return REAGENT_BAG end
+end
+local function BagIDs(bag)
+  local ids, t = {}, BagTable(bag or 0)
+  for id, n in pairs(t or {}) do if n > 0 then ids[#ids + 1] = id end end
   table.sort(ids)
   return ids
 end
 C_Container = {
-  GetContainerNumSlots = function(bag) if bag == 0 then return math.max(16, #BagIDs() + 4) end return 0 end,
-  GetContainerItemID = function(bag, slot) if bag == 0 then return BagIDs()[slot] end end,
+  GetContainerNumSlots = function(bag)
+    if bag == 0 then return math.max(16, #BagIDs(0) + 4) end
+    if bag == Enum.BagIndex.ReagentBag then return REAGENT_SLOTS end
+    return 0
+  end,
+  GetContainerItemID = function(bag, slot) return BagTable(bag) and BagIDs(bag)[slot] or nil end,
   GetContainerItemInfo = function(bag, slot)
-    local id = bag == 0 and BagIDs()[slot]
+    local t = BagTable(bag)
+    local id = t and BagIDs(bag)[slot]
     if not id then return nil end
     local f = BAG_FLAGS[id] or {}
-    return { itemID = id, stackCount = BAGS[id], isBound = f.bound or false, quality = f.quality or 1,
+    return { itemID = id, stackCount = t[id], isBound = f.bound or false, quality = f.quality or 1,
       hasNoValue = f.noValue or false, isLocked = false, hyperlink = "|Hitem:" .. id .. "|h[" .. id .. "]|h" }
   end,
-  GetContainerNumFreeSlots = function(bag) return bag == 0 and 4 or 0, 0 end,
+  GetContainerNumFreeSlots = function(bag)
+    if bag == 0 then return 4, 0 end
+    if bag == Enum.BagIndex.ReagentBag then return REAGENT_SLOTS - #BagIDs(bag), 0 end
+    return 0, 0
+  end,
   UseContainerItem = function(bag, slot)
-    local id = bag == 0 and BagIDs()[slot]
+    local t = BagTable(bag)
+    local id = t and BagIDs(bag)[slot]
     if id and MerchantFrame and MerchantFrame:IsShown() then
-      SOLD[#SOLD + 1] = { itemID = id, count = BAGS[id] }
-      BAGS[id] = 0
+      SOLD[#SOLD + 1] = { itemID = id, count = t[id] }
+      t[id] = 0
     end
   end,
 }
@@ -268,6 +289,14 @@ end
 FAVOR = 0
 C_CurrencyInfo = { GetCurrencyInfo = function(id) return { quantity = FAVOR, name = "Merchant's Favor", currencyID = id } end }
 
+-- Manejador de errores de Lua del juego: GAME_ERROR_HANDLER es el del juego (apunta en
+-- GAME_ERRORS lo que le llega). El addon no debe cambiarlo salvo con /cj errores grabar
+GAME_ERRORS = {}
+GAME_ERROR_HANDLER = function(msg) GAME_ERRORS[#GAME_ERRORS + 1] = tostring(msg) end
+local errorHandler = GAME_ERROR_HANDLER
+geterrorhandler = function() return errorHandler end
+seterrorhandler = function(f) errorHandler = f end
+
 InCombatLockdown = function() return IN_COMBAT or false end
 IsShiftKeyDown = function() return false end
 IsControlKeyDown = function() return false end
@@ -299,6 +328,55 @@ end
 GetAuctionItemTimeLeft = function(_, i) return AUCTIONS[i] and AUCTIONS[i].tl end
 AuctionFrame = Mock("AuctionFrame")
 
+-- Auctionator simulado: su historial de precios por día (Auctionator.Database).
+-- InstallAuctionator() lo carga (sin llamarla no hay Auctionator, como sin el addon).
+--   AUCTIONATOR_DAYS[itemID] = { { ago = días, max = cobre, min = cobre, avail = n }, ... }
+--   AUCTIONATOR_FAIL = true      GetPriceHistory da error
+--   AUCTIONATOR_ROWS = { ... }   devuelve estas filas tal cual (otra forma de datos)
+--   AUCTIONATOR_DB["itemID"] = {} los objetos con precios en Auctionator (Database.db)
+-- Los días van como en Auctionator: días desde SCAN_DAY_0 (aquí 0), en texto
+AUCTIONATOR_DAYS, AUCTIONATOR_CALLBACKS, AUCTIONATOR_DB = {}, {}, {}
+function AuctionatorToday() return math.floor(time() / 86400) end
+function InstallAuctionator()
+  Auctionator = {
+    Constants = { SCAN_DAY_0 = 0 },
+    Database = {
+      db = AUCTIONATOR_DB,
+      GetPriceHistory = function(self, key)
+        if AUCTIONATOR_FAIL then error("Auctionator: error simulado") end
+        if AUCTIONATOR_ROWS then return AUCTIONATOR_ROWS end
+        local out, today = {}, AuctionatorToday()
+        for _, d in ipairs(AUCTIONATOR_DAYS[tonumber(key)] or {}) do
+          out[#out + 1] = { rawDay = tostring(today - d.ago), date = "día " .. (today - d.ago),
+            minSeen = d.min or d.max, maxSeen = d.max, available = d.avail }
+        end
+        table.sort(out, function(a, b) return tonumber(a.rawDay) > tonumber(b.rawDay) end)
+        return out
+      end,
+    },
+    -- (AUCTIONATOR_LATEST[itemID] = { price, age }: el último mínimo que vio y hace
+    -- cuántos días; sin él, su API pública no da precio)
+    API = { v1 = {
+      RegisterForDBUpdate = function(_, cb) AUCTIONATOR_CALLBACKS[#AUCTIONATOR_CALLBACKS + 1] = cb end,
+      GetAuctionPriceByItemID = function(_, id) local l = AUCTIONATOR_LATEST and AUCTIONATOR_LATEST[id] return l and l.price end,
+      GetAuctionAgeByItemID = function(_, id) local l = AUCTIONATOR_LATEST and AUCTIONATOR_LATEST[id] return l and (l.age or 0) end,
+    } },
+    -- Su escaneo completo (el marco lo crea al abrir la AH): AUCTIONATOR_FULL_SCANS cuenta
+    -- las veces que se lanza
+    -- (AUCTIONATOR_WAITING = true: su propia cuenta atrás o un escaneo en curso, CanInitiate)
+    State = { FullScanFrameRef = {
+      -- (como el de verdad con la AH clásica: pide el escaneo completo al servidor)
+      InitiateScan = function()
+        AUCTIONATOR_FULL_SCANS = (AUCTIONATOR_FULL_SCANS or 0) + 1
+        QueryAuctionItems("", nil, nil, 0, nil, nil, true, false, nil)
+      end,
+      CanInitiate = function() return not AUCTIONATOR_WAITING end,
+    } },
+  }
+end
+-- Auctionator acaba un escaneo: avisa a quien se registró
+function AuctionatorUpdated() for _, cb in ipairs(AUCTIONATOR_CALLBACKS) do cb() end end
+
 -- Métodos de marco que existen en el juego (los que usa el addon). Un método que
 -- el addon llame y no esté aquí es casi seguro un error (sale como fallo)
 WIDGET_API = {}
@@ -321,4 +399,5 @@ for name in ([[
   SetGradientAlpha SetRotation CreateMaskTexture AddMaskTexture SetMaxLines SetToplevel GetZoom
   SetClampRectInsets GetRight GetBottom GetName IsEventRegistered GetValue
   GetVertexColor SetFixedFrameLevel SetFixedFrameStrata SetStartDelay SetToFinalAlpha
+  CreateLine SetStartPoint SetEndPoint SetThickness SetCursorPosition
 ]]):gmatch("%a+") do WIDGET_API[name] = true end
