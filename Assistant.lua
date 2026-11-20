@@ -1386,6 +1386,14 @@ function A.LineKey(line)
     .. "|" .. tostring(line.item) .. "|" .. tostring(line.stepRecipe) .. "|" .. tostring(line.buyRow)
 end
 
+-- La profesión cuyas filas rehace A.Update (las mismas condiciones), o nil
+function A.BuildsFor()
+  if not (ES.db and A.Enabled()) then return nil end
+  local profKey = A.Profession()
+  if profKey and not Hidden(profKey) then return profKey end
+  return nil
+end
+
 function A.Update()
   if not ES.db then return end
   local profKey = A.Enabled() and A.Profession()
@@ -1400,7 +1408,14 @@ function A.Update()
   local rank = data.skillLine and ES:GetProfessionSkill(data.skillLine) or nil
   -- Las filas de la vista Ruta, más las de compra (solo el asistente: la ventana tiene
   -- Materiales y la Lista de compra)
-  local lines = ES:RouteLines(profKey, { buy = true }) or {}
+  local lines, plan = ES:RouteLines(profKey, { buy = true, lean = true })
+  -- Los avisos de tramo en el chat salen de estas mismas filas (ES:PhaseNotices, solo si
+  -- ya tienen estado: el primero lo pone la subida de nivel); así no se rehacen aparte
+  if lines and ES.phaseState and ES.phaseState[profKey] and ES.PhaseNotices then
+    local ok, err = pcall(ES.PhaseNotices, ES, profKey, lines, plan)
+    if not ok and ES.RecordError then ES:RecordError("avisos de tramo", err) end
+  end
+  lines = lines or {}
   -- Los pasos de la ruta: las filas con nivel (sin el total, avisos ni citas)
   local steps, index = {}, nil
   for _, line in ipairs(lines) do
@@ -1805,6 +1820,11 @@ do
     elseif event == "PLAYER_ENTERING_WORLD" then
       -- (los datos del personaje y las profesiones ya están: Core.lua)
       C_Timer.After(1, A.Refresh)
+    elseif frame and state.profKey then
+      -- Al salir del combate solo falta volver a poner el botón seguro (lo único que no
+      -- se puede en combate: lo demás se actualiza igual). Antes se rehacía la ruta
+      -- entera tras cada pelea. Celebrando un paso hecho, nada: al acabar se pinta (EndHold)
+      if not state.hold then Paint() end
     else
       A.Refresh()
     end

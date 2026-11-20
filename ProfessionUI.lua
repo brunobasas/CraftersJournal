@@ -669,11 +669,12 @@ end
 -- Se llama al subir un punto y al cambiar las bolsas (fabricar gasta materiales sin
 -- subir siempre un punto)
 ES.phaseState = {}
-function ES:PhaseNotices(profKey)
+-- lines, plan: las filas que el asistente acaba de hacer (A.Update), para no rehacerlas
+function ES:PhaseNotices(profKey, lines, plan)
   local data = ES.Data[profKey]
   local level = data and data.skillLine and ES:GetProfessionSkill(data.skillLine)
   if not (level and ES:RouteLock(profKey)) then return end
-  local lines, plan = ES:RouteLines(profKey, { buy = true })
+  if not lines then lines, plan = ES:RouteLines(profKey, { buy = true, lean = true }) end
   local ph = lines and ES.Planner.Phase(plan, level)
   if not ph then return end
   local cur, items = nil, {}
@@ -726,9 +727,12 @@ do
     local mine = stamp
     C_Timer.After(0.5, function()
       if mine ~= stamp then return end
+      -- (la del asistente no: él rehace sus filas con este mismo cambio de las bolsas y
+      -- los avisos salen de ellas, A.Update; antes se hacían dos veces)
+      local assisted = ES.Assistant and ES.Assistant.BuildsFor and ES.Assistant.BuildsFor()
       for _, p in ipairs(ES.PROFESSIONS or {}) do
         -- (solo las que ya tienen estado: el primer aviso lo pone la subida de nivel)
-        if ES.Data[p.key] and ES.phaseState[p.key] and ES:RouteLock(p.key) then
+        if p.key ~= assisted and ES.Data[p.key] and ES.phaseState[p.key] and ES:RouteLock(p.key) then
           local ok, err = pcall(ES.PhaseNotices, ES, p.key)
           if not ok and ES.RecordError then ES:RecordError("avisos de tramo", err) end
         end
@@ -3927,6 +3931,10 @@ local function RouteLines(plan, page, opts)
       end
     end
   end
+  -- opts.lean (asistente y avisos de tramo): sin las filas del final (aviso de dónde se
+  -- para, "Con lo que llevas", recetas quitadas, total), que no usan. "Con lo que llevas"
+  -- repasa todas las recetas con tus bolsas, y esto se hace con cada cambio de las bolsas
+  if opts and opts.lean then return lines end
   if plan.stoppedAt then
     lines[#lines + 1] = { title = ORANGE .. L["El plan se queda en "] .. plan.stoppedAt .. "|r", sub = StopReason(plan) }
   end
