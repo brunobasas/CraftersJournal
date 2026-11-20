@@ -780,6 +780,13 @@ function ES:ComputeAlternatives(page, plan)
   local k = 1
   local function Work()
     if page.plan ~= plan then plan.altsRunning = nil return end -- ruta nueva: se deja
+    -- Como los cálculos de Jobs.lua: con la ventana cerrada o en combate se espera (se
+    -- mira otra vez cada segundo); antes seguía gastando hasta 8 ms de cada fotograma
+    local main = CraftersJournalMainFrame
+    if C_Timer and ((main and not main:IsShown()) or (InCombatLockdown and InCombatLockdown())) then
+      C_Timer.After(1, Work)
+      return
+    end
     local started = debugprofilestop and debugprofilestop()
     local n = 0
     while k <= #jobs do
