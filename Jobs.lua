@@ -20,8 +20,9 @@ local function OverBudget()
 end
 
 -- Llamado desde dentro de los cálculos largos: cede si se acabó el tiempo del fotograma
+-- (OverBudget escrito aquí mismo: se llama millones de veces en cada ruta)
 function ES.Yield()
-  if frameStart and OverBudget() and coroutine.running() then coroutine.yield() end
+  if frameStart and debugprofilestop() - frameStart > budget and coroutine.running() then coroutine.yield() end
 end
 
 local function Finish(job, ok, result)

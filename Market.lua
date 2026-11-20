@@ -246,9 +246,21 @@ local function StartBuild(stamp, history, track)
   C_Timer.After(0, Step)
 end
 
+-- Las tres partes de la firma la última vez que coincidió con la del índice en uso:
+-- iguales, la firma es la misma y no hace falta montar la cadena (un cálculo de ruta
+-- pide el índice cientos de miles de veces). Lo mismo que Stamp, sin la cadena
+local seenFor, seenN, seenLast, seenTrack
 function Market:Index()
-  local stamp, history, track = Stamp()
-  if cache and cache.stamp == stamp then return cache end
+  local history = ES.History:Entries()
+  local track = ES.db.track and ES.db.track[ES:RealmKey()]
+  local last = history[#history]
+  local n, lastTime, trackTime = #history, last and last.time or 0, track and track.time or 0
+  if cache and seenFor == cache and n == seenN and lastTime == seenLast and trackTime == seenTrack then return cache end
+  local stamp = n .. ":" .. lastTime .. ":" .. trackTime
+  if cache and cache.stamp == stamp then
+    seenFor, seenN, seenLast, seenTrack = cache, n, lastTime, trackTime
+    return cache
+  end
   if not (debugprofilestop and C_Timer and coroutine) then
     cache = Build(stamp, history, track, function() end)
     return cache
@@ -470,6 +482,7 @@ function Market:Demand(itemID)
 end
 
 Market.SIGNALS = 3   -- estancado, precio clavado, más oferta (+ demanda de TSM, si hay datos)
+local SIGNAL_KEYS = { "stuck", "nailed", "supply", "demand" }
 
 -- Todas las señales de un objeto y el veredicto: good, watch, avoid o unknown
 function Market:Signals(itemID)
@@ -482,7 +495,7 @@ function Market:Signals(itemID)
   }
   s.nailed = { known = s.price.known, flag = s.price.flag and s.wall.flag or false }
   local flags, known = 0, 0
-  for _, key in ipairs({ "stuck", "nailed", "supply", "demand" }) do
+  for _, key in ipairs(SIGNAL_KEYS) do
     if s[key].known then known = known + 1 end
     if s[key].flag then flags = flags + 1 end
   end

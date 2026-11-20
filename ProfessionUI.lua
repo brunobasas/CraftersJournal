@@ -2226,7 +2226,8 @@ function ES.CraftsAtLevel(recipeID, level)
 end
 do
   local f = CreateFrame("Frame")
-  ES.SafeRegister(f, "UNIT_SPELLCAST_SUCCEEDED")
+  -- (solo tus lanzamientos: con todas las unidades llegaba uno por cada hechizo de cualquiera a tu alrededor)
+  if not (f.RegisterUnitEvent and pcall(f.RegisterUnitEvent, f, "UNIT_SPELLCAST_SUCCEEDED", "player")) then ES.SafeRegister(f, "UNIT_SPELLCAST_SUCCEEDED") end
   f:SetScript("OnEvent", function(_, _, unit, _, spellID)
     if unit ~= "player" or not spellID then return end
     for _, p in ipairs(ES.PROFESSIONS or {}) do
@@ -4063,8 +4064,8 @@ end
 
 -- Totales de ventas de la vista Profit: al vendedor (lo seguro, lo que cuenta la ruta)
 -- y siguiendo el consejo de cada fila (AH y vendedor). anyAH: algo va a la AH
-local function SalesTotals(plan)
-  local inBags = InventoryByItem()
+local function SalesTotals(plan, inBags)
+  inBags = inBags or InventoryByItem()
   local income, advised, anyAH = 0, 0, false
   for _, d in ipairs(plan.destinations or {}) do
     local advice, _, value = DestinationAdvice(d, inBags)
@@ -4077,14 +4078,14 @@ end
 ES.ProfitSalesTotals = SalesTotals -- (para pruebas)
 
 -- Líneas de la vista Profit: qué hacer con todo lo que fabricas
-local function ProfitLines(plan, page)
+local function ProfitLines(plan, page, inBags)
   local lines = {}
   local dests = {}
   for _, d in ipairs(plan.destinations) do dests[#dests + 1] = d end
   table.sort(dests, function(a, b) return a.income + (a.ahExtra or 0) > b.income + (b.ahExtra or 0) end)
   local total, extra = 0, 0
   local advised, anyAH = 0, false -- (total siguiendo el consejo de cada fila)
-  local inBags = InventoryByItem()
+  inBags = inBags or InventoryByItem() -- (el de RenderPlan si ya lo tiene: Inventory:List una vez por pintado)
   for _, d in ipairs(dests) do
     local name, texture = ItemLabel(d.itemID, L["Objeto "] .. d.itemID)
     local parts = {} -- cuántas fabricas: en la columna de la izquierda
@@ -4549,10 +4550,14 @@ function ES:RenderPlan(page)
   end
   -- Posible total siguiendo el consejo (AH y vendedor), bajo el total seguro
   page.totalAHInfo = nil
+  local inBags -- (lo de las bolsas de este pintado: también lo usa la vista Profit)
   if page.totalAH then
     local text = ""
     if plan and #plan.steps > 0 then
-      local ok, income, advised, anyAH = pcall(SalesTotals, plan)
+      local ok, income, advised, anyAH = pcall(function()
+        inBags = InventoryByItem()
+        return SalesTotals(plan, inBags)
+      end)
       if ok and anyAH and math.abs(advised - income) >= 1 then
         local advisedNet = plan.net - (advised - income)
         page.totalAHInfo = { net = plan.net, advisedNet = advisedNet }
@@ -4643,7 +4648,7 @@ function ES:RenderPlan(page)
 
   local lines = {}
   if plan and #plan.steps > 0 then
-    if page.view == "profit" then lines = ProfitLines(plan, page)
+    if page.view == "profit" then lines = ProfitLines(plan, page, inBags)
     elseif page.view == "shop" then lines = ShopLines(plan, page)
     else
       lines = RouteLines(plan, page)

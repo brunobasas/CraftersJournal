@@ -8,10 +8,12 @@ ES.ahOpen = false
 -- AH abierta: por el evento o porque su ventana está a la vista (si el evento se
 -- pierde, el botón de escanear no debe quedarse en gris con la AH delante)
 -- El cliente puede tener las dos ventanas (moderna y clásica): vale cualquiera
+-- (sin crear una tabla en cada llamada: se mira con cada GET_ITEM_INFO_RECEIVED)
 local function AHFrameShown()
-  for _, f in ipairs({ AuctionHouseFrame or false, AuctionFrame or false }) do
-    if f and f.IsShown and f:IsShown() then return true end
-  end
+  local f = AuctionHouseFrame
+  if f and f.IsShown and f:IsShown() then return true end
+  f = AuctionFrame
+  if f and f.IsShown and f:IsShown() then return true end
   return false
 end
 

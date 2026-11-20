@@ -758,7 +758,8 @@ do
   end
   ES.SafeRegister(f, "TRADE_SKILL_SHOW")
   ES.SafeRegister(f, "TRADE_SKILL_LIST_UPDATE")
-  ES.SafeRegister(f, "UNIT_SPELLCAST_SUCCEEDED")
+  -- (solo tus lanzamientos: con todas las unidades llegaba uno por cada hechizo de cualquiera a tu alrededor)
+  if not (f.RegisterUnitEvent and pcall(f.RegisterUnitEvent, f, "UNIT_SPELLCAST_SUCCEEDED", "player")) then ES.SafeRegister(f, "UNIT_SPELLCAST_SUCCEEDED") end
   f:SetScript("OnEvent", function(_, event, unit, _, spellID)
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
       -- Fabricaste una con enfriamiento: ya no está lista (el juego tarda un poco en dar
