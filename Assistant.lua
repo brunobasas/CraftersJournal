@@ -90,7 +90,7 @@ end
 
 
 ---------------------------------------------------------------------------
--- Botón seguro para usar un pergamino (como SetUseItem en la vista Ruta): suelto en
+-- Botón seguro para usar un pergamino (como el de las filas de la ventana, WP.HoverRow): suelto en
 -- UIParent y colocado encima del banner; se suelta al entrar en combate (en ese
 -- momento aún se puede), así el banner nunca queda protegido
 ---------------------------------------------------------------------------

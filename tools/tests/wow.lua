@@ -103,7 +103,26 @@ local function Mock(name)
     end
     if k == "GetParent" then return function(self) return self._parent end end
     if k == "GetChildren" then return function(self) return unpack(self._children or {}) end end
-    if k == "IsProtected" then return function() return false end end
+    -- Como en el juego: un marco seguro (de plantilla Secure...) es protegido, y lo es todo
+    -- marco que tenga uno dentro (GitHub #11: la ventana entera quedaba protegida)
+    if k == "IsProtected" then return function(self)
+      local function protected(f)
+        local tpl = rawget(f, "_template")
+        if type(tpl) == "string" and tpl:find("Secure") then return true end
+        for _, c in ipairs(rawget(f, "_children") or {}) do
+          if protected(c) then return true end
+        end
+        return false
+      end
+      return protected(self)
+    end end
+    -- Anclajes: cuántos puntos tiene y a qué marco el último (ClearAllPoints los quita)
+    if k == "SetPoint" then return function(self, _, rel)
+      self._anchors = (self._anchors or 0) + 1
+      if type(rel) == "table" then self._anchorTo = rel end
+    end end
+    if k == "ClearAllPoints" then return function(self) self._anchors, self._anchorTo = 0, nil end end
+    if k == "GetNumPoints" then return function(self) return self._anchors or 0 end end
     if k == "GetName" then return function(self) return self._globalName end end
     -- Como en WoW: solo los métodos (con mayúscula) existen; los campos propios no
     if type(k) ~= "string" or not k:match("^%u") then return nil end
@@ -113,9 +132,10 @@ local function Mock(name)
 end
 MockFrame = Mock
 
-CreateFrame = function(_, name, parent)
+CreateFrame = function(_, name, parent, template)
   local f = Mock("frame")
   f._parent = parent
+  f._template = template -- (la plantilla: IsProtected)
   -- (los hijos, para GetChildren)
   if type(parent) == "table" then
     local kids = rawget(parent, "_children") or {}

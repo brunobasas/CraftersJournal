@@ -677,7 +677,10 @@ end
 -- estrella si está cerca y luego marca el camino como siempre. Es uno solo y cuelga
 -- de UIParent: un botón seguro dentro de la ventana la volvería protegida y
 -- cerrarla en combate daría el aviso de acción bloqueada. Se suelta al entrar en
--- combate (en ese momento aún se puede); en combate, la fila funciona como antes
+-- combate (en ese momento aún se puede); en combate, la fila funciona como antes.
+-- El mismo botón usa el objeto de las filas que lo piden (row.useItem: "Aprender
+-- receta", con el pergamino en la bolsa). Antes ese era un botón seguro hijo de la
+-- fila y dejaba protegida la ventana (GitHub #11)
 local hover
 local function ReleaseHover()
   if not hover or (InCombatLockdown and InCombatLockdown()) then return end
@@ -700,20 +703,29 @@ function WP.Targetable(npcID)
 end
 
 function WP.HoverRow(row)
-  if (InCombatLockdown and InCombatLockdown()) or not WP.Available() or not row.go then return end
-  local id = row.go()
-  local npc = WP.NPC(id or 0)
-  if not (npc and npc.name) then return end
-  -- (sin estrella para lo que no se puede seleccionar: el clic hace lo de la fila)
-  if not WP.Targetable(id) then ReleaseHover() return end
+  if InCombatLockdown and InCombatLockdown() then return end
+  -- Usar un objeto de las bolsas (no depende de los PNJ); si no, la estrella
+  local itemID = row.useItem
+  local npc
+  if not itemID then
+    local id = WP.Available() and row.go and row.go()
+    npc = id and WP.NPC(id)
+    if not (npc and npc.name) then
+      -- (la fila repintada con el botón encima ya no lleva a nadie: fuera, ver StyleRow)
+      if hover and hover.row == row then ReleaseHover() end
+      return
+    end
+    -- (sin estrella para lo que no se puede seleccionar: el clic hace lo de la fila)
+    if not WP.Targetable(id) then ReleaseHover() return end
+  end
   if not hover then
     hover = CreateFrame("Button", "CraftersJournalRowMarkButton", UIParent, "SecureActionButtonTemplate")
     -- Solo el botón izquierdo, como la fila (bajando o soltando, según la opción del juego)
     hover:RegisterForClicks("LeftButtonUp", "LeftButtonDown")
-    hover:SetAttribute("type", "macro")
-    -- Después de la macro, lo que haga la fila (marcar el camino, buscar en la AH...)
+    -- Después de la macro, lo que haga la fila (marcar el camino, buscar en la AH...).
+    -- Tras usar un objeto, nada más: la fila no tiene otra acción
     hover:HookScript("PostClick", function(self, _, down)
-      local onClick = not down and self.row and self.row:GetScript("OnClick")
+      local onClick = not down and self.row and self:GetAttribute("type") == "macro" and self.row:GetScript("OnClick")
       if onClick then onClick(self.row) end
     end)
     hover:SetScript("OnEnter", function(self)
@@ -752,7 +764,17 @@ function WP.HoverRow(row)
   end
   hover:SetPoint("TOPLEFT", row, "TOPLEFT", left, 0)
   hover:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -(row.hoverInset or (row.onSkip and 28 or 0)), 0)
-  hover:SetAttribute("macrotext", WP.MarkMacro(npc.name))
+  -- Un modo u otro, nunca los dos: sin el atributo del otro (si no, un botón que fue
+  -- estrella podría usar un objeto, o al revés)
+  if itemID then
+    hover:SetAttribute("type", "item")
+    hover:SetAttribute("macrotext", nil)
+    hover:SetAttribute("item", "item:" .. itemID)
+  else
+    hover:SetAttribute("type", "macro")
+    hover:SetAttribute("item", nil)
+    hover:SetAttribute("macrotext", WP.MarkMacro(npc.name))
+  end
   hover:Show()
 end
 WP.HoverButton = function() return hover end -- para pruebas

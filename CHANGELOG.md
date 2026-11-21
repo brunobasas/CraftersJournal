@@ -1,5 +1,9 @@
 # Crafter's Journal
 
+## 0.67.0
+
+- **Closing the window in combat no longer gets blocked.** Once a route had shown a "Learn recipe" row (a recipe scroll in your bags), the window couldn't be closed with Escape, hidden or moved during combat: the game showed "Crafter's Journal has been blocked from an action". The button that uses the scroll now sits on top of the row only while your mouse is over it, like the star on trainers and vendors, and steps aside when combat starts. Clicking the row out of combat still learns the recipe; in combat it does nothing. (GitHub #11)
+
 ## 0.66.0
 
 - **The Calculator prices AH materials like the routes do.** It multiplied the cheapest auction by the quantity, so with large quantities the material cost came out below what you'd really pay. It now climbs the AH price ladder (the cheapest units first, then the next ones), and if you need more than what's for sale, the rest counts at the median price. The price per unit shown is the average you'd pay.

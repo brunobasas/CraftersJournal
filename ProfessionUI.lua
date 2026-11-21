@@ -1309,6 +1309,15 @@ local function RowClick(self, button)
   end
 end
 
+-- Botón seguro encima de la fila al pasar el ratón (Waypoints.lua, HoverRow): usa el
+-- objeto de la fila (row.useItem: aprender una receta que llevas; usar objetos es
+-- protegido) o, en las de instructor o vendedor, pone la estrella. Es uno solo y
+-- cuelga de UIParent: uno hijo de la fila dejaba protegida la ventana y cerrarla en
+-- combate daba "acción bloqueada" (GitHub #11). En combate no hay botón
+local function WantsHover(row)
+  return row.useItem ~= nil or (row.go ~= nil and not row.onClick)
+end
+
 local function CreateRow(parent)
   local row = CreateFrame("Button", nil, parent, "BackdropTemplate")
   row:SetWidth(LIST_WIDTH)
@@ -1419,7 +1428,8 @@ local function CreateRow(parent)
   skip:Hide()
 
   row:SetScript("OnEnter", function(self)
-    if self.go and not self.onClick then ES.Waypoints.HoverRow(self) end -- estrella al pulsar (Waypoints.lua)
+    -- Botón seguro encima: estrella o usar el objeto de la fila (Waypoints.lua, HoverRow)
+    if WantsHover(self) then ES.Waypoints.HoverRow(self) end
     if self.tooltip then self.tooltip(self) end
   end)
   row:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1446,52 +1456,7 @@ local function LineHeight(line)
   return line.section and SECTION_HEIGHT or line.height or ROW_HEIGHT
 end
 
--- Fila que usa un objeto de tus bolsas al pulsarla (aprender una receta que llevas):
--- usar objetos es protegido, así que va un botón seguro encima de la fila (sin
--- tapar la ✕). En combate no se pueden tocar: se apunta lo que pide la fila ahora y
--- se aplica al salir (si no, una fila reutilizada al repintar en combate se quedaba
--- con el botón del pergamino de la línea de antes, y su clic usaba ese pergamino)
-local pendingUse = {} -- [row] = itemID o false (esconder el botón)
-local function SetUseItem(row, itemID)
-  if InCombatLockdown and InCombatLockdown() then
-    pendingUse[row] = itemID or false
-    return
-  end
-  pendingUse[row] = nil
-  if not itemID then
-    if row.useButton then row.useButton:Hide() end
-    return
-  end
-  local b = row.useButton
-  if not b then
-    b = CreateFrame("Button", nil, row, "SecureActionButtonTemplate")
-    b:SetPoint("TOPLEFT", 0, 0)
-    b:SetPoint("BOTTOMRIGHT", -34, 0)
-    b:RegisterForClicks("AnyUp", "AnyDown")
-    b:SetAttribute("type", "item")
-    b:SetScript("OnEnter", function() local f = row:GetScript("OnEnter") if f then f(row) end end)
-    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    local hl = b:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints(row)
-    hl:SetColorTexture(1, 0.82, 0.25, 0.08)
-    row.useButton = b
-  end
-  b:SetAttribute("item", "item:" .. itemID)
-  b.itemID = itemID -- (para pruebas)
-  b:Show()
-end
-do
-  local f = CreateFrame("Frame")
-  ES.SafeRegister(f, "PLAYER_REGEN_ENABLED")
-  f:SetScript("OnEvent", function()
-    local list = pendingUse
-    pendingUse = {}
-    for row, itemID in pairs(list) do SetUseItem(row, itemID or nil) end
-  end)
-end
-ES.UI.SetUseItem = SetUseItem -- para pruebas
-
--- Botones − y + para cambiar una cantidad (line.onStep(delta); con Mayús, de 5 en 5),
+-- Botones − y +para cambiar una cantidad (line.onStep(delta); con Mayús, de 5 en 5),
 -- a la izquierda del valor. Solo se crean en las filas que los usan (lote de Ganar dinero)
 local STEP_VALUE_COL = 130 -- ancho reservado al valor (cabe "+99g 99s 99c")
 local function SetStepper(row, line)
@@ -1614,7 +1579,13 @@ local function StyleRow(row, line)
   row.value:ClearAllPoints()
   row.value:SetPoint("RIGHT", line.onSkip and -30 or -12, 0)
   SetStepper(row, line)
-  SetUseItem(row, line.useItem)
+  row.useItem = line.useItem
+  -- Repintada con el botón seguro encima (el ratón sigue ahí): que haga lo de la fila
+  -- de ahora, no el pergamino o la estrella de la de antes. (En combate ya está suelto)
+  local hover = ES.Waypoints.HoverButton()
+  if hover and hover.row == row then
+    if WantsHover(row) then ES.Waypoints.HoverRow(row) else ES.Waypoints.ReleaseHover() end
+  end
   return height
 end
 
@@ -2583,7 +2554,7 @@ local function SourcedLearnLine(r, st, profName, plan)
   elseif best.kind == "owned" then
     icon, title = RECIPE_ICON, L["Aprender receta: "] .. r.name
     sub = string.format(L["La tienes en la bolsa%s · clic para aprenderla"], best.count > 1 and (" (" .. best.count .. ")") or "")
-    useItem = r.scroll -- clic: usa el pergamino (botón seguro, ver SetUseItem)
+    useItem = r.scroll -- clic: usa el pergamino (botón seguro, ver WantsHover)
   elseif best.kind == "quest" then
     icon, label = QUEST_ICON, L["Da la misión"]
     -- Gratis en oro, pero puede pedir objetos o misiones antes (CurseForge): se dice

@@ -2819,45 +2819,8 @@ step("comprar por tramos: tramo, margen, lista viva y avisos", function()
   ES.phaseState.Alchemy = nil
   if not ok then error(err, 0) end
 end)
-step("ruta: receta en la bolsa, clic para aprenderla (botón seguro)", function()
-  local row = ES.UI.CreateRow(CreateFrame("Frame"))
-  ES.UI.StyleRow(row, { title = "Aprender receta: X", icon = 134400, useItem = 12345 })
-  local b = row.useButton
-  assert(b and b._shown ~= false and b.itemID == 12345, "falta el botón que usa el pergamino")
-  assert(b:GetAttribute("type") == "item" and b:GetAttribute("item") == "item:12345", "el botón no usa el objeto")
-  ES.UI.StyleRow(row, { title = "Otra fila", icon = 134400 })
-  assert(b._shown == false, "la fila reutilizada sigue usando el pergamino")
-  -- En combate no se puede tocar: se apunta y se aplica al salir (si no, la fila
-  -- reutilizada se quedaba con el botón del pergamino de antes)
-  local savedLock = InCombatLockdown
-  local ok, err = pcall(function()
-    InCombatLockdown = function() return false end
-    ES.UI.StyleRow(row, { title = "Aprender receta: X", icon = 134400, useItem = 12345 })
-    assert(b._shown ~= false and b.itemID == 12345, "fuera de combate, el botón se aplica al momento")
-    InCombatLockdown = function() return true end
-    ES.UI.StyleRow(row, { title = "Otra fila", icon = 134400 })
-    assert(b._shown ~= false and b.itemID == 12345, "en combate el botón seguro no se toca")
-    InCombatLockdown = function() return false end
-    FireEvent("PLAYER_REGEN_ENABLED")
-    assert(b._shown == false, "al salir de combate, la fila sin objeto sigue con el botón del pergamino")
-    -- En combate pasa a otro pergamino: al salir, el suyo
-    InCombatLockdown = function() return true end
-    ES.UI.StyleRow(row, { title = "Aprender receta: Y", icon = 134400, useItem = 67890 })
-    InCombatLockdown = function() return false end
-    FireEvent("PLAYER_REGEN_ENABLED")
-    assert(b._shown ~= false and b.itemID == 67890 and b:GetAttribute("item") == "item:67890",
-      "al salir de combate, el botón usa el pergamino de la fila que se ve")
-    -- Repintada en combate y otra vez fuera antes de salir: manda lo último
-    InCombatLockdown = function() return true end
-    ES.UI.StyleRow(row, { title = "Otra fila", icon = 134400 })
-    InCombatLockdown = function() return false end
-    ES.UI.StyleRow(row, { title = "Aprender receta: X", icon = 134400, useItem = 12345 })
-    FireEvent("PLAYER_REGEN_ENABLED")
-    assert(b._shown ~= false and b.itemID == 12345, "lo apuntado en combate pisa lo aplicado después")
-  end)
-  InCombatLockdown = savedLock
-  if not ok then error(err, 0) end
-end)
+-- (Receta en la bolsa, clic para aprenderla: el botón seguro compartido de las filas, en
+-- las pruebas de tools/tests/categories/route.lua, GitHub #11)
 step("vender parte de una pila: se parte y se vende lo justo", function()
   -- 17 Elixir of Ogre Strength en una pila, hay que vender 12: antes no vendía ninguno
   local ID = 3391

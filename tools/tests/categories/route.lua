@@ -600,6 +600,94 @@ test("bolsas: la ruta guardada no vale si al entrar llevas otra cantidad de un m
   expect(ES:CachedPlan("Tailoring", plan.from, plan.to, cap) == nil, "se reutiliza con otra cantidad de %d", item)
 end, { state = "scan" })
 
+-- Botones seguros de las filas (spec route-row-actions) ---------------------------
+-- GitHub #11: el botón que usa el pergamino era hijo de la fila; un hijo protegido
+-- vuelve protegida la ventana entera, y cerrarla en combate (Escape) daba "acción
+-- bloqueada". Ahora es el botón compartido de la estrella (Waypoints.lua, HoverRow),
+-- suelto en UIParent y colocado encima de la fila al pasar el ratón
+
+-- Una fila de la lista de la página de Sastrería (dentro de la ventana), con `line`
+local function WindowRow(line)
+  local page = ProfessionPage("Tailoring")
+  local row = ES.UI.CreateRow(page.content)
+  ES.UI.StyleRow(row, line)
+  return row
+end
+local function Enter(row) row:GetScript("OnEnter")(row) end
+local function UseLine(itemID) return { title = "Aprender receta: X", icon = 134400, useItem = itemID } end
+local function TrainerLine()
+  local id = expect(ES.Waypoints.Trainers("Tailoring", 1)[1], "Sastrería no tiene instructores: la prueba no prueba nada")
+  return { title = "Instructor", icon = 134400, go = function() return id end }
+end
+
+test("las filas no vuelven protegida la ventana (pergamino en la bolsa y estrella)", function()
+  OpenPage("Tailoring")
+  local main = ES:GetMainFrame()
+  local useRow, starRow = WindowRow(UseLine(12345)), WindowRow(TrainerLine())
+  local p = useRow
+  while p and p ~= main do p = p:GetParent() end
+  expect(p == main, "la fila no está dentro de la ventana: la prueba no prueba nada")
+  Enter(useRow)
+  Enter(starRow)
+  Enter(useRow)
+  expect(not main:IsProtected(), "un botón seguro cuelga de la ventana: cerrarla en combate da acción bloqueada")
+end, { state = "scan" })
+
+test("el botón compartido usa el objeto de la fila o pone la estrella, nunca las dos cosas", function()
+  OpenPage("Tailoring")
+  local useRow, starRow = WindowRow(UseLine(12345)), WindowRow(TrainerLine())
+  Enter(useRow)
+  local h = expect(ES.Waypoints.HoverButton(), "pasar el ratón por la fila del pergamino no pone el botón seguro")
+  expect(h:GetParent() == UIParent, "el botón seguro no cuelga de UIParent")
+  expect(h._shown and h.row == useRow, "el botón seguro no está sobre la fila del pergamino")
+  expect_eq(h:GetAttribute("type"), "item", "tipo del botón sobre el pergamino")
+  expect_eq(h:GetAttribute("item"), "item:12345", "objeto que usa")
+  expect(h:GetAttribute("macrotext") == nil, "sobre el pergamino el botón aún lleva la macro de la estrella")
+  -- Su clic usa el pergamino y nada más (sin la acción de la fila después)
+  local clicked = false
+  useRow:SetScript("OnClick", function() clicked = true end)
+  h:GetScript("PostClick")(h, "LeftButton", false)
+  expect(not clicked, "tras usar el pergamino, el clic también hizo lo de la fila")
+  Enter(starRow)
+  expect(h.row == starRow, "el botón no pasó a la fila del instructor")
+  expect_eq(h:GetAttribute("type"), "macro", "tipo del botón sobre el instructor")
+  expect(h:GetAttribute("item") == nil, "sobre el instructor el botón aún usa el pergamino")
+  Enter(useRow)
+  expect(h:GetAttribute("macrotext") == nil and h:GetAttribute("item") == "item:12345", "de vuelta al pergamino, el botón no lo usa")
+end, { state = "scan" })
+
+test("la fila cambia con el ratón encima: el botón usa lo de la fila nueva", function()
+  OpenPage("Tailoring")
+  local row = WindowRow(UseLine(12345))
+  Enter(row)
+  local h = ES.Waypoints.HoverButton()
+  ES.UI.StyleRow(row, UseLine(67890))
+  expect(h._shown and h:GetAttribute("item") == "item:67890", "repintada con otro pergamino, el botón usa el de antes: %s", tostring(h:GetAttribute("item")))
+  ES.UI.StyleRow(row, { title = "Otra fila", icon = 134400 })
+  expect(not h._shown and h.row == nil, "repintada sin objeto, el botón sigue sobre la fila con el pergamino")
+end, { state = "scan" })
+
+test("en combate no hay botón de usar objetos sobre las filas", function()
+  OpenPage("Tailoring")
+  local row = WindowRow(UseLine(12345))
+  Enter(row)
+  local h = ES.Waypoints.HoverButton()
+  local ok, err = pcall(function()
+    -- Al entrar en combate (en el evento aún se puede tocar) se suelta
+    FireEvent("PLAYER_REGEN_DISABLED")
+    IN_COMBAT = true
+    expect(not h._shown and h:GetNumPoints() == 0, "al entrar en combate el botón sigue anclado a la fila")
+    Enter(row)
+    expect(not h._shown, "en combate el botón vuelve a ponerse sobre la fila")
+    IN_COMBAT = false
+    FireEvent("PLAYER_REGEN_ENABLED")
+    Enter(row)
+    expect(h._shown and h.row == row and h:GetAttribute("item") == "item:12345", "al salir de combate el botón no vuelve a la fila")
+  end)
+  IN_COMBAT = false
+  if not ok then error(err, 0) end
+end, { state = "scan" })
+
 test("la comprobación de rutas detecta un nivel que baja", function()
   local plan = PlanRoute("FirstAid", 1, 75)
   expect(#plan.steps >= 2, "la ruta de prueba tiene pocos pasos")
