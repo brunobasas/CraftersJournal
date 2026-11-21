@@ -726,6 +726,20 @@ local function KnownCooldowns(profKey)
 end
 function Earn.ResetCooldownRecipes() cdRecipes = {} end -- (pruebas: datos cambiados a mano)
 
+-- Recetas de una profesión que sabes y están en enfriamiento ahora (se sabe que no
+-- están listas): la ruta no las propone (Discord: pedía Mooncloth con ella en
+-- enfriamiento). Las que no se sabe si están listas sí. Lista de ids en orden fijo
+-- (para la clave de la ruta: ES:StableRouteKey)
+function Earn.OnCooldown(profKey)
+  local list = {}
+  for id in pairs(KnownCooldowns(profKey)) do
+    local left = Earn.CooldownLeft(id)
+    if left and left > 0 then list[#list + 1] = id end
+  end
+  table.sort(list)
+  return list
+end
+
 -- Con la profesión abierta: guarda el enfriamiento de sus recetas. true si cambió
 -- si alguna está lista o no
 function Earn.ReadCooldowns(profKey)
@@ -755,6 +769,8 @@ do
       Earn:Clear(true)
       if ES.RenderEarn then pcall(ES.RenderEarn, ES) end
       if ES.CraftWindow and ES.CraftWindow.Refresh then pcall(ES.CraftWindow.Refresh, ES.CraftWindow) end
+      -- (y la ruta: una receta en enfriamiento no se propone, ver Earn.OnCooldown)
+      if ES.RefreshAfterCooldown then pcall(ES.RefreshAfterCooldown, ES, prof) end
     end
   end
   ES.SafeRegister(f, "TRADE_SKILL_SHOW")

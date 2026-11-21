@@ -1328,3 +1328,38 @@ test("con ruta entera, la compra no habla de margen", function()
   expect_eq(#found, 0, "filas que hablan de margen con ruta entera")
 end, { state = "scan" })
 
+-- Recetas en enfriamiento (Discord: la ruta de Sastrería pedía Mooncloth con ella en
+-- enfriamiento). Las que se sabe que no están listas no salen en la ruta; las listas
+-- o sin saber, sí. Vale para todas las profesiones (Earn.OnCooldown)
+test("una receta en enfriamiento no sale en la ruta (Mooncloth)", function()
+  local MOONCLOTH, FELCLOTH, MOONCLOTH_ITEM = 18560, 14256, 14342
+  local r = expect(ES.Data.Tailoring.recipes[MOONCLOTH], "no está Mooncloth en los datos")
+  expect(ES.Planner.Cooldown(r, MOONCLOTH), "Mooncloth sin enfriamiento")
+  SKILLS[ES.Data.Tailoring.skillLine] = { 233, 300 }
+  -- (barata de hacer y cara de vender: lista, la ruta la elige para su punto)
+  SetPrice(FELCLOTH, 1)
+  SetPrice(MOONCLOTH_ITEM, 500000)
+  Know({ MOONCLOTH })
+  ES.Earn.ResetCooldownRecipes()
+  local function UsesMooncloth(plan)
+    for _, st in ipairs(plan.steps) do
+      if st.recipe == r or (st.recipe and st.recipe.id == MOONCLOTH) then return true end
+    end
+    for _, id in pairs(plan.choice) do if id == MOONCLOTH then return true end end
+    return false
+  end
+  local readyKey = ES:StableRouteKey("Tailoring", 233, 250, 300)
+  expect(UsesMooncloth(PlanRoute("Tailoring", 233, 250)), "lista, la ruta no usa Mooncloth: la prueba no prueba nada")
+  -- En enfriamiento (leído al abrir la profesión): fuera de la ruta y otra clave
+  ES.charData.cdReady = { [MOONCLOTH] = time() + 3 * 86400 }
+  local opts = ES:PlanOptions("Tailoring", 233, 250)
+  expect(opts.excluded and opts.excluded[MOONCLOTH], "en enfriamiento, Mooncloth no está entre las excluidas")
+  expect(not (ES.db.prof and ES.db.prof.Tailoring and ES.db.prof.Tailoring.excluded
+    and ES.db.prof.Tailoring.excluded[MOONCLOTH]), "el enfriamiento se apuntó como receta quitada a mano")
+  expect(ES:StableRouteKey("Tailoring", 233, 250, 300) ~= readyKey, "el enfriamiento no cambia la clave de la ruta")
+  expect(not UsesMooncloth(PlanRoute("Tailoring", 233, 250)), "en enfriamiento, la ruta usa Mooncloth")
+  -- Lista otra vez: vuelve
+  NOW = NOW + 4 * 86400
+  expect_eq(ES:StableRouteKey("Tailoring", 233, 250, 300), readyKey, "clave con el enfriamiento ya pasado")
+  expect(UsesMooncloth(PlanRoute("Tailoring", 233, 250)), "lista otra vez, la ruta no usa Mooncloth")
+end, { state = "scan" })

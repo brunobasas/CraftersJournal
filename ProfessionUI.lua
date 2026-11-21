@@ -297,6 +297,16 @@ function ES:PlanOptions(profKey, from, to, cap)
   -- usa como preparación, y con "usar lo de las bolsas" cuenta también sus materiales
   local foreign = self:ForeignProducers(profKey)
   if not next(foreign.producers) then foreign = nil end
+  -- Quitadas con la ✕ y, además, las que están en enfriamiento ahora (Mooncloth,
+  -- transmutaciones: no se pueden fabricar; ver Earn.OnCooldown)
+  local excluded = settings.excluded and next(settings.excluded) and settings.excluded or nil
+  local onCD = self.Earn and self.Earn.OnCooldown and self.Earn.OnCooldown(profKey) or {}
+  if #onCD > 0 then
+    local t = {}
+    for id in pairs(excluded or {}) do t[id] = true end
+    for _, id in ipairs(onCD) do t[id] = true end
+    excluded = t
+  end
   return {
     via = via,
     foreignProducers = foreign,
@@ -314,7 +324,7 @@ function ES:PlanOptions(profKey, from, to, cap)
     sourcedScrolls = ES.Waypoints.SOURCED_PROFESSIONS[profKey] or nil,
     noQuests = settings.useQuests == false or nil, -- icono de misión desactivado
     noLimited = settings.noLimited or nil, -- icono de vendedores de stock limitado desactivado
-    excluded = settings.excluded and next(settings.excluded) and settings.excluded or nil, -- quitadas con la ✕
+    excluded = excluded,
     useFavor = settings.useFavor or nil, -- recetas de Merchant's Favor (icono; por defecto no)
     -- Icono "Menos fabricaciones": cada fabricación pesa más al elegir (por defecto no)
     -- (apagado: la ruta más barata en dinero, con un peso mínimo por fabricación, 5c,
@@ -562,7 +572,9 @@ function ES:StableRouteKey(profKey, from, to, cap)
     self.RepStamp and self:RepStamp() or "", tostring(self.AddonVersion and self.AddonVersion()), RecipeCount(profKey),
     self.SpecStamp and self:SpecStamp() or "",
     -- (recetas sabidas de otras profesiones que fabrican lo que usa: aprender Smelt Thorium)
-    self:ForeignProducers(profKey).stamp }, ":")
+    self:ForeignProducers(profKey).stamp,
+    -- (recetas en enfriamiento: la ruta no las propone hasta que estén listas)
+    "cd" .. table.concat(self.Earn and self.Earn.OnCooldown and self.Earn.OnCooldown(profKey) or {}, ",") }, ":")
 end
 function ES:PlanKey(profKey, from, to, cap, stable)
   return (stable or self:StableRouteKey(profKey, from, to, cap)) .. ":" .. self.planGen .. "." .. (self.planGens[profKey] or 0)
@@ -2282,6 +2294,18 @@ function ES:RefreshAfterLearn()
   if self.Earn then self.Earn:Clear() end
   if self.RenderEarn then self:RenderEarn() end
   if self.CraftWindow and self.CraftWindow.Refresh then self.CraftWindow:Refresh() end
+end
+
+-- Se lee que una receta con enfriamiento está lista o ya no (al abrir la profesión):
+-- sin ruta fijada, la de esa profesión se recalcula (la clave cambia: ver
+-- StableRouteKey) para proponerla o dejar de hacerlo
+function ES:RefreshAfterCooldown(profKey)
+  for _, page in ipairs(self.professionPages or {}) do
+    if page.profKey == profKey and page.initialized and page:IsVisible() and page.data and not self:RouteLock(profKey) then
+      self:CalculatePlan(page)
+    end
+  end
+  if self.RenderHome then self:RenderHome() end
 end
 
 -- Sube tu nivel (fabricando): la profesión abierta lo relee al momento. Con la ruta
