@@ -119,3 +119,27 @@ test("las recetas sabidas se guardan por personaje", function()
   local mine = ES.db.known and ES.db.known[ES:CharKey()]
   expect(mine and mine.Cooking and #mine.Cooking >= 1, "no se guardaron")
 end)
+
+-- Por nombre y GUID, no por reino (el cliente de Forever ya no lo da: Keys.lua). En
+-- Forever dos personajes de la cuenta pueden llamarse igual
+test("recetas sabidas: dos personajes con el mismo nombre, y el alter sale con su nombre", function()
+  SKILLS[ES.Data.Cooking.skillLine] = { 50, 75 }
+  local first
+  for id in pairs(ES.Data.Cooking.recipes) do first = id break end
+  KNOWN_SPELLS[first] = true
+  local guid = UnitGUID
+  UnitGUID = function(u) if u == "player" then return "Player-6940-0000AAAA" end end
+  ES.Collection:SaveKnown("Cooking")
+  UnitGUID = function(u) if u == "player" then return "Player-6945-0000BBBB" end end
+  KNOWN_SPELLS[first] = nil
+  ES.Collection:SaveKnown("Cooking")
+  local a, b = ES.db.known["Bruno-Player-6940-0000AAAA"], ES.db.known["Bruno-Player-6945-0000BBBB"]
+  expect(a and b, "no se guardaron aparte")
+  expect(#a.Cooking == #b.Cooking + 1, "uno pisó al otro (%d y %d recetas)", #a.Cooking, #b.Cooking)
+  -- El segundo (no la sabe) ve que el primero sí, con su nombre
+  local e
+  for _, x in ipairs(ES.Collection:Build("Cooking").entries) do if x.id == first then e = x end end
+  UnitGUID = guid
+  e = expect(e, "la receta no sale en la colección")
+  expect_eq(table.concat(e.alts or {}, ","), "Bruno", "alters que la saben")
+end)

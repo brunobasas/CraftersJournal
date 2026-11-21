@@ -70,11 +70,14 @@ local building       -- { stamp, co } mientras se construye
 local servedStale    -- se dio un índice viejo (o vacío) mientras se construía el nuevo
 local whenReady = {} -- lo que espera al índice nuevo (Market.WhenReady)
 
+-- (con la clave de la AH: si cambia en la sesión, Keys.lua, el índice de la otra no vale
+-- aunque las dos tengan los mismos escaneos, p. ej. ninguno)
 local function Stamp()
+  local key = ES:RealmKey()
   local history = ES.History:Entries()
-  local track = ES.db.track and ES.db.track[ES:RealmKey()]
+  local track = ES.db.track and ES.db.track[key]
   local last = history[#history]
-  return (#history) .. ":" .. (last and last.time or 0) .. ":" .. (track and track.time or 0), history, track
+  return key .. ":" .. (#history) .. ":" .. (last and last.time or 0) .. ":" .. (track and track.time or 0), history, track
 end
 
 -- `pause()` se llama cada poco: en segundo plano cede el fotograma si se pasa del presupuesto
@@ -249,16 +252,17 @@ end
 -- Las tres partes de la firma la última vez que coincidió con la del índice en uso:
 -- iguales, la firma es la misma y no hace falta montar la cadena (un cálculo de ruta
 -- pide el índice cientos de miles de veces). Lo mismo que Stamp, sin la cadena
-local seenFor, seenN, seenLast, seenTrack
+local seenFor, seenKey, seenN, seenLast, seenTrack
 function Market:Index()
+  local key = ES:RealmKey()
   local history = ES.History:Entries()
-  local track = ES.db.track and ES.db.track[ES:RealmKey()]
+  local track = ES.db.track and ES.db.track[key]
   local last = history[#history]
   local n, lastTime, trackTime = #history, last and last.time or 0, track and track.time or 0
-  if cache and seenFor == cache and n == seenN and lastTime == seenLast and trackTime == seenTrack then return cache end
-  local stamp = n .. ":" .. lastTime .. ":" .. trackTime
+  if cache and seenFor == cache and key == seenKey and n == seenN and lastTime == seenLast and trackTime == seenTrack then return cache end
+  local stamp = key .. ":" .. n .. ":" .. lastTime .. ":" .. trackTime
   if cache and cache.stamp == stamp then
-    seenFor, seenN, seenLast, seenTrack = cache, n, lastTime, trackTime
+    seenFor, seenKey, seenN, seenLast, seenTrack = cache, key, n, lastTime, trackTime
     return cache
   end
   if not (debugprofilestop and C_Timer and coroutine) then

@@ -1363,3 +1363,23 @@ test("una receta en enfriamiento no sale en la ruta (Mooncloth)", function()
   expect_eq(ES:StableRouteKey("Tailoring", 233, 250, 300), readyKey, "clave con el enfriamiento ya pasado")
   expect(UsesMooncloth(PlanRoute("Tailoring", 233, 250)), "lista otra vez, la ruta no usa Mooncloth")
 end, { state = "scan" })
+
+-- La ruta depende de la AH: la de otro ruleset (otro modo de juego, Keys.lua) no vale
+-- aunque tenga el mismo escaneo
+test("ruta guardada: no se reutiliza en otro ruleset", function()
+  local _, plan, cap = PageRoute("Tailoring", 50, 75)
+  local saved = expect(ES.db.prof.Tailoring.lastRoute, "no se guardó la ruta")
+  local function Reused()
+    Reload()
+    ES.db.prof.Tailoring.lastRoute = saved
+    return ES:CachedPlan("Tailoring", plan.from, plan.to, cap) ~= nil
+  end
+  expect(Reused(), "sin cambios no se reutiliza")
+  ES.db.scans["gm15-Alliance"] = ES.db.scans[ES:RealmKey()] -- (el mismo escaneo en las dos AH)
+  SetGameMode(15)
+  RunTimers()
+  expect(not Reused(), "la ruta del ruleset 14 se reutiliza en el 15")
+  SetGameMode(14)
+  RunTimers()
+  expect(Reused(), "de vuelta en el 14 no se reutiliza")
+end, { state = "scan" })

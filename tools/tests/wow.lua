@@ -199,10 +199,22 @@ function RunTimers(seconds)
 end
 
 -- Jugador, mundo y objetos ---------------------------------------------------
-REALM = "Realm"
+-- Como el cliente de Forever desde el parche del 21/11/2026: no da el reino (vacío, y
+-- su número 0) y sí el modo de juego (el ruleset: 14 PvP, 15 Normal). Una prueba de un
+-- cliente anterior pone REALM = "Realm" y C_GameRules = nil; GAME_MODE = 0 es un modo
+-- que aún no ha llegado (SetGameMode lo cambia y avisa, como el juego)
+REALM = ""
+GAME_MODE = 14
 FACTION = "Alliance"
 NPC_FACTION = "Alliance"
 GetRealmName = function() return REALM end
+GetRealmID = function() return 0 end
+GetNativeRealmID = function() return 0 end
+C_GameRules = { GetCurrentGameModeRecordID = function() return GAME_MODE end }
+function SetGameMode(id)
+  GAME_MODE = id
+  FireEvent("ACTIVE_GAME_MODE_UPDATED", id)
+end
 UnitFactionGroup = function(u) if u == "npc" then return NPC_FACTION end return FACTION end
 UnitExists = function() return true end
 UnitName = function() return "Bruno" end

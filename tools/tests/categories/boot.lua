@@ -79,12 +79,15 @@ end, { boot = false })
 
 -- Lo guardado roto: cada caso por separado, para saber cuál falla --------------
 
-local function RealmKey() return REALM .. "-" .. FACTION end
+-- (con la clave de antes del parche, como Fixtures: al arrancar pasa a la nueva)
+local function RealmKey() return "Realm-" .. FACTION end
 
 local BROKEN = {
   { "un escaneo sin objetos", function(db) db.scans[RealmKey()] = { time = NOW } end },
   { "un escaneo vacío", function(db) db.scans[RealmKey()] = {} end,
-    check = function() expect(ES.db.scans[RealmKey()] == nil, "el escaneo vacío sigue guardado") end },
+    check = function()
+      expect(ES.db.scans[RealmKey()] == nil and ES.db.scans[ES:RealmKey()] == nil, "el escaneo vacío sigue guardado")
+    end },
   { "escaneos que no son una tabla", function(db) db.scans = "roto" end },
   { "historial vacío del reino", function(db) db.history = { [RealmKey()] = {} } end },
   { "personaje vacío", function(db) db.characters = { [UnitGUID("player")] = {} } end },
@@ -272,6 +275,59 @@ test("salir del juego guarda lo del personaje", function()
   expect_eq(ES.charData.lastProf, "Leatherworking", "última profesión guardada")
 end, { state = "full" })
 
+-- Claves de lo guardado (Keys.lua, change ruleset-keys) ---------------------------
+-- Desde el parche del cliente de Forever del 21/11/2026 el juego no da el reino: lo de
+-- la AH va por modo de juego (ruleset) y bando, y lo del personaje por nombre y GUID
+
+-- La clave de la AH con este cliente (como en una sesión nueva)
+local function KeyFor(mode, faction, realm, noModes)
+  GAME_MODE, FACTION, REALM = mode, faction, realm or ""
+  local rules = C_GameRules
+  if noModes then C_GameRules = nil end
+  ES.Keys.Reset()
+  local key = ES:RealmKey()
+  C_GameRules = rules
+  return key
+end
+
+test("claves: la de la AH es el modo de juego y el bando", function()
+  expect_eq(KeyFor(14, "Alliance"), "gm14-Alliance", "PvP, Alianza")
+  expect_eq(KeyFor(15, "Alliance"), "gm15-Alliance", "Normal, Alianza")
+  expect_eq(KeyFor(14, "Horde"), "gm14-Horde", "PvP, Horda")
+  expect_eq(KeyFor(0, "Alliance", "Realm", true), "Realm-Alliance", "cliente sin modos, con reino")
+  expect_eq(ES:CharKey(), "Bruno-Player-1-00000001", "personaje")
+end)
+
+test("claves: sin modo al cargar, lo apuntado pasa a la clave buena cuando llega", function()
+  GAME_MODE = 0
+  Boot({})
+  expect(ES.Keys.IsPending(ES:RealmKey()), "sin modo ni clave anterior, la clave no es la provisional: %s", ES:RealmKey())
+  expect(ES.Invest:Add(4306, "buy", 5, 100), "no se apunta la compra")
+  ES.History:Entries() -- (leer no crea nada)
+  SetGameMode(14)
+  RunTimers()
+  expect_eq(ES:RealmKey(), "gm14-Alliance", "clave al llegar el modo")
+  local book = ES.db.invest.account["gm14-Alliance"]
+  expect(book and book[4306] and #book[4306].moves == 1, "la compra no pasó a la clave del modo")
+  expect_eq(table.concat(BadKeys(ES.db), " "), "", "claves provisionales o vacías")
+end, { boot = false })
+
+test("claves: sin modo al cargar, se usa la última clave buena", function()
+  GAME_MODE = 0
+  Boot({ dataKey = { Alliance = "gm14-Alliance" }, scans = { ["gm14-Alliance"] = Fixtures.Scan() } })
+  expect_eq(ES:RealmKey(), "gm14-Alliance", "clave sin modo")
+  expect(ES.db.scans[ES:RealmKey()], "no se ve el escaneo de la última clave buena")
+end, { boot = false })
+
+test("claves: una sesión entera sin modo no guarda claves provisionales ni vacías", function()
+  GAME_MODE = 0
+  Boot({})
+  ES.Invest:Add(4306, "buy", 5, 100)
+  ES.Collection:SaveKnown("Cooking")
+  FireEvent("PLAYER_LOGOUT")
+  expect_eq(table.concat(BadKeys(ES.db), " "), "", "claves provisionales o vacías al salir")
+end, { boot = false })
+
 -- Antes llegaba un UNIT_SPELLCAST_SUCCEEDED por cada hechizo de cualquiera a tu
 -- alrededor; los manejadores solo miran los tuyos (PR #8: RegisterUnitEvent)
 test("hechizos lanzados: solo llegan los tuyos", function()
@@ -283,3 +339,119 @@ test("hechizos lanzados: solo llegan los tuyos", function()
   expect(mine >= 2, "solo %d marcos reciben tus hechizos (Ganar dinero y las recetas con enfriamiento)", mine)
   expect_eq(others, 0, "marcos que reciben los hechizos de otro")
 end)
+
+-- Juntar lo de dos claves: no se pierde nada y dos veces da lo mismo que una
+test("migración: juntar no pierde nada y es idempotente", function()
+  local M = ES.Keys.Merge
+  local function Copy(t)
+    if type(t) ~= "table" then return t end
+    local c = {}
+    for k, v in pairs(t) do c[k] = Copy(v) end
+    return c
+  end
+  local function Twice(merge, dst, src) return merge(merge(Copy(dst), Copy(src)), Copy(src)) end
+  -- Cartera: los movimientos de las dos, sin repetir el que está en ambas, en orden
+  local a = { [1] = { moves = { { t = 10, kind = "buy", n = 5, unit = 100 }, { t = 30, kind = "sell", n = 2, unit = 150 } } } }
+  local b = { [1] = { moves = { { t = 20, kind = "buy", n = 1, unit = 90 }, { t = 10, kind = "buy", n = 5, unit = 100 } } },
+              [2] = { moves = { { t = 5, kind = "buy", n = 3, total = 300 } } } }
+  local book = Twice(M.Book, a, b)
+  expect_eq(#book[1].moves, 3, "movimientos del objeto 1")
+  expect_eq(book[1].moves[1].t .. "," .. book[1].moves[2].t .. "," .. book[1].moves[3].t, "10,20,30", "orden")
+  expect(book[2] and #book[2].moves == 1, "el objeto que solo estaba en una se perdió")
+  -- Historial: todas las entradas, por hora
+  local h = Twice(M.History, { { time = 1 }, { time = 3 } }, { { time = 2 }, { time = 3 } })
+  expect_eq(#h, 3, "entradas del historial")
+  -- Precios por día: todos los días; uno repetido se queda con el de la clave nueva
+  local d = Twice(M.Days, { [7] = "100:5;102:7" }, { [7] = "101:6;102:9", [8] = "100:1" })
+  expect_eq(d[7], "100:5;101:6;102:7", "días del objeto 7")
+  expect_eq(d[8], "100:1", "días del objeto 8")
+  -- Escaneo: el más reciente entero
+  expect_eq(M.Newer({ time = 5, items = {} }, { time = 9, items = {} }).time, 9, "escaneo más reciente")
+  expect_eq(M.Newer({ time = 9, items = {} }, { time = 5, items = {} }).time, 9, "no cambia por uno más viejo")
+  -- Recetas sabidas: todas
+  local k = Twice(M.Known, { Cooking = { 1, 2 } }, { Cooking = { 2, 3 }, Tailoring = { 4 } })
+  expect_eq(#k.Cooking, 3, "recetas de Cocina")
+  expect(k.Tailoring and #k.Tailoring == 1, "se perdió Sastrería")
+end)
+
+-- Lo guardado como el SavedVariables de un jugador tras el parche: la cartera, el
+-- escaneo y sus precios con la clave del reino, una compra y recetas apuntadas después
+-- con las claves vacías ("-Alliance", "Bruno-")
+local OLD = "CAMWOW EU4 Realm 6 PvP"
+local function PlayerDB()
+  local function Moves(t, n) return { moves = { { t = t, kind = "buy", n = n, unit = 100 } } } end
+  local book = {}
+  for i, id in ipairs({ 249391, 4306, 2592, 13468, 9258, 2589, 2318, 4338 }) do book[id] = Moves(1795000000 + i, 10 * i) end
+  local scan = Fixtures.Scan()
+  scan.time = 1795217572
+  return {
+    scans = { [OLD .. "-Alliance"] = scan },
+    track = { [OLD .. "-Alliance"] = { time = 1795217572, v = 3, packed = "" } },
+    history = { [OLD .. "-Alliance"] = { { time = 1794644173, elapsed = 1, snap = "" } }, ["-Alliance"] = {} },
+    invest = { account = { [OLD .. "-Alliance"] = book, ["-Alliance"] = { [4306] = Moves(1795300000, 5) } } },
+    investPrices = { [OLD .. "-Alliance"] = { [4306] = "20770:197" } },
+    known = { ["Bruno-" .. OLD] = { Cooking = { 2538 } }, ["Bruno-"] = { Tailoring = { 2963 } } },
+    lastFullScan = { ["Bruno-" .. OLD] = 1795210979, ["otro addon"] = 1795217538 },
+  }
+end
+
+test("migración: lo guardado con el reino vuelve a salir con el cliente sin reino", function()
+  Boot(PlayerDB())
+  local key = ES:RealmKey()
+  expect_eq(key, "gm14-Alliance", "clave")
+  local n = 0
+  for _ in pairs(ES.Invest.Book()) do n = n + 1 end
+  expect_eq(n, 8, "objetos de la cartera")
+  expect_eq(#ES.Invest.Book()[4306].moves, 2, "movimientos de Silk Cloth (el de antes y el de después del parche)")
+  expect(ES.db.scans[key] and ES.db.scans[key].time == 1795217572, "el escaneo no está en la clave nueva")
+  expect_eq(ES.db.investPrices[key] and ES.db.investPrices[key][4306], "20770:197", "precios por día")
+  expect_eq(#ES.History:Entries(), 1, "entradas del historial")
+  local me = ES.db.known[ES:CharKey()]
+  expect(me and me.Cooking and me.Tailoring, "las recetas sabidas no pasaron al personaje")
+  OpenPage("invest")
+  expect_eq(ES:GetMainFrame().pages.invest.shownCards, 8, "fichas en la pestaña Inversiones")
+  -- No queda nada con las claves de antes ni vacías
+  expect_eq(table.concat(BadKeys(ES.db), " "), "", "claves vacías")
+  for name, t in pairs(KeyedTables(ES.db)) do
+    for k in pairs(t) do expect(not tostring(k):find(OLD, 1, true), "queda %s/%s", name, tostring(k)) end
+  end
+  -- Entrar otra vez no cambia nada
+  ES.Keys.Reset()
+  FireEvent("PLAYER_LOGIN")
+  FireEvent("PLAYER_ENTERING_WORLD")
+  RunTimers()
+  expect_eq(#ES.Invest.Book()[4306].moves, 2, "movimientos de Silk Cloth al entrar otra vez")
+  expect_eq(#ES.History:Entries(), 1, "entradas del historial al entrar otra vez")
+end, { boot = false })
+
+-- Dos rulesets en la misma cuenta: cada reino antiguo va al ruleset de sus personajes
+test("migración: cada reino antiguo va al ruleset de sus personajes", function()
+  local scanPvP, scanNormal = Fixtures.Scan(), Fixtures.Scan()
+  scanPvP.time, scanNormal.time = 1000, 2000
+  local db = {
+    scans = { ["Reino PvP-Alliance"] = scanPvP, ["Reino Normal-Alliance"] = scanNormal },
+    known = { ["Bruno-Reino PvP"] = { Cooking = { 2538 } }, ["Ana-Reino Normal"] = { Cooking = { 2539 } } },
+  }
+  GAME_MODE = 14
+  Boot(db)
+  expect(ES.db.scans["gm14-Alliance"] and ES.db.scans["gm14-Alliance"].time == 1000, "el PvP no pasó al 14")
+  expect(ES.db.scans["Reino Normal-Alliance"], "lo del reino Normal se tocó al entrar en PvP")
+  -- Después entra Ana, del reino Normal, en el ruleset Normal
+  UnitName = function() return "Ana" end
+  UnitGUID = function(u) if u == "player" then return "Player-6945-0000BBBB" end end
+  GAME_MODE = 15
+  ES.Keys.Reset()
+  FireEvent("PLAYER_LOGIN")
+  RunTimers()
+  expect(ES.db.scans["gm15-Alliance"] and ES.db.scans["gm15-Alliance"].time == 2000, "el Normal no pasó al 15")
+  expect(ES.db.scans["gm14-Alliance"].time == 1000, "el 14 cambió")
+  expect(ES.db.known["Ana-Player-6945-0000BBBB"], "las recetas de Ana no pasaron a su personaje")
+end, { boot = false })
+
+-- Sin pistas de a qué reino era el personaje, y con varios reinos antiguos: no se adivina
+test("migración: con varios reinos antiguos y sin pistas, no se toca nada", function()
+  local db = { scans = { ["Reino A-Alliance"] = Fixtures.Scan(), ["Reino B-Alliance"] = Fixtures.Scan() } }
+  Boot(db)
+  expect(ES.db.scans["Reino A-Alliance"] and ES.db.scans["Reino B-Alliance"], "se borró un reino antiguo")
+  expect(not ES.db.scans["gm14-Alliance"], "se movió un reino antiguo sin saber cuál era")
+end, { boot = false })

@@ -10,7 +10,8 @@ local _, ES = ...
 -- de la comisión de la AH.
 --
 -- La cartera es de la CUENTA: la comparten todos tus personajes (a diferencia de las
--- rutas de las profesiones, que son de cada uno). Va por reino y facción, como la AH.
+-- rutas de las profesiones, que son de cada uno). Va por ruleset y bando, como la AH
+-- (ES:RealmKey, Keys.lua).
 -- ES.db.invest = { account = { [RealmKey] = cartera } }
 -- (una versión de desarrollo tuvo también carteras por personaje, invest.chars: no se
 -- leen)
@@ -155,7 +156,7 @@ function Invest.DayTime(day) return Invest.DAY0 + day * DAY + DAY / 2 end
 -- Objetos de todas las carteras de este reino (de la cuenta y de cada personaje): los
 -- que el escaneo sigue (su escalera de precios) y de los que guarda el precio del día
 -- (se llama por cada subasta del escaneo: la caché solo se rehace si cambia la cartera
--- o lo guardado; el reino no cambia en una sesión)
+-- o lo guardado; si cambia la clave de la AH, Keys.lua llama a Invest.Dirty)
 local trackedSet, trackedDb
 function Invest.Dirty() trackedSet = nil end
 function Invest.Tracked()

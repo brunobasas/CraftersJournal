@@ -38,6 +38,7 @@ Locales\deDE.lua
 Locales\frFR.lua
 
 Core.lua
+Keys.lua
 Jobs.lua
 History.lua
 Market.lua

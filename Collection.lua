@@ -34,8 +34,9 @@ function Collection:SaveKnown(profKey)
   for id, r in pairs(data.recipes) do
     if not r.intermediate and not r.conversion and ES:IsRecipeKnown(id) then list[#list + 1] = id end
   end
-  ES.db.known = ES.db.known or {}
   local char = ES:CharKey()
+  if not char then return end -- (el juego aún no da el GUID: se guarda en la siguiente)
+  ES.db.known = ES.db.known or {}
   ES.db.known[char] = ES.db.known[char] or {}
   ES.db.known[char][profKey] = list
 end

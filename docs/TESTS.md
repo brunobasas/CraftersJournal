@@ -72,6 +72,7 @@ end, { state = "full" })                 -- "empty", "scan" (por defecto) o "ful
 - `OpenMain()`, `OpenPage("money")`, `ProfessionPage("Leatherworking")`, `PlanRoute("Tailoring", 1, 300)`, `ProfessionKeys()`.
 - `snapshot("clave", valor)`: compara `valor` con el guardado en `tools/tests/snapshots/<categoría>.json`.
 - `SKILLS[skillLine] = { nivel, tope }`, `KNOWN_SPELLS[id] = true`, `BAGS[itemID] = n`, `IN_COMBAT = true`, `FireEvent(...)`, `RunTimers()`: el estado del juego simulado.
+- El cliente simulado es el de Forever desde el parche del 21/11/2026: `REALM = ""` (no da el reino) y `GAME_MODE = 14` (el ruleset, `C_GameRules`). `SetGameMode(id)` cambia de ruleset y avisa como el juego; `GAME_MODE = 0` es un modo que aún no ha llegado. Lo guardado de `Fixtures` va con las claves de antes del parche (`"Realm-Alliance"`, `"Bruno-Realm"`) y cada prueba arranca migrándolo (`Keys.lua`). `BadKeys(ES.db)` lista las claves provisionales o vacías que no deben quedar. `tools/test_ui.py` es un cliente anterior: da el reino y no tiene `C_GameRules`.
 
 Además de lo que compruebe la prueba, falla si el addon da un error de Lua, si apunta un error en su registro (`ES:RecordError`), si escribe una variable global sin querer o si llama a un método de marco que no está en la lista de la API real (`WIDGET_API` en `tools/tests/wow.lua`; si el método existe en el juego, se añade ahí).
 
