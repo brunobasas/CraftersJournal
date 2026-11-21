@@ -862,7 +862,13 @@ local function ConvertedHave(plan, bags, level)
       cap[c.itemID] = rem and math.ceil(rem - 0.001) or c.quantity
     end
   end
-  local function Held(itemID) return math.min(bags(itemID), cap[itemID] or math.huge) end
+  -- (lo que la ruta da por hecho en pasos pasados, Planner.MadeNeed, ya es de esos pasos:
+  -- no vale además como su material. 21 Cured Medium Hide para las Hillman's Shoulders
+  -- contaban también como Medium Hide y la compra pedía una menos de las que faltaban)
+  local reserved = level and ES.Planner.MadeNeed(plan, level) or {}
+  local function Held(itemID)
+    return math.min(math.max(0, bags(itemID) - math.ceil((reserved[itemID] or 0) - 0.001)), cap[itemID] or math.huge)
+  end
   local inside = {} -- [material] = { { intermedio, unidades por intermedio } }
   local function Walk(top, itemID, per, depth)
     local r = made[itemID]
@@ -3522,13 +3528,31 @@ local function RouteLines(plan, page, opts)
   -- cuando hace falta y no al principio de la ruta
   local craftBefore = {}
   local direct = {} -- [itemID] = primer paso que lo usa directamente
-  for _, c in ipairs(plan.crafted) do
+  -- Lo que fabrica un paso para otro posterior (Cured Medium Hide del paso de curarlas,
+  -- para las Hillman's Shoulders): con la ruta empezada, si no llevas lo que la ruta da
+  -- por hecho, también tiene su fila "Fabrica N×" delante del paso que lo usa (la compra
+  -- pide sus materiales: Planner ShortMade). made: solo sale si falta alguno
+  local crafted, inCrafted = {}, {}
+  for _, c in ipairs(plan.crafted) do crafted[#crafted + 1] = c inCrafted[c.itemID] = true end
+  if locked then
+    for i, st in ipairs(plan.steps) do
+      for _, rg in ipairs(st.reagents) do
+        local maker = (rg.kinds.stock or rg.kinds.ahead) and not inCrafted[rg.item] and ES.Planner.MadeStep(plan, rg.item)
+        if maker and maker ~= st then
+          inCrafted[rg.item] = true
+          crafted[#crafted + 1] = { itemID = rg.item, recipe = maker.recipe, quantity = 0, made = true }
+          direct[rg.item] = i
+        end
+      end
+    end
+  end
+  for _, c in ipairs(crafted) do
     for i, st in ipairs(plan.steps) do
       local uses = false
       for _, rg in ipairs(st.reagents) do
-        if rg.item == c.itemID and rg.kinds.craft then uses = true break end
+        if rg.item == c.itemID and (rg.kinds.craft or (c.made and (rg.kinds.stock or rg.kinds.ahead))) then uses = true break end
       end
-      if uses then direct[c.itemID] = i break end
+      if uses then direct[c.itemID] = direct[c.itemID] or i break end
     end
   end
   -- Herramientas que se fabrican (Runed Golden Rod): van en el paso donde hacen
@@ -3547,7 +3571,7 @@ local function RouteLines(plan, page, opts)
     seen[c.itemID] = true
     local at, depth = direct[c.itemID] or toolAt[c.itemID], 0
     if not at then
-      for _, c2 in ipairs(plan.crafted) do
+      for _, c2 in ipairs(crafted) do
         if not seen[c2.itemID] and c2.recipe then
           for _, rq in ipairs(c2.recipe.r or {}) do
             if rq[1] == c.itemID then
@@ -3561,7 +3585,7 @@ local function RouteLines(plan, page, opts)
     placed[c.itemID] = { at = at or 1, depth = depth }
     return placed[c.itemID]
   end
-  for _, c in ipairs(plan.crafted) do
+  for _, c in ipairs(crafted) do
     local p = Place(c)
     craftBefore[p.at] = craftBefore[p.at] or {}
     table.insert(craftBefore[p.at], c)
@@ -3678,7 +3702,19 @@ local function RouteLines(plan, page, opts)
         local inPhase = ES.Planner.PhaseCraftedNeed(plan, c0.itemID, math.max(page.from or 0, st.from))
         if inPhase then c.quantity = math.min(c.quantity, inPhase) end
       end
-      if c.quantity > 0 then
+      -- Y lo que la ruta da por hecho en pasos ya pasados (Planner.MadeNeed, lo mismo que
+      -- pide la compra): también hay que llevarlo y, si falta, se fabrica otra vez
+      if locked then
+        local to = plan.reached or plan.to or st.to
+        if ES.Shopping.ByPhase(page.profKey) then
+          local _, ph = ES.Planner.PhaseNeed(plan, math.max(page.from or 0, st.from))
+          if ph then to = ph.batchTo or ph.to end
+        end
+        local made = ES.Planner.MadeNeed(plan, math.max(page.from or 0, plan.from or 0), to)[c0.itemID] or 0
+        c.quantity = c.quantity + math.ceil(made - 0.001)
+      end
+      -- (lo de un paso anterior, solo si falta: si no, es el paso que ya lo fabricó)
+      if c.quantity > 0 and not (c0.made and c.quantity <= ES:ItemCount(c.itemID)) then
       local name, texture = ItemLabel(c.itemID, L["Objeto "] .. c.itemID)
       local conversion = c.recipe and c.recipe.conversion
       -- Clic: como en los pasos, abre su receta y fabrica lo que falta (3 restos -> 1 cuero)
@@ -3712,8 +3748,11 @@ local function RouteLines(plan, page, opts)
       local isTool = toolAt[c.itemID] ~= nil
       local buyable = not (c.recipe and c.recipe.bop)
         and (ES.Data.VendorPrices[c.itemID] or (plan.ctx and plan.ctx.ladders[c.itemID])) ~= nil
-      local mandatory = not buyable
-      local why = mandatory and (isTool and L["Herramienta para los pasos siguientes: no se puede comprar, hay que fabricarla"]
+      -- (lo de un paso anterior: la ruta no decidió fabricarlo en vez de comprarlo, lo
+      -- fabricó para subir; sin ✕, que quitaría ese paso)
+      local mandatory = not buyable or c0.made
+      local why = c0.made and L["Te faltan de las que fabricó un paso anterior: se fabrican otra vez"]
+        or mandatory and (isTool and L["Herramienta para los pasos siguientes: no se puede comprar, hay que fabricarla"]
         or L["Hace falta para los pasos siguientes y no se puede comprar: hay que fabricarlo"])
       -- El título dice cuántas te QUEDAN por fabricar (lo que llevas ya cuenta: también lo
       -- que sale del paso de antes), y debajo, cuántas hacen falta en total. Discord:
@@ -3785,7 +3824,8 @@ local function RouteLines(plan, page, opts)
         onSkip = not conversion and not mandatory and SkipCraft(c.itemID) or nil,
         skipTip = L["No fabricarlo: la ruta lo compra hecho en la AH (sin comprar sus materiales). Se recupera con la fila de recetas quitadas."],
         tooltip = function(row)
-          SimpleTooltip(c.itemID, L["Sale más barato fabricarlo que comprarlo; sus materiales ya están en la lista de compra."])(row)
+          SimpleTooltip(c.itemID, c0.made and L["Lo fabricó un paso anterior de la ruta y te faltan; sus materiales ya están en la lista de compra."]
+            or L["Sale más barato fabricarlo que comprarlo; sus materiales ya están en la lista de compra."])(row)
           if not conversion and recipeID then
             GameTooltip:AddLine(" ")
             GameTooltip:AddLine(craftNow and string.format(L["Clic: abrir la receta y fabricar %d (como mucho, las que te dan los materiales que llevas)."], crafts)

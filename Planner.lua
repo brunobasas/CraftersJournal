@@ -218,6 +218,7 @@ local function Need(plan, from, to, z, green)
   for itemID, q in pairs(made) do
     local a = Item(itemID)
     a.expected = a.expected + q
+    a.made = q
     for s = from, to - 1 do
       local id = plan.choice and plan.choice[s]
       local per = id and DirectQty(recipes[id], itemID)
@@ -234,9 +235,56 @@ local function Need(plan, from, to, z, green)
     for _, sh in pairs(a.shares) do
       target = target + math.ceil(sh.q / sh.per - 0.001) * sh.per
     end
-    if target > 0 then out[itemID] = { expected = a.expected, target = target } end
+    -- made: la parte que es lo hecho en pasos ya pasados (ver ShortMade)
+    if target > 0 then out[itemID] = { expected = a.expected, target = target, made = a.made } end
   end
   return out
+end
+
+-- Lo que la ruta da por hecho en pasos ya pasados y debes llevar: { [itemID] = unidades }
+-- para los niveles de `level` a `to` (ver MadeNeed)
+function Planner.MadeNeed(plan, level, to)
+  return MadeNeed(plan, level, to or plan.reached or plan.to or level)
+end
+
+-- El paso de la ruta que fabrica `itemID` (el primero), o nil
+local function MadeStep(plan, itemID)
+  for _, st in ipairs(plan.steps or {}) do
+    local r = st.recipe
+    if r and r.out and r.out[1] == itemID and r.r then return st end
+  end
+end
+Planner.MadeStep = MadeStep
+
+-- Lo hecho en pasos ya pasados que no llevas (Cured Medium Hide del paso de curarlas,
+-- para las Hillman's Shoulders): se fabrica otra vez, no se compra hecho. Con suerte
+-- en ese paso subes con menos fabricaciones de las previstas y te quedan menos; la
+-- compra pedía las 5 que faltaban hechas en la AH, sin la Medium Hide ni la Salt para
+-- curarlas (CurseForge). `need`: { [itemID] = { target, expected, made } } (ver Need),
+-- se cambia aquí. raw(itemID): lo que llevas
+local function ShortMade(plan, need, raw)
+  local add = {}
+  for itemID, n in pairs(need) do
+    local st = n.made and n.made > 0 and MadeStep(plan, itemID)
+    -- (en unidades enteras: lo hecho es una media, 12,6; si no quedaba "×0" en la lista)
+    local short = st and math.min(math.ceil(n.made - 0.001), n.target - raw(itemID)) or 0
+    if short > 0 then
+      local r = st.recipe
+      local crafts = math.ceil(short / math.max(1, r.out[2] or 1) - 0.001)
+      n.target, n.expected = n.target - short, math.max(0, n.expected - short)
+      n.made = math.max(0, n.made - short)
+      for _, rq in ipairs(r.r) do add[rq[1]] = (add[rq[1]] or 0) + crafts * rq[2] end
+    end
+  end
+  for itemID, q in pairs(add) do
+    local n = need[itemID]
+    if n then
+      n.target, n.expected = n.target + q, n.expected + q
+    else
+      need[itemID] = { target = q, expected = q }
+    end
+  end
+  for itemID, n in pairs(need) do if n.target <= 0 then need[itemID] = nil end end
 end
 
 -- Dónde comprar un material de la ruta: la entrada de plan.shopping (o nil). Si la ruta
@@ -684,6 +732,7 @@ function Planner.RouteNeed(profKey, plan, level, opts)
     local function Raw(itemID) return ES.HaveForShopping and ES:HaveForShopping(itemID) or ES:ItemCount(itemID) or 0 end
     -- (¿lo tienes todo?: con lo ya convertido, Bolt of Linen Cloth cuenta como su Linen Cloth)
     local Have = ES.RouteHave and ES.RouteHave(plan, level) or Raw
+    if not hold and not preview then ShortMade(plan, need, Raw) end
     local all = true
     for itemID, n in pairs(need) do
       local target = n.target
@@ -709,7 +758,15 @@ function Planner.RouteNeed(profKey, plan, level, opts)
   local function Raw(itemID) return ES.HaveForShopping and ES:HaveForShopping(itemID) or ES:ItemCount(itemID) or 0 end
   local Have = route and ES.RouteHave and ES.RouteHave(plan, level) or Raw
   local all, any = true, false
+  -- (con lo hecho en pasos pasados que no llevas, a fabricar otra vez: ShortMade)
+  local whole = {}
+  local made = route and not hold and MadeNeed(plan, level, plan.reached or plan.to or level) or {}
   for itemID, q in pairs(Planner.NeedFrom(plan, level)) do
+    whole[itemID] = { target = q, expected = q, made = made[itemID] }
+  end
+  if route and not hold then ShortMade(plan, whole, Raw) end
+  for itemID, w in pairs(whole) do
+    local q = w.target
     local n = math.ceil(q - 0.001)
     if hold then n = math.min(n, Raw(itemID)) end
     if n > 0 then

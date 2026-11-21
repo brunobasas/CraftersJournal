@@ -1388,3 +1388,77 @@ test("ruta guardada: no se reutiliza en otro ruleset", function()
   RunTimers()
   expect(Reused(), "de vuelta en el 14 no se reutiliza")
 end, { state = "scan" })
+
+-- CurseForge: Peletería de 65 a 150, un paso cura Medium Hide y las Hillman's Shoulders
+-- gastan esos Cured Medium Hide. Con suerte en el paso de curarlas quedan menos de los
+-- previstos y la compra pedía los que faltaban hechos en la AH, sin la Medium Hide ni la
+-- Salt para curarlos ni la fila de fabricarlos
+test("lo que fabricó un paso anterior y falta: se compran sus materiales y se fabrica", function()
+  local CURED, HIDE, SALT = 4233, 4232, 4289
+  ES.db.prof.Leatherworking = { excluded = { [3764] = true, [9074] = true, [9068] = true, [9146] = true } }
+  local _, plan = StartRoute("Leatherworking", 65, 150)
+  KNOWN_SPELLS[3817], KNOWN_SPELLS[3768] = true, true
+  -- (la ruta tiene que curar las Medium Hide en un paso y gastarlas en uno posterior)
+  local maker, user
+  for _, st in ipairs(plan.steps) do
+    if st.id == 3817 then maker = st end
+    for _, rg in ipairs(st.reagents) do
+      if rg.item == CURED and rg.kinds.stock and maker and st ~= maker then user = st end
+    end
+  end
+  expect(maker and user, "la ruta no cura Medium Hide para un paso posterior: la prueba no prueba nada")
+  -- Al empezar las hombreras llevas 21 de los ~26 que hizo el paso de curarlas
+  SKILLS[ES.Data.Leatherworking.skillLine] = { user.from, 150 }
+  BAGS[CURED], BAGS[2319], BAGS[2321] = 21, 400, 100
+  ES.Earn:Clear()
+  local need = ES.Planner.RouteNeed("Leatherworking", plan, user.from)
+  local made = math.ceil(maker.expected - 0.001) -- (los que hace de media el paso de curarlas)
+  local short = made - 21
+  expect(short > 0, "con 21 no falta ninguno: la prueba no prueba nada")
+  local buy = ES.RouteBuy(plan, "Leatherworking", user.from, { phase = true })
+  local function Buys(itemID)
+    for _, src in ipairs({ "ah", "vendor" }) do
+      for _, it in ipairs(buy[src]) do if it.itemID == itemID then return it.quantity end end
+    end
+    return 0
+  end
+  note("hechos %d, llevas 21 · compra: %d Cured, %d Medium Hide, %d Salt", made, Buys(CURED), Buys(HIDE), Buys(SALT))
+  expect_eq(Buys(CURED), 0, "Cured Medium Hide que se compran hechos")
+  expect(Buys(HIDE) >= short, "compra %d Medium Hide y faltan %d Cured Medium Hide", Buys(HIDE), short)
+  expect(Buys(SALT) >= short, "compra %d Salt y faltan %d Cured Medium Hide", Buys(SALT), short)
+  expect(need[CURED] and need[CURED].need <= 21, "la lista pide %s Cured Medium Hide con 21 en las bolsas", tostring(need[CURED] and need[CURED].need))
+  -- Y la fila de fabricarlas, delante de las hombreras
+  local row
+  for _, l in ipairs(ES:RouteLines("Leatherworking", { buy = true })) do
+    if l.item == CURED and l.stepRecipe == 3817 and not l.done then row = l end
+  end
+  row = expect(row, "no hay fila de fabricar los Cured Medium Hide que faltan")
+  local n = tonumber(Plain(row.title):match("(%d+)×"))
+  expect(n and n >= short, "la fila dice «%s» y faltan %d", Plain(row.title), short)
+  -- Sin que la ruta fabrique ninguno de más (solo gasta los del paso de curarlas): la
+  -- fila sale igual, sin ✕ (quitaría ese paso)
+  local locked = ES:LockedPlan("Leatherworking")
+  local kept = {}
+  for _, c in ipairs(locked.crafted) do if c.itemID ~= CURED then kept[#kept + 1] = c end end
+  locked.crafted = kept
+  row = nil
+  for _, l in ipairs(ES:RouteLines("Leatherworking", { buy = true })) do
+    if l.item == CURED and l.stepRecipe == 3817 and not l.done then row = l end
+  end
+  row = expect(row, "sin intermedio en la ruta, no hay fila de fabricar los que faltan")
+  n = tonumber(Plain(row.title):match("(%d+)×"))
+  expect_eq(n, short, "Cured Medium Hide que pide fabricar la fila")
+  expect(not row.onSkip, "la fila del paso anterior lleva la X de quitar (quitaría ese paso)")
+  -- Con todos los que hizo el paso, la fila solo pide los que la ruta ya fabricaba de más
+  -- (si se acaban en las hombreras) y la compra, solo sus materiales
+  BAGS[CURED] = made
+  ES.Earn:Clear()
+  buy = ES.RouteBuy(plan, "Leatherworking", user.from, { phase = true })
+  local extra = ES.Planner.PhaseCraftedNeed(plan, CURED, user.from) or 0
+  expect_eq(Buys(CURED), 0, "con todos: Cured Medium Hide que se compran")
+  expect(Buys(HIDE) <= extra, "con todos: compra %d Medium Hide (la ruta fabricaba %d de más)", Buys(HIDE), extra)
+  for _, l in ipairs(ES:RouteLines("Leatherworking", { buy = true })) do
+    local k = l.item == CURED and l.stepRecipe == 3817 and not l.done and tonumber(Plain(l.title):match("(%d+)×"))
+    if k then expect(k <= extra, "con todos los Cured la fila dice «%s» (la ruta fabricaba %d de más)", Plain(l.title), extra) end
+  end
+end, { state = "scan" })
