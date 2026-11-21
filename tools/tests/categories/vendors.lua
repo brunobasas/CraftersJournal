@@ -254,3 +254,17 @@ test("Simple Poultice: cerrar a Morag no da por visitada la fila de Mild Spices"
   expect(not spices.done, "la fila de Mild Spices dejó de estar pendiente")
   expect(noir.sub:find(notEnough, 1, true), "la fila del Bottle no se dio por visitada: %s", noir.sub)
 end, { boot = false })
+
+-- Cada venta o compra trae MERCHANT_UPDATE y BAG_UPDATE_DELAYED, y cada repintado repasa
+-- todas tus bolsas (Inventory:List): antes se repintaba dos veces (PR #8)
+test("vender o comprar: la ventana del vendedor se repinta una vez", function()
+  OpenMerchant({ { item = 2320, price = 10 } })
+  local V, n = ES.VendorShop, 0
+  local refresh = V.Refresh
+  V.Refresh = function(self, ...) n = n + 1 return refresh(self, ...) end
+  FireEvent("MERCHANT_UPDATE")
+  FireEvent("BAG_UPDATE_DELAYED")
+  RunTimers()
+  expect_eq(n, 1, "repintados de la ventana del vendedor por una venta")
+  CloseMerchant()
+end, { state = "scan" })

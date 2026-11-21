@@ -241,6 +241,28 @@ test("cambiar de idioma: textos, recetas y números", function()
   expect_eq(ES.L["Lista de compra"], "Lista de compra", "texto en español")
 end)
 
+-- El juego nunca libera ventanas: cada cambio de idioma dejaba otra ventana entera
+-- atendiendo las bolsas, los objetos que llegan... y guardando sus rutas (PR #8)
+test("cambiar de idioma: la ventana vieja deja de atender eventos y suelta sus rutas", function()
+  local page = StartRoute("Tailoring", 1, 75)
+  RunTimers()
+  local before = FireEvent("GET_ITEM_INFO_RECEIVED", 2589, true)
+  RunTimers()
+  for _, l in ipairs(ES.LANGS) do
+    ES:SetLanguage(l.key)
+    RunTimers()
+  end
+  ES:SetLanguage("es")
+  RunTimers()
+  expect(ES:GetMainFrame():IsShown(), "la ventana se cerró")
+  expect_eq(FireEvent("GET_ITEM_INFO_RECEIVED", 2589, true), before, "marcos que reciben GET_ITEM_INFO_RECEIVED")
+  RunTimers()
+  expect(not page:IsEventRegistered("GET_ITEM_INFO_RECEIVED"), "la página vieja de Sastrería sigue atendiendo GET_ITEM_INFO_RECEIVED")
+  expect(page.plan == nil, "la página vieja sigue con su ruta")
+  local new = ProfessionPage("Tailoring")
+  expect(new and new ~= page, "no hay página nueva de Sastrería")
+end, { state = "scan" })
+
 -- Cambiar de idioma con cada pestaña abierta (la ventana se vuelve a crear)
 for _, page in ipairs({ "home", "shopping", "money", "inventory", "invest", "favor", "calc", "patterns", "Leatherworking", "pattern:Tailoring" }) do
   test("cambiar de idioma con la página «" .. page .. "» abierta", function()

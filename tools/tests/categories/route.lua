@@ -606,3 +606,50 @@ test("la comprobación de rutas detecta un nivel que baja", function()
   plan.steps[2].from = plan.steps[1].from - 1
   expect(#RouteProblems("FirstAid", plan, 1, 75) > 0, "no lo detectó")
 end)
+
+-- La ordenación final del GPS puntuaba las dos rutas en cada comparación (~40.000 con
+-- Ingeniería 1-300) y una ordenación no puede ceder el fotograma: el juego se paraba
+-- casi medio segundo (PR #8). Cada ruta se puntúa una vez
+test("ordenar las rutas guardadas: cada una se puntúa una vez", function()
+  local P = ES.Planner
+  local scores, score = 0, P.RouteScore
+  P.RouteScore = function(...) scores = scores + 1 return score(...) end
+  local sort, worst, size = table.sort, 0, 0
+  table.sort = function(t, cmp)
+    local before = scores
+    sort(t, cmp)
+    if scores - before > worst then worst, size = scores - before, #t end
+  end
+  local ok, err = pcall(PlanRoute, "Cooking", 1, 300)
+  table.sort, P.RouteScore = sort, score
+  if not ok then error(err, 0) end
+  expect(size > 1, "ninguna ordenación puntuó rutas: la prueba no prueba nada")
+  note("la ordenación que más puntúa: %d puntuaciones para %d rutas", worst, size)
+  expect(worst <= size, "%d puntuaciones para ordenar %d rutas", worst, size)
+end)
+
+-- Las alternativas de cada paso se calculan poco a poco, y con la ventana cerrada o en
+-- combate seguían gastando hasta 8 ms de cada fotograma (PR #8): ahora esperan
+test("alternativas de cada paso: esperan en combate y con la ventana cerrada", function()
+  local page, plan = PageRoute("Tailoring", 1, 75)
+  RunTimers()
+  expect(plan.alts, "la ruta no calcula sus alternativas: la prueba no prueba nada")
+  -- En combate
+  plan.alts, plan.altsRunning = nil, nil
+  IN_COMBAT = true
+  ES:ComputeAlternatives(page, plan)
+  RunTimers(5)
+  expect(not plan.alts, "en combate se calcularon las alternativas")
+  IN_COMBAT = false
+  RunTimers(5)
+  expect(plan.alts, "al salir del combate no se acabaron las alternativas")
+  -- Con la ventana cerrada
+  plan.alts, plan.altsRunning = nil, nil
+  ES:HideMainFrame()
+  ES:ComputeAlternatives(page, plan)
+  RunTimers(5)
+  expect(not plan.alts, "con la ventana cerrada se calcularon las alternativas")
+  ES:GetMainFrame():Show()
+  RunTimers(5)
+  expect(page.plan ~= plan or plan.alts, "al abrir la ventana no se acabaron las alternativas")
+end, { state = "scan" })

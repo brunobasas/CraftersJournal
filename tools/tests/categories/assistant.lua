@@ -116,3 +116,53 @@ test("en combate no se toca lo protegido", function()
   FireEvent("PLAYER_REGEN_ENABLED")
   RunTimers()
 end, { state = "scan" })
+
+-- Cuántas veces se hacen las filas de la ruta empezada (ES:RouteLines) desde ahora
+local function CountRouteLines()
+  local n, lines = 0, ES.RouteLines
+  ES.RouteLines = function(...) n = n + 1 return lines(...) end
+  return function() return n end
+end
+
+-- Antes el asistente y los avisos de tramo del chat hacían las mismas filas cada uno
+-- con cada cambio de las bolsas (PR #8): ahora los avisos salen de las del asistente
+test("cambio en las bolsas: las filas de la ruta se hacen una vez", function()
+  A = ES.Assistant
+  StartRoute("Tailoring", 1, 75)
+  A.Update()
+  RunTimers()
+  ES.phaseState.Tailoring = ES.phaseState.Tailoring or {} -- (los avisos, en marcha: lo pone la subida de nivel)
+  local built = CountRouteLines()
+  local notices, given, phase = 0, 0, ES.PhaseNotices
+  ES.PhaseNotices = function(self, profKey, lines, ...)
+    notices = notices + 1
+    if lines then given = given + 1 end
+    return phase(self, profKey, lines, ...)
+  end
+  BAGS[2589] = (BAGS[2589] or 0) + 5
+  FireEvent("BAG_UPDATE_DELAYED")
+  RunTimers()
+  expect_eq(built(), 1, "veces que se hacen las filas de la ruta")
+  expect_eq(notices, 1, "pasadas de los avisos de tramo")
+  expect_eq(given, 1, "pasadas de los avisos con las filas del asistente")
+  expect(ES.phaseState.Tailoring.last, "los avisos de tramo no miraron el tramo")
+end, { state = "scan" })
+
+-- Al salir del combate solo falta volver a poner el botón seguro: antes se rehacía la
+-- ruta entera tras cada pelea (PR #8)
+test("al salir del combate el asistente se repinta sin rehacer la ruta", function()
+  A = ES.Assistant
+  StartRoute("Tailoring", 1, 75)
+  A.Update()
+  RunTimers()
+  local title = tostring(A.Frame().banner.title._text)
+  local built = CountRouteLines()
+  IN_COMBAT = true
+  FireEvent("PLAYER_REGEN_DISABLED")
+  IN_COMBAT = false
+  FireEvent("PLAYER_REGEN_ENABLED")
+  RunTimers()
+  expect_eq(built(), 0, "veces que se hacen las filas de la ruta al salir del combate")
+  expect(A.Frame():IsShown(), "el asistente se escondió")
+  expect_eq(tostring(A.Frame().banner.title._text), title, "paso del banner")
+end, { state = "scan" })

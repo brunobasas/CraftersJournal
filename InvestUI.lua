@@ -1053,10 +1053,12 @@ function ES:CreateInvestPage(page)
     PH.Watch(function() ES:RenderInvest() ES:RenderInvestItem() end)
     ES:RenderInvest()
   end)
-  -- Llegan nombres e iconos de objetos que faltaban
+  -- Llegan nombres e iconos de objetos que faltaban: solo esos repintan (los apunta
+  -- RenderInvest en page.pendingItemIDs, ver ES.UI.WaitingForItem). Antes repintaba con
+  -- cualquier objeto que llegara (bolsas, chat, otros addons), le faltara algo o no
   ES.SafeRegister(page, "GET_ITEM_INFO_RECEIVED")
-  page:SetScript("OnEvent", function(self)
-    if self:IsVisible() and not self.refreshQueued then
+  page:SetScript("OnEvent", function(self, _, itemID)
+    if ES.UI.WaitingForItem(self, itemID) and self:IsVisible() and not self.refreshQueued then
       self.refreshQueued = true
       C_Timer.After(0.5, function() self.refreshQueued = false ES:RenderInvest() end)
     end
@@ -1099,8 +1101,17 @@ function ES:RenderInvest()
   page.views.list.icon:SetVertexColor(asList and 1 or 0.55, asList and 0.82 or 0.55, asList and 0.25 or 0.55)
   page.views.grid.icon:SetVertexColor(asList and 0.55 or 1, asList and 0.55 or 0.82, asList and 0.55 or 0.25)
   local y, n, s, nr = 0, 0, 0, 0
+  -- Los objetos a la vista que el juego aún no tiene cargados (nombre e icono): solo su
+  -- llegada repinta (OnEvent)
+  page.pendingItems = false
+  local waiting = page.pendingItemIDs
+  if waiting then for id in pairs(waiting) do waiting[id] = nil end else waiting = {} page.pendingItemIDs = waiting end
+  local function Pending(e)
+    if e.itemID and not ES:GetItemData(e.itemID) then page.pendingItems, waiting[e.itemID] = true, true end
+  end
   local function PlaceRows(list)
     for _, e in ipairs(list) do
+      Pending(e)
       nr = nr + 1
       local row = page.rows[nr] or CreateListRow(page.content)
       page.rows[nr] = row
@@ -1116,6 +1127,7 @@ function ES:RenderInvest()
   local function Place(list)
     if asList then return PlaceRows(list) end
     for i, e in ipairs(list) do
+      Pending(e)
       n = n + 1
       local card = page.cards[n] or CreateCard(page.content)
       page.cards[n] = card

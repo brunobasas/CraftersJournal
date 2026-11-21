@@ -1043,3 +1043,27 @@ test("arranque: lo guardado sin cartera o con una rota", function()
   Boot({ invest = { account = { ["Realm-Alliance"] = { [SILK] = { moves = "mal" } } } } })
   no_error(function() ES.Invest:Summary() end)
 end, { boot = false })
+
+-- Antes repintaba con cada objeto que llegaba del servidor (bolsas, chat, otros
+-- addons), le faltara algo o no: solo lo hace cuando llega uno de los que faltaban
+test("pestaña: solo repinta cuando llega un objeto que le faltaba", function()
+  Buy(SILK, 10, 2 * S)
+  Buy(LOTUS, 2, 8 * G)
+  UNCACHED[LOTUS] = true
+  OpenPage("invest")
+  local n, render = 0, ES.RenderInvest
+  ES.RenderInvest = function(...) n = n + 1 return render(...) end
+  FireEvent("GET_ITEM_INFO_RECEIVED", 2589, true) -- (Linen Cloth: no está en la cartera)
+  FireEvent("GET_ITEM_INFO_RECEIVED", SILK, true) -- (ya estaba cargado)
+  RunTimers()
+  expect_eq(n, 0, "repintados con objetos que no faltaban")
+  expect(Page().pendingItems, "no apunta que falta el Black Lotus")
+  UNCACHED[LOTUS] = nil
+  FireEvent("GET_ITEM_INFO_RECEIVED", LOTUS, true)
+  RunTimers()
+  expect_eq(n, 1, "repintados al llegar el Black Lotus")
+  expect(not Page().pendingItems, "sigue esperando objetos con todo cargado")
+  FireEvent("GET_ITEM_INFO_RECEIVED", LOTUS, true)
+  RunTimers()
+  expect_eq(n, 1, "repintados con todo cargado")
+end)

@@ -271,3 +271,15 @@ test("salir del juego guarda lo del personaje", function()
   expect(ES.db.prof == nil, "lo del personaje sigue suelto en ES.db")
   expect_eq(ES.charData.lastProf, "Leatherworking", "última profesión guardada")
 end, { state = "full" })
+
+-- Antes llegaba un UNIT_SPELLCAST_SUCCEEDED por cada hechizo de cualquiera a tu
+-- alrededor; los manejadores solo miran los tuyos (PR #8: RegisterUnitEvent)
+test("hechizos lanzados: solo llegan los tuyos", function()
+  local cast = { "Cast-3-0-0-0-2152-0000000000", 2152 }
+  local mine = FireEvent("UNIT_SPELLCAST_SUCCEEDED", "player", unpack(cast))
+  RunTimers()
+  local others = FireEvent("UNIT_SPELLCAST_SUCCEEDED", "target", unpack(cast))
+  RunTimers()
+  expect(mine >= 2, "solo %d marcos reciben tus hechizos (Ganar dinero y las recetas con enfriamiento)", mine)
+  expect_eq(others, 0, "marcos que reciben los hechizos de otro")
+end)
