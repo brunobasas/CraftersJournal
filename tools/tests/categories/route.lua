@@ -1090,3 +1090,241 @@ test("la fila de fundir dice que es con Minería, abre Smelt Mithril y su X hace
   expect(not Find(actions, "craft", BAR), "tras la X se sigue fundiendo")
 end, { state = "scan" })
 
+-- Lo que la ruta explica de sus cifras (spec route-explanations) ------------------
+-- CurseForge: "is -11g after the vendor sale or only materials?", "why you suggest
+-- something". Las cifras ya eran buenas; no se veía de dónde salían
+
+-- Cobre de un texto con dinero (ES.Money: números con los iconos de oro, plata y cobre)
+local function Copper(text)
+  local n, found = 0, false
+  for num, kind in tostring(text or ""):gmatch("(%d+)|TInterface\\MoneyFrame\\UI%-(%a+)Icon") do
+    found = true
+    n = n + tonumber(num) * (kind == "Gold" and 10000 or kind == "Silver" and 100 or 1)
+  end
+  return found and n or nil
+end
+
+-- Las líneas de un tooltip: AddLine tal cual y AddDoubleLine como "izquierda | derecha"
+local function TooltipLines(fn, ...)
+  local lines = {}
+  local add, add2 = GameTooltip.AddLine, GameTooltip.AddDoubleLine
+  GameTooltip.AddLine = function(_, t) lines[#lines + 1] = tostring(t) end
+  GameTooltip.AddDoubleLine = function(_, a, b) lines[#lines + 1] = tostring(a) .. " | " .. tostring(b) end
+  local ok, err = pcall(fn, ...)
+  GameTooltip.AddLine, GameTooltip.AddDoubleLine = add, add2
+  if not ok then error(err, 0) end
+  return lines
+end
+local function LineStarting(lines, prefix)
+  for _, l in ipairs(lines) do
+    if l:sub(1, #prefix) == prefix then return l end
+  end
+end
+local function Plain(s) return (tostring(s or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
+
+-- Las filas de los pasos de la vista Ruta, cada una con su paso: { { line, st } }
+local function StepRows(page, plan)
+  local out, k = {}, 0
+  for _, l in ipairs(page.lines or {}) do
+    if l.stepRecipe and tostring(l.level):find("–", 1, true) then
+      k = k + 1
+      out[#out + 1] = { line = l, st = plan.steps[k] }
+    end
+  end
+  return out
+end
+
+-- El neto por fabricación que dice la línea de debajo de un paso (negativo si "ganas")
+local function RowNet(sub)
+  sub = Plain(sub)
+  for _, key in ipairs({ "neto %s", "ganas %s" }) do
+    local prefix = ES.L[key]:gsub("%%s.*$", "")
+    local i = sub:find(prefix, 1, true)
+    if i then
+      local money = Copper(sub:sub(i + #prefix):match("^(.-)/") or "")
+      if money then return key == "ganas %s" and -money or money end
+    end
+  end
+end
+
+test("la fila de cada paso dice su neto por fabricación, el que da la cifra de la fila", function()
+  local page, plan = PageRoute("Tailoring", 50, 75)
+  local rows = StepRows(page, plan)
+  expect(#rows > 0 and rows[1].st, "no hay filas de pasos")
+  local withSale = false
+  for i, x in ipairs(rows) do
+    local st, l = x.st, x.line
+    if not l.done then
+      local net = expect(RowNet(l.sub), "paso %d: la línea de debajo no dice el neto: «%s»", i, Plain(l.sub))
+      expect_near(net, st.unitCost - st.unitValue, 1, "paso " .. i .. ": neto por fabricación")
+      -- (la cifra de la fila: el neto por las fabricaciones del paso)
+      local value = (Copper(l.value) or 0) * (Plain(l.value):find("^%+") and -1 or 1)
+      expect_near(net * st.crafts, value, st.crafts + 1, "paso " .. i .. ": neto × fabricaciones frente a la cifra de la fila")
+      -- (con venta, el neto no es el coste de los materiales: así se ve que no enseña ese)
+      if st.unitValue >= 2 then withSale = true end
+    end
+  end
+  expect(withSale, "ningún paso recupera nada vendiéndolo: la prueba no prueba lo del neto")
+end, { state = "scan" })
+
+test("el tooltip de un paso acaba con su cuenta: materiales, lo que se recupera y el neto", function()
+  local page, plan = PageRoute("Tailoring", 50, 75)
+  local x = expect(StepRows(page, plan)[1], "no hay filas de pasos")
+  local lines = TooltipLines(x.line.tooltip, CreateFrame("Frame"))
+  local mats = expect(LineStarting(lines, ES.L["Materiales"] .. " | "), "el tooltip no dice los materiales del paso")
+  local back = expect(LineStarting(lines, ES.L["Se recupera vendiéndolo"] .. " | ") or LineStarting(lines, ES.L["Se recupera (vendido o guardado)"] .. " | "),
+    "el tooltip no dice lo que se recupera")
+  local net = expect(LineStarting(lines, ES.L["Neto"] .. " | ") or LineStarting(lines, ES.L["Ganas"] .. " | "), "el tooltip no dice el neto")
+  local st = x.st
+  expect_near(Copper(mats), st.crafts * st.unitCost, 1, "materiales del paso")
+  expect_near(Copper(back), st.crafts * st.unitValue, 1, "lo que se recupera")
+  expect_near(Copper(net), math.abs(st.total - st.fee), 1, "neto del paso")
+  expect_near(Copper(net), Copper(x.line.value) or 0, 1, "el neto del tooltip y la cifra de la fila")
+  note("%s · %s · %s", Plain(mats), Plain(back), Plain(net))
+end, { state = "scan" })
+
+test("el tooltip de un paso que guarda parte de lo que fabrica lo dice en lo que se recupera", function()
+  local found
+  for _, case in ipairs({ { "Tailoring", 1, 75 }, { "Tailoring", 75, 150 }, { "Leatherworking", 1, 75 }, { "Blacksmithing", 1, 75 } }) do
+    local page, plan = PageRoute(case[1], case[2], case[3])
+    for _, x in ipairs(StepRows(page, plan)) do
+      local r = x.st and x.st.recipe
+      if r and r.out and (plan.keptByItem[r.out[1]] or 0) > 0 then found = x break end
+    end
+    if found then break end
+  end
+  expect(found, "ninguna ruta de prueba guarda lo que fabrica un paso: la prueba no prueba nada")
+  local lines = TooltipLines(found.line.tooltip, CreateFrame("Frame"))
+  expect(LineStarting(lines, ES.L["Se recupera (vendido o guardado)"] .. " | "),
+    "el tooltip de un paso que guarda lo que fabrica no dice «vendido o guardado»")
+end, { state = "scan" })
+
+-- El neto como lo escribe la ruta ("neto 46s" / "ganas 12s"), sin colores
+local function NetLabel(net)
+  if net <= -0.5 then return Plain(string.format(ES.L["ganas %s"], ES.Money(-net))) end
+  return Plain(string.format(ES.L["neto %s"], ES.Money(math.max(0, net))))
+end
+
+test("cada alternativa dice cuánto más cuesta en total, con su neto y fabricaciones frente a los del paso", function()
+  local page, plan = PageRoute("Tailoring", 50, 75)
+  RunTimers(10)
+  expect(plan.alts, "la ruta no calculó sus alternativas")
+  local rows, checked = StepRows(page, plan), 0
+  for i, x in ipairs(rows) do
+    local list = plan.alts[i]
+    if list and #list > 0 and not x.line.done then
+      local lines = TooltipLines(x.line.tooltip, CreateFrame("Frame"))
+      local st = x.st
+      for n = 1, math.min(3, #list) do
+        local alt = list[n]
+        local r = ES.Data.Tailoring.recipes[alt.id]
+        local head = expect(LineStarting(lines, string.format("%d. %s | ", n + 1, r.name)), "paso %d: no está la alternativa %s", i, r.name)
+        if math.abs(alt.delta) >= 0.5 then
+          local prefix = Plain(alt.delta > 0 and ES.L["+%s en total"] or ES.L["-%s en total"]):gsub("%%s.*$", "")
+          expect(Plain(head):find(" | " .. prefix, 1, true), "paso %d, %s: la cifra no dice «en total»: «%s»", i, r.name, Plain(head))
+          expect_near(Copper(head), math.abs(alt.delta), 1, "paso " .. i .. ", " .. r.name .. ": cifra de la alternativa")
+        end
+        -- La línea de debajo: su neto por fabricación y el del paso, y las fabricaciones
+        local below
+        for k, l in ipairs(lines) do if l == head then below = Plain(lines[k + 1]) end end
+        local a = alt.step
+        expect(below and below:find(NetLabel(a.unitCost - a.unitValue), 1, true), "paso %d, %s: sin su neto: «%s»", i, r.name, tostring(below))
+        expect(below:find(NetLabel(st.unitCost - st.unitValue), 1, true), "paso %d, %s: sin el neto del paso: «%s»", i, r.name, below)
+        expect(below:find(tostring(math.floor(a.crafts + 0.5)), 1, true), "paso %d, %s: sin sus fabricaciones: «%s»", i, r.name, below)
+        checked = checked + 1
+      end
+    end
+  end
+  expect(checked > 0, "ningún paso con alternativas: la prueba no prueba nada")
+  note("%d alternativas comprobadas", checked)
+end, { state = "scan" })
+
+local function Hover(frame)
+  local fn = expect(frame and frame._scripts and frame._scripts.OnEnter, "el marco no tiene tooltip")
+  return TooltipLines(fn, frame)
+end
+
+test("la vista Ruta dice cómo elige la ruta, y su tooltip da el texto entero", function()
+  local page = PageRoute("Tailoring", 50, 75)
+  local text = Plain(page.howLine:GetText())
+  expect(text ~= "", "con ruta, no sale la línea de cómo elige la ruta")
+  expect_eq(text, Plain(ES.L["La ruta busca el menor coste neto: materiales menos ventas al vendedor. Por eso puede no coincidir con las guías."]), "línea")
+  local lines = Hover(page.howHover)
+  expect(LineStarting(lines, ES.L["Cómo elige la ruta"]), "al pasar el ratón no sale «Cómo elige la ruta»")
+  expect(#lines >= 2 and #lines[2] > #text, "el tooltip no da el texto entero")
+end, { state = "scan" })
+
+test("sin escaneo, no sale la línea de cómo elige la ruta", function()
+  OpenPage("Tailoring")
+  RunTimers()
+  local page = expect(ProfessionPage("Tailoring"), "no hay página de Sastrería")
+  expect_eq(Plain(page.howLine:GetText()), "", "línea sin ruta")
+  expect_eq(#Hover(page.howHover), 0, "líneas del tooltip sin ruta")
+end, { state = "empty" })
+
+test("el tooltip del Total da su cuenta: materiales menos ventas más instructor", function()
+  local page, plan = PageRoute("Tailoring", 50, 75)
+  local lines = Hover(page.totalHover)
+  local mats = expect(LineStarting(lines, ES.L["Materiales"] .. " | "), "sin materiales")
+  local sales = expect(LineStarting(lines, ES.L["Ventas al vendedor"] .. " | "), "sin ventas al vendedor")
+  local fees = expect(LineStarting(lines, ES.L["Instructor y herramientas"] .. " | "), "sin instructor y herramientas")
+  local total = expect(LineStarting(lines, ES.L["Total"] .. " | ") or LineStarting(lines, ES.L["Ganas"] .. " | "), "sin total")
+  local sign = LineStarting(lines, ES.L["Ganas"] .. " | ") and -1 or 1
+  expect_near((Copper(mats) or 0) - (Copper(sales) or 0) + (Copper(fees) or 0), sign * (Copper(total) or 0), 2, "materiales - ventas + instructor")
+  expect_near(sign * (Copper(total) or 0), plan.net, 1, "total del tooltip y de la ruta")
+  expect(LineStarting(lines, ES.L["Cómo elige la ruta"]), "el tooltip del Total no explica cómo elige la ruta")
+  note("%s · %s · %s · %s", Plain(mats), Plain(sales), Plain(fees), Plain(total))
+end, { state = "scan" })
+
+-- El margen de la compra en los tooltips de Materiales y de las filas de compra del
+-- asistente. Ruta de Sastrería 120-150 empezada con el modo `byPhase` (nil: por tramos)
+local MARGIN_PREFIX = Plain(ES.L["De media hacen falta %d y se piden %d (%d de margen), por si los puntos tardan en subir. Si te sobran, sirven para el tramo siguiente."]):match("^(.-)%%d")
+local function MarginTooltips(byPhase)
+  ES.db.prof.Tailoring = ES.db.prof.Tailoring or {}
+  ES.db.prof.Tailoring.byPhase = byPhase
+  local page, plan = StartRoute("Tailoring", 120, 150)
+  local need = ES.Planner.RouteNeed("Tailoring", plan, 120)
+  local found, rows = {}, 0
+  local function Scan(lines)
+    for _, l in ipairs(lines or {}) do
+      if l.tooltip and (l.buyRow or l.item) then
+        rows = rows + 1
+        for _, t in ipairs(TooltipLines(l.tooltip, CreateFrame("Frame"))) do
+          local s = Plain(t)
+          local i = s:find(MARGIN_PREFIX, 1, true)
+          if i then
+            local avg, ask, extra = s:sub(i):match("(%d+)%D+(%d+)%D+(%d+)")
+            found[#found + 1] = { avg = tonumber(avg), ask = tonumber(ask), extra = tonumber(extra), text = s }
+          end
+        end
+      end
+    end
+  end
+  ES:SelectProfessionView(page, "shop")
+  RunTimers()
+  Scan(page.lines)
+  Scan(ES:RouteLines("Tailoring", { buy = true }))
+  return found, need, rows
+end
+
+test("compra por tramos: el tooltip explica el margen (de media, lo que se pide y la diferencia)", function()
+  local found, need, rows = MarginTooltips(nil)
+  expect(rows > 0, "no hay filas de compra: la prueba no prueba nada")
+  expect(#found > 0, "ninguna fila de compra explica el margen")
+  for _, f in ipairs(found) do
+    expect_eq(f.ask - f.avg, f.extra, "margen de «" .. f.text .. "»")
+    local ok = false
+    for _, n in pairs(need) do
+      if n.expected and n.need == f.ask and math.ceil(n.expected - 0.001) == f.avg then ok = true end
+    end
+    expect(ok, "«%s» no cuadra con lo que pide la compra del tramo", f.text)
+  end
+  note("%s", found[1].text)
+end, { state = "scan" })
+
+test("con ruta entera, la compra no habla de margen", function()
+  local found, _, rows = MarginTooltips(false)
+  expect(rows > 0, "no hay filas de compra: la prueba no prueba nada")
+  expect_eq(#found, 0, "filas que hablan de margen con ruta entera")
+end, { state = "scan" })
+

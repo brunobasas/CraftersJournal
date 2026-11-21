@@ -75,6 +75,14 @@ local function Signed(copper)
   return ES.Money(0)
 end
 
+-- Neto de una fabricación (materiales menos lo que se recupera): "neto 46s" o, si se
+-- gana dinero, "ganas 12s" (un coste negativo confunde). Lo usan la fila del paso y
+-- las alternativas
+local function NetText(net)
+  if net <= -0.5 then return string.format(L["ganas %s"], ES.Money(-net)) end
+  return string.format(L["neto %s"], ES.Money(math.max(0, net)))
+end
+
 -- Nombre del objeto en su color de calidad. Si el juego aún no lo ha cargado, el
 -- nombre de los datos del addon (o `fallback`); el tercer valor dice que falta
 function ES:ItemName(itemID)
@@ -1052,11 +1060,15 @@ local function AddAltTooltip(plan, i, data, row)
   for n = 1, math.min(ALT_SHOWN, #list) do
     local alt = list[n]
     local a, r = alt.step, data.recipes[alt.id]
+    -- Cuánto cambia el total de la ruta y, debajo, de dónde sale: neto por fabricación y
+    -- fabricaciones, frente a las del paso. Antes se comparaba el coste de los materiales,
+    -- y una alternativa con materiales más baratos parecía mejor aunque costara más
+    -- (CurseForge: "why you suggest something")
     GameTooltip:AddDoubleLine(string.format("%d. %s", n + 1, r and r.name or "?"),
-      alt.delta >= 0.5 and (RED .. "+" .. ES.Money(alt.delta) .. "|r")
-      or alt.delta <= -0.5 and (GREEN .. "-" .. ES.Money(-alt.delta) .. "|r") or L["igual"], 1, 1, 1, 1, 1, 1)
-    GameTooltip:AddLine("   " .. string.format(L["%d fabricaciones (aquí %d) · %s/u (aquí %s) · recuperas %s/u (aquí %s)"],
-      a.crafts, st.crafts, ES.Money(a.unitCost), ES.Money(st.unitCost), ES.Money(a.unitValue), ES.Money(st.unitValue))
+      alt.delta >= 0.5 and (RED .. string.format(L["+%s en total"], ES.Money(alt.delta)) .. "|r")
+      or alt.delta <= -0.5 and (GREEN .. string.format(L["-%s en total"], ES.Money(-alt.delta)) .. "|r") or L["igual"], 1, 1, 1, 1, 1, 1)
+    GameTooltip:AddLine("   " .. string.format(L["%s/u (aquí %s) · %d fabricaciones (aquí %d)"],
+      NetText(a.unitCost - a.unitValue), NetText(st.unitCost - st.unitValue), math.floor(a.crafts + 0.5), math.floor(st.crafts + 0.5))
       .. ((a.fee or 0) > 0 and (" · " .. L["aprender"] .. " " .. ES.Money(a.fee)) or ""), 0.75, 0.75, 0.75, true)
     local v = ES.Planner.AlternativeVerdict(plan, st, alt)
     if v == "better" then
@@ -1173,6 +1185,20 @@ local function RecipeTooltip(step, plan)
         GameTooltip:AddLine(L["Precio poco fiable: "] .. sale.risk .. ".", 1, 0.5, 0, true)
       end
     end
+
+    -- La cuenta del paso, con la resta hecha: la cifra de la fila es este neto
+    -- (CurseForge: "is -11g after the vendor sale or only materials?")
+    local mats, back = step.crafts * step.unitCost, step.crafts * step.unitValue
+    local net = (step.total or 0) - (step.fee or 0)
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(L["Cuenta del paso:"], 1, 0.82, 0)
+    GameTooltip:AddDoubleLine(L["Materiales"], ES.Money(mats), 1, 1, 1, 1, 1, 1)
+    GameTooltip:AddDoubleLine(kept and L["Se recupera (vendido o guardado)"] or L["Se recupera vendiéndolo"],
+      "-" .. ES.Money(back), 1, 1, 1, 1, 1, 1)
+    GameTooltip:AddDoubleLine(net <= -0.5 and L["Ganas"] or L["Neto"], ES.Money(math.abs(net)), 1, 0.82, 0, 1, 0.82, 0)
+    if (step.fee or 0) > 0 then
+      GameTooltip:AddLine(L["Aprender la receta va en su propia fila."], 0.6, 0.6, 0.6, true)
+    end
     GameTooltip:Show()
   end
 end
@@ -1216,10 +1242,26 @@ local function DestinationTooltip(d, name, signals)
   end
 end
 
-local function ShopTooltip(it, plan)
+-- El margen de la compra por tramos: lo que se pide de más sobre lo que hace falta de
+-- media (CurseForge: el paso decía 288 barras y la compra pedía 312). nil sin margen
+local function MarginText(need, expected)
+  if not (need and expected) then return nil end
+  local avg = math.ceil(expected - 0.001)
+  if need - avg < 1 then return nil end
+  return string.format(L["De media hacen falta %d y se piden %d (%d de margen), por si los puntos tardan en subir. Si te sobran, sirven para el tramo siguiente."],
+    avg, need, need - avg)
+end
+
+-- `need`, `expected`: lo que pide la compra y lo que hace falta de media (RouteBuy)
+local function ShopTooltip(it, plan, need, expected)
   return function(row)
     GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
     GameTooltip:SetHyperlink("item:" .. it.itemID)
+    local margin = MarginText(need, expected)
+    if margin then
+      GameTooltip:AddLine(" ")
+      GameTooltip:AddLine(margin, 1, 0.82, 0, true)
+    end
     if it.source == "ah" then
       GameTooltip:AddLine(" ")
       GameTooltip:AddLine(string.format(L["%d uds a %s de media, comprando de la más barata a la más cara (ahora hay %d a la venta)."],
@@ -2036,19 +2078,59 @@ function ES:CreateProfessionPage(page, profKey)
   totalHover:SetPoint("TOPLEFT", strip, "TOPLEFT", COL_OF.total * COL + 2, 0)
   totalHover:SetSize(COL - 6, 56)
   totalHover:EnableMouse(true)
+  -- Cómo elige la ruta: busca el menor coste neto (materiales menos ventas al vendedor),
+  -- y por eso puede no coincidir con las guías, que solo miran los materiales
+  -- (CurseForge: "routes differ from other addons and guides"). En el tooltip del Total
+  -- y de la línea de debajo de las cifras
+  local function AddHowTooltip()
+    GameTooltip:AddLine(L["Cómo elige la ruta"], 1, 0.82, 0)
+    GameTooltip:AddLine(L["La ruta busca la forma más barata de subir contando lo que recuperas: los materiales a precio de la AH (o del vendedor, si sale más barato) menos lo que sacas vendiendo al vendedor lo que fabricas, más el instructor. Por eso a veces elige una receta con materiales más caros: se vende mejor o hacen falta menos fabricaciones. Las guías suelen mirar solo los materiales, así que la ruta puede no coincidir con ellas."],
+      0.8, 0.8, 0.8, true)
+  end
   totalHover:SetScript("OnEnter", function(self)
-    local t = page.totalAHInfo
-    if not t then return end
+    local plan = page.plan
+    if not (plan and plan.steps and #plan.steps > 0) then return end
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
     GameTooltip:AddLine(L["Total"], 1, 0.82, 0)
-    GameTooltip:AddDoubleLine(L["Vendiendo al vendedor (seguro)"], Signed(t.net), 0.8, 0.8, 0.8)
-    GameTooltip:AddDoubleLine(L["Siguiendo el consejo (AH y vendedor)"], Signed(t.advisedNet), 0.8, 0.8, 0.8)
+    -- La cuenta del total, con la resta hecha
+    GameTooltip:AddDoubleLine(L["Materiales"], ES.Money(plan.reagentCost), 1, 1, 1, 1, 1, 1)
+    GameTooltip:AddDoubleLine(L["Ventas al vendedor"], "-" .. ES.Money(plan.resale), 1, 1, 1, 1, 1, 1)
+    GameTooltip:AddDoubleLine(L["Instructor y herramientas"], ES.Money(plan.fees + plan.toolsCost), 1, 1, 1, 1, 1, 1)
+    GameTooltip:AddDoubleLine(plan.net <= -0.5 and L["Ganas"] or L["Total"], ES.Money(math.abs(plan.net)), 1, 0.82, 0, 1, 0.82, 0)
     GameTooltip:AddLine(" ")
-    GameTooltip:AddLine(string.format(L["El segundo total cuenta lo que la vista %s aconseja anunciar en la AH a su precio actual. No es seguro: depende de que se venda, a ese precio y antes de que caduque la subasta. Lo del vendedor sí es seguro."],
-      L["Profit"]), 0.8, 0.8, 0.8, true)
+    AddHowTooltip()
+    local t = page.totalAHInfo
+    if t then
+      GameTooltip:AddLine(" ")
+      GameTooltip:AddDoubleLine(L["Vendiendo al vendedor (seguro)"], Signed(t.net), 0.8, 0.8, 0.8)
+      GameTooltip:AddDoubleLine(L["Siguiendo el consejo (AH y vendedor)"], Signed(t.advisedNet), 0.8, 0.8, 0.8)
+      GameTooltip:AddLine(" ")
+      GameTooltip:AddLine(string.format(L["El segundo total cuenta lo que la vista %s aconseja anunciar en la AH a su precio actual. No es seguro: depende de que se venda, a ese precio y antes de que caduque la subasta. Lo del vendedor sí es seguro."],
+        L["Profit"]), 0.8, 0.8, 0.8, true)
+    end
     GameTooltip:Show()
   end)
   totalHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  page.totalHover = totalHover -- (pruebas)
+  -- La línea, debajo de las cifras de las cuatro primeras columnas (solo el Total usa la
+  -- línea de abajo, con el "con AH"). Sin salto: si no cabe, se corta; el ratón da el
+  -- texto entero
+  page.howLine = Label(strip, "", "GameFontDisableSmall")
+  page.howLine:SetPoint("BOTTOMLEFT", strip, "BOTTOMLEFT", 6, 2)
+  page.howLine:SetWidth(COL_OF.total * COL - 12)
+  page.howLine:SetJustifyH("LEFT")
+  page.howLine:SetWordWrap(false)
+  local howHover = CreateFrame("Frame", nil, strip)
+  howHover:SetAllPoints(page.howLine)
+  howHover:EnableMouse(true)
+  howHover:SetScript("OnEnter", function(self)
+    if (page.howLine:GetText() or "") == "" then return end
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    AddHowTooltip()
+    GameTooltip:Show()
+  end)
+  howHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  page.howHover = howHover -- (pruebas)
   page.routeButton:SetPoint("TOPRIGHT", strip, "BOTTOMRIGHT", 0, 0)
   page.status = Label(page, "", "GameFontHighlightSmall")
   page.status:SetPoint("TOPLEFT", strip, "BOTTOMLEFT", 2, -4)
@@ -2727,10 +2809,12 @@ local function RouteBuy(plan, profKey, level, opts)
   -- (en los dos sitios, donde va la mayor parte: Planner.ShoppingSource)
   local shopping = {}
   for _, it in ipairs(plan.shopping or {}) do shopping[it.itemID] = ES.Planner.ShoppingSource(plan, it.itemID) end
-  local res = { ah = {}, vendor = {}, have = {}, left = 0, need = {}, phase = phase, Have = Have, plan = plan }
+  -- expected: lo que hace falta de media (sin el margen de por tramos), para explicarlo
+  local res = { ah = {}, vendor = {}, have = {}, left = 0, need = {}, expected = {}, phase = phase, Have = Have, plan = plan }
   local ids = {}
   for itemID, n in pairs(routeNeed) do
     res.need[itemID] = n.need
+    res.expected[itemID] = n.expected
     ids[#ids + 1] = itemID
   end
   table.sort(ids)
@@ -2744,7 +2828,7 @@ local function RouteBuy(plan, profKey, level, opts)
         local source = planned and planned.source or (vendorPrice and "vendor" or "ah")
         local ahEntry = plan.ctx and plan.ctx.prices and plan.ctx.prices[itemID]
         local unit = planned and planned.unit or vendorPrice or (ahEntry and ahEntry.minUnit) or 0
-        local it = { itemID = itemID, quantity = missing, need = n, source = source, unit = unit, total = unit * missing,
+        local it = { itemID = itemID, quantity = missing, need = n, expected = res.expected[itemID], source = source, unit = unit, total = unit * missing,
           supply = planned and planned.supply or (ahEntry and ahEntry.quantity) }
         res.left = res.left + it.total
         table.insert(source == "ah" and res.ah or res.vendor, it)
@@ -2941,6 +3025,9 @@ local function BuyLine(source, items, buy, level, visited, profKey)
         -- Si se puede fabricar: por qué se compra (Bolt of Linen Cloth y no Linen Cloth)
         local cmp = not bank and (it.unit or 0) > 0 and CraftCompareText(buy.plan, it.itemID, it.unit)
         if cmp then GameTooltip:AddLine("   " .. cmp, 0.6, 0.6, 0.6, true) end
+        -- Por qué pide más de lo que hace falta de media (el margen de por tramos)
+        local margin = not bank and MarginText(it.need, it.expected)
+        if margin then GameTooltip:AddLine("   " .. margin, 1, 0.82, 0, true) end
       end
       if bank then
         GameTooltip:AddLine(L["Según lo que había la última vez que abriste el banco."], 0.6, 0.6, 0.6, true)
@@ -3909,10 +3996,13 @@ local function RouteLines(plan, page, opts)
       sub = done and (GREY .. L["Hecho"] .. "|r")
         -- Lo que llevas se mide en puntos (tu nivel), no en fabricaciones de esta
         -- receta: los puntos que te dé otra (Bolt of Woolen Cloth) también cuentan
+        -- Por fabricación, el neto (materiales menos lo que se recupera): el que cuadra con
+        -- la cifra de la fila. CurseForge: con solo los materiales no se sabía si el −11g
+        -- ya restaba la venta al vendedor
         or current and (string.format(L["%d/%d puntos · ~%s%d|r fabricaciones más · %s/u"], level - st.from, st.to - st.from,
-          GOLD, left, ES.Money(st.unitCost)) .. (batchText and (" · " .. batchText) or "") .. timeText .. aheadText)
+          GOLD, left, NetText(st.unitCost - st.unitValue)) .. (batchText and (" · " .. batchText) or "") .. timeText .. aheadText)
         or (string.format(L["%s%d fabricaciones|r · %s/u"], perPoint > LOW_CHANCE_CRAFTS and ORANGE or "",
-        stepCrafts, ES.Money(st.unitCost)) .. (batchText and (" · " .. batchText) or "") .. timeText .. aheadText),
+        stepCrafts, NetText(st.unitCost - st.unitValue)) .. (batchText and (" · " .. batchText) or "") .. timeText .. aheadText),
       -- (la segunda mejor receta y por qué es peor va solo en el tooltip: AddAltTooltip)
       value = Signed(st.total - st.fee), item = r.out and r.out[1], -- lo de aprender va en su fila
       onSkip = not done and Skip(st.id) or nil,
@@ -4506,7 +4596,7 @@ local function ShopLines(plan, page)
     end
     if action then sub = ACTION .. L["Clic: "] .. action .. "|r · " .. sub end
     local go = not onClick and WP.Target(it.source == "ah" and "auction" or "vendor", it.itemID) or nil
-    local tip = ShopTooltip(it, plan)
+    local tip = ShopTooltip(it, plan, need[it.itemID] and math.ceil(need[it.itemID] - 0.001), buy.expected[it.itemID])
     return { level = "×" .. it.quantity, icon = texture or 134400, title = name, sub = sub, value = Signed(it.total),
       item = it.itemID, onClick = onClick, go = go,
       tooltip = function(row)
@@ -4839,6 +4929,7 @@ function ES:RenderPlan(page)
   local stats = page.stats
   if page.calculating and not plan then
     for _, fs in pairs(stats) do fs:SetText(GREY .. "—|r") end
+    if page.howLine then page.howLine:SetText("") end
     page.status:SetText(GREY .. L["Calculando la ruta…"] .. "|r")
     self:UpdateCalcProgress(page)
     page.lines = {}
@@ -4857,6 +4948,11 @@ function ES:RenderPlan(page)
     stats.time:SetText(secs > 0 and DurationIcon(secs) or (GREY .. "—|r"))
   else
     for _, fs in pairs(stats) do fs:SetText(GREY .. "—|r") end
+  end
+  -- Cómo elige la ruta (ver la franja), solo con una ruta con pasos
+  if page.howLine then
+    page.howLine:SetText(plan and #plan.steps > 0
+      and L["La ruta busca el menor coste neto: materiales menos ventas al vendedor. Por eso puede no coincidir con las guías."] or "")
   end
   -- Posible total siguiendo el consejo (AH y vendedor), bajo el total seguro
   page.totalAHInfo = nil
