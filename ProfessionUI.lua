@@ -546,7 +546,8 @@ function ES:StableRouteKey(profKey, from, to, cap)
     tostring(settings.useQuests), self:RealmKey(), ExcludedKey(settings), tostring(settings.useFavor),
     tostring(settings.fewerCrafts), tostring(self.Planner.SKILL_BONUS or 0), -- (Working Overtime)
     tostring(settings.noLimited or false), self:KnownStamp(profKey), trainer,
-    self.RepStamp and self:RepStamp() or "", tostring(self.AddonVersion and self.AddonVersion()), RecipeCount(profKey) }, ":")
+    self.RepStamp and self:RepStamp() or "", tostring(self.AddonVersion and self.AddonVersion()), RecipeCount(profKey),
+    self.SpecStamp and self:SpecStamp() or "" }, ":")
 end
 function ES:PlanKey(profKey, from, to, cap, stable)
   return (stable or self:StableRouteKey(profKey, from, to, cap)) .. ":" .. self.planGen .. "." .. (self.planGens[profKey] or 0)

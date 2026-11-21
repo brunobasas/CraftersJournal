@@ -85,6 +85,26 @@ test("una idea con precios conocidos: la cuenta hecha a mano", function()
   expect_eq(idea.sellWhere, "ah", "se vende en la AH")
 end, { state = "full" })
 
+-- Spec recipe-requirements: «Recetas que podrías aprender» no propone las de una
+-- especialización que no tienes (Frostsaber Boots pide Tribal Leatherworking)
+test("recetas para aprender: solo las de tu especialización", function()
+  local r = ES.Data.Leatherworking.recipes[19066] -- Frostsaber Boots
+  expect(r and r.scroll and r.spec == "Tribal", "Frostsaber Boots no es un pergamino de Tribal: la prueba no prueba nada")
+  SKILLS[ES.Data.Leatherworking.skillLine] = { 260, 300 }
+  for _, m in ipairs(r.r) do SetPrice(m[1], 1, 5000) end -- materiales baratos
+  SetPrice(r.scroll, 100, 1)                              -- el patrón, en la AH
+  SetPrice(r.out[1], 500000, 40)                          -- lo fabricado, caro
+  local function Offered()
+    for _, idea in ipairs(Ideas().learnable) do
+      if idea.e.id == 19066 then return true end
+    end
+    return false
+  end
+  expect(not Offered(), "sin Tribal Leatherworking propone aprender Frostsaber Boots")
+  KNOWN_SPELLS[10660] = true
+  expect(Offered(), "con Tribal Leatherworking no propone aprender Frostsaber Boots (la prueba no prueba nada)")
+end, { state = "full" })
+
 test("quitar una receta de Ganar dinero y recuperarla", function()
   local res = Ideas()
   local first = expect(res.batch[1], "sin ideas")

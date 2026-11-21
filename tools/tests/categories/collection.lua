@@ -51,6 +51,38 @@ test("una receta de instructor que no tienes: dónde y si ya puedes aprenderla",
   expect(#res.next > 0, "sin «siguientes recetas»")
 end)
 
+-- Spec recipe-requirements: los pergaminos que piden especialización lo dicen, como las
+-- de instructor (antes solo salía en las de instructor)
+test("una receta de pergamino de especialización dice cuál pide", function()
+  SKILLS[ES.Data.Leatherworking.skillLine] = { 250, 300 }
+  OpenPage("patterns")
+  ES:SelectPage("pattern:Leatherworking")
+  RunTimers()
+  local frame = ES:GetMainFrame().pages["pattern:Leatherworking"].collectionFrame
+  expect(frame and frame.data, "la colección de Peletería no se ha pintado")
+  local e
+  for _, x in ipairs(frame.data.entries) do if x.id == 19066 then e = x end end -- Frostsaber Boots
+  expect(e, "Frostsaber Boots no está en la colección de Peletería")
+  expect(e.recipe.scroll, "Frostsaber Boots no es de pergamino: la prueba no prueba nada")
+  ES:SelectCollectionEntry(frame, e)
+  RunTimers()
+  local want = string.format(ES.L["solo con la especialización %s"], "Tribal")
+  expect(AllText():find(want, 1, true), "la ficha de Frostsaber Boots no dice «%s»", want)
+end)
+
+test("una receta de especialización que no tienes no sale como «puedes aprenderla ya»", function()
+  SKILLS[ES.Data.Engineering.skillLine] = { 270, 300 }
+  local function Entry()
+    for _, e in ipairs(ES.Collection:Build("Engineering").entries) do
+      if e.id == 12758 then return e end -- Goblin Rocket Helmet (instructor de Goblin, 245)
+    end
+  end
+  local e = expect(Entry(), "Goblin Rocket Helmet no está en la colección")
+  expect(not e.learnableNow, "sin Goblin Engineering, Goblin Rocket Helmet sale como «puedes aprenderla ya»")
+  KNOWN_SPELLS[20222] = true -- Goblin Engineering
+  expect(Entry().learnableNow, "con Goblin Engineering, Goblin Rocket Helmet no sale como «puedes aprenderla ya»")
+end)
+
 -- Mooncloth Bag pide 1 Mooncloth, que se fabrica con 2 Felcloth pero tiene enfriamiento
 -- (una cada pocos días). Salía a 93s (2 Felcloth) en vez de los 60g de la AH
 local function SetPrice(itemID, price)

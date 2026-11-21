@@ -270,6 +270,42 @@ for _, prof in ipairs({ "Alchemy", "Blacksmithing", "Enchanting", "Engineering",
   end)
 end
 
+-- Spec recipe-requirements. CurseForge: "filter and not include recipes that require a
+-- specialization, like Tribal Leatherworking" (Frostsaber Boots en la ruta de Peletería)
+test("sin especialización, ninguna ruta 1-300 usa recetas de especialización", function()
+  -- (además de las que llevan `spec`, las dos que se colaban antes, por si la pierden)
+  local KNOWN = { [19066] = "Tribal", [16978] = "Swordsmith" } -- Frostsaber Boots, Blazing Rapier
+  local bad = {}
+  for _, prof in ipairs(ProfessionKeys()) do
+    local plan = PlanRoute(prof, 1, 300)
+    for i, s in ipairs(plan.steps) do
+      local r = ES.Data[prof].recipes[s.id]
+      local spec = r and (r.spec or KNOWN[s.id])
+      if spec then
+        bad[#bad + 1] = string.format("%s paso %d %d-%d: %s (pide %s)", prof, i, s.from, s.to, r.nameEN or r.name, spec)
+      end
+    end
+  end
+  expect(#bad == 0, "%d pasos con recetas de especialización:\n    %s", #bad, table.concat(bad, "\n    "))
+end)
+
+test("con una especialización, solo se aprenden sus recetas", function()
+  local LW, BS = ES.Data.Leatherworking, ES.Data.Blacksmithing
+  ES.Planner.Annotate(LW)
+  ES.Planner.Annotate(BS)
+  local boots, volcanic, rapier = LW.recipes[19066], LW.recipes[19059], BS.recipes[16978]
+  expect(boots and volcanic and rapier, "faltan Frostsaber Boots, Volcanic Leggings o Blazing Rapier en los datos")
+  local opts = { includeScrolls = true }
+  expect(ES.Planner.LearnSkill(boots, opts) == nil, "sin Tribal se puede aprender Frostsaber Boots")
+  KNOWN_SPELLS[10660] = true -- Tribal Leatherworking
+  expect(ES.Planner.LearnSkill(boots, opts), "con Tribal no se puede aprender Frostsaber Boots")
+  expect(ES.Planner.LearnSkill(volcanic, opts) == nil, "con Tribal se puede aprender Volcanic Leggings (Elemental)")
+  KNOWN_SPELLS[9787] = true -- Weaponsmith, sin Master Swordsmith
+  expect(ES.Planner.LearnSkill(rapier, opts) == nil, "con Weaponsmith pero sin Master Swordsmith se puede aprender Blazing Rapier")
+  KNOWN_SPELLS[17039] = true -- Master Swordsmith
+  expect(ES.Planner.LearnSkill(rapier, opts), "con Master Swordsmith no se puede aprender Blazing Rapier")
+end)
+
 -- Desde un nivel intermedio con recetas aprendidas: no las vuelve a cobrar
 for _, case in ipairs({ { "Leatherworking", 120 }, { "Tailoring", 150 }, { "Cooking", 100 }, { "Blacksmithing", 90 } }) do
   local prof, level = case[1], case[2]
@@ -443,6 +479,11 @@ test("clave estable: cambia con las recetas sabidas, el instructor, el standing 
   expect(K() ~= trainer, "cambiar el standing no cambia la clave")
   ES.Standing = standing
   expect_eq(K(), trainer, "con el standing de antes")
+  -- Especializaciones (spec recipe-requirements: aprender Tribal cambia qué recetas sirven)
+  KNOWN_SPELLS[10660] = true
+  expect(K("Leatherworking") ~= lw, "aprender Tribal Leatherworking no cambia la clave")
+  KNOWN_SPELLS[10660] = nil
+  expect_eq(K("Leatherworking"), lw, "sin Tribal otra vez")
   -- Versión del addon
   GetAddOnMetadata = function(_, field) if field == "Version" then return "99.0.0" end end
   expect(K() ~= trainer, "otra versión del addon no cambia la clave")
@@ -516,6 +557,11 @@ test("ruta guardada: deja de valer con escaneo nuevo, receta aprendida, otro niv
   KNOWN_SPELLS[learned] = true
   expect(not Reused(), "se reutiliza tras aprender una receta")
   KNOWN_SPELLS[learned] = nil
+  -- Especialización aprendida entre sesiones
+  KNOWN_SPELLS[9788] = true -- Armorsmith
+  expect(not Reused(), "se reutiliza tras aprender una especialización")
+  KNOWN_SPELLS[9788] = nil
+  expect(Reused(), "sin la especialización otra vez no se reutiliza")
   -- Versión nueva del addon
   GetAddOnMetadata = function(_, field) if field == "Version" then return "99.0.0" end end
   expect(not Reused(), "se reutiliza con otra versión del addon")

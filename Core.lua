@@ -295,13 +295,28 @@ function ES:IsRecipeKnown(spellID)
   return false
 end
 
--- Especializaciones (recipe.spec): el hechizo que se aprende al elegirla
+-- Especializaciones (recipe.spec): el hechizo que se aprende al elegirla (la misma tabla
+-- que SPEC_SPELLS en tools/gen_profession.py). Swordsmith, Hammersmith y Axesmith son
+-- los maestros de armas de Weaponsmith (Blazing Rapier pide Master Swordsmith)
 local SPEC_SPELLS = {
-  Armorsmith = 9788, Weaponsmith = 9787, Gnomish = 20219, Goblin = 20222,
+  Armorsmith = 9788, Weaponsmith = 9787,
+  Swordsmith = 17039, Hammersmith = 17040, Axesmith = 17041,
+  Gnomish = 20219, Goblin = 20222,
   Dragonscale = 10656, Elemental = 10658, Tribal = 10660,
 }
+local SPEC_ORDER = { "Armorsmith", "Weaponsmith", "Swordsmith", "Hammersmith", "Axesmith",
+  "Gnomish", "Goblin", "Dragonscale", "Elemental", "Tribal" }
 function ES:HasSpecialization(spec)
   return self:IsRecipeKnown(SPEC_SPELLS[spec])
+end
+-- Firma de las especializaciones que tienes (para la clave de la ruta: aprender una
+-- cambia qué recetas puede usar)
+function ES:SpecStamp()
+  local have = {}
+  for _, spec in ipairs(SPEC_ORDER) do
+    if self:HasSpecialization(spec) then have[#have + 1] = spec end
+  end
+  return table.concat(have, "+")
 end
 
 ---------------------------------------------------------------------------

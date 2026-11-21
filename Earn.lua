@@ -342,7 +342,7 @@ end
 
 local function RecipeMarketFor(profKey, data, scan)
   local key = table.concat({ scan and scan.time or 0, ES:RealmKey(), ES.repStamp or "", tostring(ES:IsNeutralAH()),
-    ES.Market:Index().stamp or "" }, ":")
+    ES.Market:Index().stamp or "", ES.SpecStamp and ES:SpecStamp() or "" }, ":")
   local m = marketMemo[profKey]
   if m and m.key == key then
     m.ctx.used = {} -- (lo que compró el lote anterior no cuenta: se vuelve a repartir)
@@ -498,7 +498,8 @@ end
 function Earn:Ideas()
   local scan = ES.db.scans and ES.db.scans[ES:RealmKey()]
   local minLine = Earn.MinLineProfit()
-  local stamp = table.concat({ scan and scan.time or 0, ES:RealmKey(), ES.repStamp or "", minLine }, ":")
+  local stamp = table.concat({ scan and scan.time or 0, ES:RealmKey(), ES.repStamp or "", minLine,
+    ES.SpecStamp and ES:SpecStamp() or "" }, ":")
   -- (y si una con enfriamiento ya está lista desde entonces, otra vez)
   if cache and cache.stamp == stamp and not (cache.cdNext and time() >= cache.cdNext) then return cache end
   local res = { stamp = stamp, ideas = {}, avoided = {}, vendor = {}, learnable = {}, scanTime = scan and scan.time, profs = Earn.MyProfessions(), known = 0,

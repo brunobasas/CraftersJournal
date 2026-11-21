@@ -37,33 +37,33 @@
   "steps": 11
  },
  "ruta 1-300 Blacksmithing": {
-  "fees": 107400,
-  "net": 3048782,
+  "fees": 127200,
+  "net": 3076900,
   "reached": 300,
-  "reagents": 5221717,
+  "reagents": 5225807,
   "recipes": [
-   "1-32 Rough Sharpening Stone ×36",
-   "32-68 Rough Grinding Stone ×47",
-   "68-83 Runed Copper Pants ×16",
-   "83-96 Runed Copper Belt ×15",
-   "96-140 Bronze Shortsword ×50",
+   "1-26 Rough Sharpening Stone ×27",
+   "26-72 Rough Grinding Stone ×63",
+   "72-95 Runed Copper Pants ×31",
+   "95-140 Bronze Shortsword ×51",
    "140-150 Silvered Bronze Boots ×15",
    "150-155 Bronze Warhammer ×5",
    "155-160 Glinting Steel Dagger ×5",
    "160-175 Golden Scale Bracers ×15",
    "175-225 Steel Breastplate ×121",
    "225-235 Dense Weightstone ×17",
-   "235-245 Big Black Mace ×17",
+   "235-244 Big Black Mace ×15",
+   "244-245 Imperial Plate Belt ×1",
    "245-250 Imperial Plate Bracers ×5",
    "250-257 Arcanite Skeleton Key ×11",
    "257-266 Imperial Plate Bracers ×9",
-   "266-270 Blazing Rapier ×4",
+   "266-270 Huge Thorium Battleaxe ×4",
    "270-278 Arcanite Blacksmith Hammer ×9",
-   "278-289 Blazing Rapier ×13",
+   "278-289 Huge Thorium Battleaxe ×13",
    "289-296 Imperial Plate Boots ×8",
    "296-300 Imperial Plate Leggings ×4"
   ],
-  "resale": 2280353,
+  "resale": 2276125,
   "steps": 20
  },
  "ruta 1-300 Cooking": {
@@ -145,10 +145,10 @@
   "steps": 6
  },
  "ruta 1-300 Leatherworking": {
-  "fees": 111500,
-  "net": 1231035,
+  "fees": 129500,
+  "net": 1476189,
   "reached": 300,
-  "reagents": 2545026,
+  "reagents": 2792343,
   "recipes": [
    "1-31 Light Armor Kit ×30",
    "31-55 Cured Light Hide ×25",
@@ -162,12 +162,13 @@
    "195-208 Nightscape Headband ×15",
    "208-225 Wild Leather Helmet ×18",
    "225-232 Cured Rugged Hide ×11",
-   "232-251 Wild Leather Leggings ×20",
-   "251-280 Frostsaber Boots ×33",
-   "280-300 Heavy Scorpid Helm ×24"
+   "232-253 Wild Leather Leggings ×23",
+   "253-265 Wicked Leather Gauntlets ×16",
+   "265-270 Runic Leather Headband ×5",
+   "270-300 Heavy Scorpid Helm ×34"
   ],
-  "resale": 1425491,
-  "steps": 15
+  "resale": 1445654,
+  "steps": 16
  },
  "ruta 1-300 Tailoring": {
   "fees": 300400,

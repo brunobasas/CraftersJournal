@@ -84,6 +84,62 @@ test("recetas: se aprenden de algún sitio", function()
   snapshot("recetas sin forma de aprenderlas", bad)
 end, { boot = false })
 
+-- Spec recipe-requirements. CurseForge: "filter and not include recipes that require a
+-- specialization, like Tribal Leatherworking". Solo llevaban `spec` las de instructor de
+-- especialización; los pergaminos que la piden (RequiredAbility del objeto en el
+-- cliente) se colaban en la ruta: Frostsaber Boots en Peletería, Blazing Rapier en
+-- Herrería
+test("recetas de especialización: también las de pergamino llevan su especialización", function()
+  local want = {
+    { "Leatherworking", 19066, "Frostsaber Boots", "Tribal" },
+    { "Leatherworking", 19059, "Volcanic Leggings", "Elemental" },
+    { "Leatherworking", 19085, "Black Dragonscale Breastplate", "Dragonscale" },
+    { "Blacksmithing", 16978, "Blazing Rapier", "Swordsmith" },
+    { "Blacksmithing", 16973, "Enchanted Battlehammer", "Hammersmith" },
+    { "Blacksmithing", 16970, "Dawn's Edge", "Axesmith" },
+    { "Blacksmithing", 15296, "Dark Iron Plate", "Armorsmith" },
+    { "Blacksmithing", 16995, "Heartseeker", "Weaponsmith" },
+    { "Engineering", 23078, "Goblin Jumper Cables XL", "Goblin" },
+    { "Engineering", 23129, "World Enlarger", "Gnomish" },
+    { "Engineering", 23096, "Alarm-O-Bot", "Gnomish" },
+    -- (de instructor de especialización: ya la llevaban)
+    { "Engineering", 12758, "Goblin Rocket Helmet", "Goblin" },
+  }
+  local bad = {}
+  for _, w in ipairs(want) do
+    local r = ES.Data[w[1]].recipes[w[2]]
+    if not r then bad[#bad + 1] = string.format("%s %d %s: no está en los datos", w[1], w[2], w[3])
+    elseif r.spec ~= w[4] then
+      bad[#bad + 1] = string.format("%s %s: spec = %s (pide %s)", w[1], w[3], tostring(r.spec), w[4])
+    end
+  end
+  Report(bad, "recetas de especialización sin su marca")
+  -- Toda la lista, por profesión: una que gana o pierde la marca sale como cambio
+  local list = {}
+  Each(function(prof, id, r)
+    if r.spec then
+      list[prof] = list[prof] or {}
+      table.insert(list[prof], string.format("%s (%s)", r.nameEN or r.name, r.spec))
+    end
+  end)
+  local n = 0
+  for _, l in pairs(list) do table.sort(l) n = n + #l end
+  note("%d recetas de especialización", n)
+  snapshot("recetas de especialización", list)
+end, { boot = false })
+
+-- Expert Cookbook y Expert First Aid - Under Wraps no piden nivel (cliente de Forever,
+-- RequiredLevel 0; un jugador aprendió Experto de Cocina a nivel 33). Artesano: las
+-- misiones Clamlette Surprise y Triage piden 35 (QuestieDB)
+test("rangos de Cocina y Primeros auxilios: Experto no pide nivel, Artesano pide 35", function()
+  for _, prof in ipairs({ "Cooking", "FirstAid" }) do
+    local levels = {}
+    for _, rank in ipairs(ES.Data[prof].ranks) do levels[rank[1]] = rank[4] end
+    expect_eq(levels[225], 0, prof .. ": nivel de personaje de Experto (225)")
+    expect_eq(levels[300], 35, prof .. ": nivel de personaje de Artesano (300)")
+  end
+end, { boot = false })
+
 -- Un PNJ con sitio: { nombre, facción, zona, x, y [, ...] }
 local function HasPlace(npc)
   local e = ES.Data.NPCs[npc]

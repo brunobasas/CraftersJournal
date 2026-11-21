@@ -89,13 +89,11 @@ local function DropZones(ids)
 end
 
 -- De dónde sale, en una línea: "Instructor", "Receta · Botín: Kobold Geomancer · Elwynn"...
-local function Where(e, s, short)
+-- (sin la especialización: la añade Where)
+local function WhereSource(e, s, short)
   local WP = ES.Waypoints
-  s = s or e.mainSource
-  if not s then return L["Fuente desconocida"] end
   if s.kind == "trainer" then
     return L["Instructor"] .. (s.cost and s.cost > 0 and (" · " .. ES.Money(s.cost)) or "")
-      .. (e.recipe.spec and (" · " .. string.format(L["solo con la especialización %s"], e.recipe.spec)) or "")
   end
   if s.kind == "basic" then return L["Se aprende sola al tener la profesión"] end
   if s.gone then
@@ -142,6 +140,17 @@ local function Where(e, s, short)
     return string.format(L["En %d cofres u objetos"], d.objects or 0)
   end
   return L["Fuente desconocida"]
+end
+
+-- Con la especialización que pide (Tribal, Goblin...), venga de instructor o de pergamino
+local function Where(e, s, short)
+  s = s or e.mainSource
+  if not s then return L["Fuente desconocida"] end
+  local text = WhereSource(e, s, short)
+  if e.recipe.spec and s.kind ~= "basic" and not s.gone then
+    text = text .. " · " .. string.format(L["solo con la especialización %s"], e.recipe.spec)
+  end
+  return text
 end
 
 local function SourceLine(e)

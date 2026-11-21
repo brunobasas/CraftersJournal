@@ -995,6 +995,9 @@ end
 function Planner.LearnCost(ctx, recipe)
   if Known(recipe) then return 0, "known" end
   if recipe.rep and not ES:RepMet(recipe.rep) then return 0, "rep" end -- solo para la vista Recetas
+  -- De una especialización que no tienes (Tribal, Goblin...): no se puede aprender, ni
+  -- se propone en Ganar dinero (como en LearnSkill)
+  if recipe.spec and not (ES.HasSpecialization and ES:HasSpecialization(recipe.spec)) then return 0, "spec" end
   local fee = Fee(recipe)
   if fee then return fee, "trainer" end
   if recipe.trainer then return 0, "trainer" end -- de instructor, precio desconocido (se pinta "?")
@@ -2991,7 +2994,7 @@ function Planner:Plan(data, opts)
     local r = c.recipe
     if r and r.id and not r.conversion and not feePaid[r.id] and not plan.prepLearn[r.id] then
       local cost, source = Planner.LearnCost(ctx, r)
-      if source and source ~= "known" and source ~= "rep" then
+      if source and source ~= "known" and source ~= "rep" and source ~= "spec" then
         plan.prepLearn[r.id] = { cost = cost or 0, source = source }
         plan.fees = plan.fees + (cost or 0)
       end

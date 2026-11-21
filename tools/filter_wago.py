@@ -75,7 +75,10 @@ write("SpellName", name_fields, [row for row in names if row["ID"] in spells])
 
 # Tipo de objeto (para saber qué se recolecta) y precios/reputación de cada objeto
 write("Item", ["ID", "ClassID", "SubclassID"], [row for row in item_rows if row["ID"] in items])
+# RequiredAbility: hechizo que pide el pergamino para aprenderlo (una especialización:
+# Tribal, Goblin, Master Swordsmith...; ver SPEC_SPELLS en gen_profession.py)
 keep = ["ID", "Display_lang", "BuyPrice", "SellPrice", "VendorStackCount", "MinFactionID", "MinReputation",
-        "RequiredSkill", "RequiredSkillRank", "OverallQualityID", "ItemLevel", "InventoryType", "Bonding"]
+        "RequiredSkill", "RequiredSkillRank", "OverallQualityID", "ItemLevel", "InventoryType", "Bonding",
+        "RequiredAbility"]
 sparse, _ = read("ItemSparse")
 write("ItemSparse", keep, [row for row in sparse if row["ID"] in items])

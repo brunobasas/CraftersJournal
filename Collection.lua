@@ -126,11 +126,12 @@ function Collection:Build(profKey)
     e.scrollListings = scrollAH and scrollAH.listings or 0
     e.alts = AltsKnowing(profKey, e.id, altSets)
     e.repOK = not r.rep or ES:RepMet(r.rep)
+    e.specOK = not r.spec or ES:HasSpecialization(r.spec) -- (Tribal, Goblin...: solo con ella)
     -- ¿Puedes aprenderla ya? nivel suficiente y una fuente a mano (no botín)
     -- (las que Forever no enseña no tienen nivel de instructor: el de ponerse amarilla)
     local level = r.train or (r.gone and r.t and r.t[2]) or (r.t and r.t[1]) or 1
     e.level = level
-    if not e.known and skill and skill >= level and e.repOK then
+    if not e.known and skill and skill >= level and e.repOK and e.specOK then
       local best
       for _, s in ipairs(e.sources) do
         local here = s.kind == "trainer" or s.kind == "quest" or s.kind == "basic"

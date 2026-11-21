@@ -18,7 +18,7 @@ ES.Data.FirstAid = {
   skillLine = 129,
   ranks = { -- { tope, precio, habilidad requerida, nivel de personaje }
     { 150, 500, 50, 0 },
-    { 225, 10000, 125, 35 },
+    { 225, 10000, 125, 0 },
     { 300, 0, 225, 35 },
   },
   -- { PNJ instructor, rangos que enseña: 1 aprendiz (75), 2 oficial (150), 4 experto (225), 8 artesano (300) }

@@ -29,9 +29,12 @@ SKILL_LINES = {"Leatherworking": 165, "Enchanting": 333, "Tailoring": 197, "Blac
 
 # Rangos que no da el instructor en las secundarias (CMaNGOS solo trae hasta
 # Oficial): Experto = libro del vendedor (1 oro), Artesano = misión (gratis)
+# Nivel de personaje: el libro no pide (cliente de Forever: RequiredLevel 0 en 16072 y
+# 16084; un jugador aprendió Experto de Cocina a nivel 33). Artesano, el de su misión:
+# Clamlette Surprise (6610) y Triage (6622/6624) piden 35 (QuestieDB)
 EXTRA_RANKS = {
-    185: [(225, 10000, 125, 35), (300, 0, 225, 35)],  # Expert Cookbook; misión de Artesano
-    129: [(225, 10000, 125, 35), (300, 0, 225, 35)],  # Expert First Aid - Under Wraps; misión "Triage"
+    185: [(225, 10000, 125, 0), (300, 0, 225, 35)],  # Expert Cookbook; misión de Artesano
+    129: [(225, 10000, 125, 0), (300, 0, 225, 35)],  # Expert First Aid - Under Wraps; misión "Triage"
 }
 RANK_CAP = {1: 75, 2: 150, 3: 225, 4: 300}  # paso de rango -> tope de habilidad
 
@@ -151,6 +154,28 @@ SPEC_SUBNAMES = {
 }
 _npc_spec = {}
 
+# Hechizo de cada especialización -> su clave en los datos (la misma tabla que
+# SPEC_SPELLS en Core.lua). Los pergaminos que piden una (RequiredAbility del objeto en
+# el cliente: Pattern: Frostsaber Boots pide Tribal) solo los aprende quien la tiene
+SPEC_SPELLS = {
+    9788: "Armorsmith", 9787: "Weaponsmith",
+    17039: "Swordsmith", 17040: "Hammersmith", 17041: "Axesmith",
+    20219: "Gnomish", 20222: "Goblin",
+    10656: "Dragonscale", 10658: "Elemental", 10660: "Tribal",
+}
+
+
+def scroll_spec(c, scroll):
+    """Especialización que pide el pergamino para aprenderlo, o None. Para si pide un
+    hechizo que no es una especialización conocida (una nueva de Forever: añádela aquí
+    y en Core.lua)"""
+    ability = c["item_ability"].get(scroll)
+    if not ability:
+        return None
+    if ability not in SPEC_SPELLS:
+        raise SystemExit(f"El pergamino {scroll} pide el hechizo {ability}, que no está en SPEC_SPELLS")
+    return SPEC_SPELLS[ability]
+
 
 def npc_spec(npc):
     """Especialización que enseña un instructor, o None"""
@@ -246,8 +271,13 @@ def load_common():
             creates[int(r["SpellID"])] = (int(r["EffectItemType"]), qty if qty > 0 else 1.0)
 
     item_info, item_rep, item_skill, item_quality, item_bop = {}, {}, {}, {}, set()
+    item_ability = {}  # [pergamino] = hechizo que pide para aprenderlo (especialización)
     for r in rows("ItemSparse_forever"):
         iid = int(r["ID"])
+        if "RequiredAbility" not in r:
+            raise SystemExit("ItemSparse_forever.csv sin la columna RequiredAbility: vuelve a lanzar filter_wago.py")
+        if r["RequiredAbility"] not in ("", "0"):
+            item_ability[iid] = int(r["RequiredAbility"])
         # Calidad: 0 pobre, 1 común, 2 poco común, 3 raro, 4 épico
         item_quality[iid] = int(r.get("OverallQualityID") or 1)
         # Ligado al recogerlo (Bonding 1): lo fabricado no se puede vender en la AH
@@ -337,6 +367,7 @@ def load_common():
             fees[int(r["spell"])] = (int(r["cost"]), int(r["reqskill"]), True)
     return dict(sla=sla, era=era, names=names, reagents=reagents, creates=creates, scrolls=scrolls,
                 item_info=item_info, item_rep=item_rep, item_skill=item_skill, item_class=item_class,
+                item_ability=item_ability,
                 item_quality=item_quality, item_bop=item_bop,
                 tools=tools, tools2=tools2, tool_masks=tool_masks, fees=fees, ranks=ranks, trainers=trainers,
                 teachers=teachers, untaught=untaught)
@@ -648,8 +679,15 @@ def main():
             who = c["teachers"].get(sid, set())
             # Solo la enseñan instructores de una especialización (Goblin, Armorsmith...)
             specs = {npc_spec(n) for n in who}
-            if who and len(specs) == 1 and None not in specs:
-                parts.append(f'spec = "{specs.pop()}"')
+            spec = specs.pop() if who and len(specs) == 1 and None not in specs else None
+            # Si además tiene pergamino con especialización, que diga lo mismo
+            paper = scroll_spec(c, scrolls[sid]) if sid in scrolls else None
+            if spec and paper and paper != spec:
+                raise SystemExit(f"{name}: su instructor es de {spec} y su pergamino pide {paper}")
+            if paper and not spec:
+                print(f"  aviso: {name} la enseña un instructor normal y su pergamino pide {paper}: sin spec")
+            if spec:
+                parts.append(f'spec = "{spec}"')
             if who and not (who & by_rank):
                 known = sorted(who & {npc for npc, _ in trainers}) or sorted(who)
                 parts.append("tr = { " + ", ".join(str(n) for n in known) + " }")
@@ -673,6 +711,9 @@ def main():
                 parts.append(f"scrollPrice = {int(round(scroll_buy))}")
             if scroll in c["item_rep"]:
                 parts.append("rep = { %d, %d }" % c["item_rep"][scroll])
+            spec = scroll_spec(c, scroll)
+            if spec:
+                parts.append(f'spec = "{spec}"')
             parts.append(f"sq = {c['item_quality'].get(scroll, 1)}")
         elif sid in c["untaught"]:
             # De instructor en Classic, pero en Forever no la enseña ninguno ni tiene
