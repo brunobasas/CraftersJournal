@@ -552,12 +552,14 @@ end
 -- Las herramientas que pide una receta: { ES.Data.Tools[...] }. Puede pedir dos (los
 -- cascos de ingeniería: Blacksmith Hammer y Arclight Spanner, recipe.tool y tool2);
 -- antes solo se miraba la primera y la ruta nunca pedía la llave (CurseForge, 0.62.0)
+-- (sin herramienta: siempre la misma lista vacía, sin crear tablas; quien la pide solo la recorre)
+local NO_TOOLS = {}
 function Planner.RecipeTools(recipe)
-  local tools, list = ES.Data and ES.Data.Tools, {}
-  if not (recipe and tools) then return list end
-  for _, cat in ipairs({ recipe.tool or false, recipe.tool2 or false }) do
-    if cat and tools[cat] then list[#list + 1] = tools[cat] end
-  end
+  local tools = ES.Data and ES.Data.Tools
+  if not (recipe and tools) or not (recipe.tool or recipe.tool2) then return NO_TOOLS end
+  local list = {}
+  if recipe.tool and tools[recipe.tool] then list[#list + 1] = tools[recipe.tool] end
+  if recipe.tool2 and tools[recipe.tool2] then list[#list + 1] = tools[recipe.tool2] end
   return list
 end
 
@@ -1107,9 +1109,10 @@ local function NewContext(data, opts)
   -- Herramientas por familia (bastones rúnicos, martillo, piedra filosofal):
   -- dentro de una familia la mejor que ya tienes cubre las inferiores
   ctx.toolMask = {}
+  local ownedTools = opts.owned or {}
   for _, tool in pairs(ES.Data.Tools or {}) do
     local fam = tool.family or "rod"
-    if (opts.owned or {})[tool.item] and tool.mask > (ctx.toolMask[fam] or 0) then ctx.toolMask[fam] = tool.mask end
+    if ownedTools[tool.item] and tool.mask > (ctx.toolMask[fam] or 0) then ctx.toolMask[fam] = tool.mask end
   end
   if not shared then
     for id, r in pairs(data.recipes) do
@@ -1171,11 +1174,13 @@ end
 -- `extra` lo gastado (AH con clave itemID, inventario con clave -itemID) y en
 -- `actions` lo que hay que hacer. `why` recoge el motivo cuando no se puede:
 -- "price" (sin precio) o "supply" (no hay bastantes).
+-- Claves "o<itemID>" de lo tuyo en `extra`: la misma cadena, creada una vez por objeto
+local OWN_KEYS = setmetatable({}, { __index = function(t, itemID) local k = "o" .. itemID t[itemID] = k return k end })
 local function Acquire(ctx, itemID, qty, depth, extra, actions, why, skip)
   -- 1. Lo que ya llevas en bolsas/banco: gratis
   local have = skip == nil and ctx.owned[itemID]
   if have then
-    local ownKey = "o" .. itemID
+    local ownKey = OWN_KEYS[itemID]
     local usedNow = extra[ownKey] or 0
     local avail = have - usedNow
     if avail > EPS then
@@ -1572,10 +1577,15 @@ local function RecipeWeight(opts, recipeID)
 end
 Planner.RecipeWeight = RecipeWeight
 
-function Planner.RouteScore(plan)
+-- memo (PlanGPS): { [plan] = puntuación sin lo de tus bolsas }, para no rehacerla en
+-- cada comparación del mismo cálculo (lo de tus bolsas se cuenta siempre de nuevo)
+function Planner.RouteScore(plan, memo)
   local opts = plan.ctx and plan.ctx.opts
+  local score = memo and memo[plan]
+  if not score then
   local CW = CraftWeight(opts)
-  local score, crafts = plan.fees + (plan.toolsCost or 0), 0
+  local crafts
+  score, crafts = plan.fees + (plan.toolsCost or 0), 0
   for _, st in ipairs(plan.steps) do
     local gain = st.crafts * (st.unitValue - st.unitCost)
     -- (entero hasta PROFIT_FULL_CRAFTS fabricaciones por punto; más allá, rebajado: casi gris)
@@ -1597,6 +1607,8 @@ function Planner.RouteScore(plan)
   score = score + CW * crafts + GPS_STEP_COST * math.max(0, #plan.steps - 1)
   -- (ruta que pide fabricar a mitad de paso lo que ya hacía falta al empezarlo)
   if plan.unfollowable then score = score + UNFOLLOWABLE_COST end
+  if memo then memo[plan] = score end
+  end
   local have = plan.ctx and plan.ctx.opts.owned
   if have and plan.owned then
     for _, o in ipairs(plan.owned) do
@@ -1698,20 +1710,23 @@ end
 
 local function ShortestRoute(data, opts, ctx, weight, skip, fixed, paid)
   local recipes = GPSRecipes(data, opts, ctx)
+  local nRecipes = #recipes -- (lista seguida, sin huecos: ver GPSRecipes)
   local INF = math.huge
-  local prev = {}
+  local prev, spare = {}, {} -- (spare: la fila de hace dos niveles, que se reescribe entera)
   for i = 1, #recipes do prev[i] = INF end
   local bestAll, bestIdx = 0, nil -- al empezar: nada pagado, ninguna receta
   -- (y la segunda mejor, de otra receta: una con enfriamiento no sigue a sí misma)
   local best2All, best2Idx = INF, nil
   local back, last = {}, nil
   for s = opts.from, opts.to - 1 do
-    local cur, b = {}, {}
+    local cur, b = spare, {}
+    local fs = fixed and fixed[s]
     local newBest, newIdx, newBest2, newIdx2 = INF, nil, INF, nil
-    for i, rc in ipairs(recipes) do
+    for i = 1, nRecipes do
+      local rc = recipes[i]
       ES.Yield()
       local c = INF
-      local allowed = not skip[rc.id] and (not (fixed and fixed[s]) or fixed[s] == rc.id)
+      local allowed = not skip[rc.id] and (not fs or fs == rc.id)
       -- Con enfriamiento (ver Planner.Cooldown): un solo punto, en naranja
       if allowed and rc.cd and Planner.Chance(rc.r.t, s) < 1 then allowed = false end
       if allowed and rc.learn <= s and (prev[i] < INF or bestIdx or s == opts.from) then
@@ -1740,6 +1755,7 @@ local function ShortestRoute(data, opts, ctx, weight, skip, fixed, paid)
     end
     if not newIdx then break end -- ninguna receta sigue: la ruta llega hasta aquí
     back[s], last = b, s
+    spare = prev
     prev, bestAll, bestIdx, best2All, best2Idx = cur, newBest, newIdx, newBest2, newIdx2
   end
   if not last then return nil end
@@ -1832,7 +1848,8 @@ function Planner.PlanGPS(data, opts)
   local tpl = NewContext(data, opts)
   opts.shared = { prices = tpl.prices, to = opts.to, ladders = tpl.ladders, supply = tpl.supply,
     medians = tpl.medians, producers = tpl.producers }
-  local Score = Planner.RouteScore
+  local RouteScore, scoreMemo = Planner.RouteScore, {}
+  local function Score(p) return RouteScore(p, scoreMemo) end
   local best, seen, pool = nil, {}, {}
   -- Recorridos hechos; con `capped`, pasado GPS_MAX_WALKS no se recorre nada nuevo
   local walks, capped = 0, true
@@ -1842,6 +1859,9 @@ function Planner.PlanGPS(data, opts)
   -- Recorre una ruta de verdad (pasada forzada, rápida). via: fabricar o comprar
   -- fijado (lo del jugador siempre manda)
   local function Walk(choice, via, depth)
+    -- (también aquí: cientos de rutas ya recorridas seguidas salen sin pasar por Plan, que
+    -- es donde se cede el fotograma, y el juego se paraba hasta 0,2 s)
+    ES.Yield()
     local v = Copy(via or {})
     for itemID, way in pairs(opts.via or {}) do v[itemID] = way end
     local key = ChoiceKey(opts, choice, v)
@@ -1851,6 +1871,11 @@ function Planner.PlanGPS(data, opts)
     walks = walks + 1
     local t = Copy(opts)
     t.forced, t.via = choice, v
+    -- (gpsWalk: sin completar la lista de la compra a fabricaciones enteras, que solo
+    -- cambia cantidades y totales, y sin lo que pide cada nivel (pointNeed, pointUse): de
+    -- estas rutas solo se lee itemID y unit de la compra (NeedValue), y nada de lo de cada
+    -- nivel salvo pointChance (ni pointNet). La que se devuelve se recorre otra vez al final, completa)
+    t.gpsWalk = true
     local p = Planner:Plan(data, t)
     seen[key] = p
     -- Lo que un paso fabrica de más para los siguientes (ver Acquire) también sube
@@ -2208,7 +2233,16 @@ function Planner.PlanGPS(data, opts)
   local top = {}
   for _, p in pairs(pool) do top[#top + 1] = p end
   -- (primero las que llegan más lejos: una que se para antes sale barata por subir menos)
-  table.sort(top, function(a, b) return a.reached > b.reached or (a.reached == b.reached and Score(a) < Score(b)) end)
+  -- (la puntuación de cada una se calcula la primera vez que la pide la ordenación y se
+  -- reutiliza: antes eran dos por comparación, ~40.000 con lo de tus bolsas, y una
+  -- ordenación no puede ceder el fotograma: el juego se paraba casi medio segundo)
+  local topScore = {}
+  local function TopScore(p)
+    local s = topScore[p]
+    if s == nil then s = Score(p) topScore[p] = s end
+    return s
+  end
+  table.sort(top, function(a, b) return a.reached > b.reached or (a.reached == b.reached and TopScore(a) < TopScore(b)) end)
   local again = false
   for k = 1, math.min(GPS_TOP, #top) do
     local p = ViaPolish(top[k])
@@ -2751,6 +2785,8 @@ function Planner:Plan(data, opts)
     end
     -- Materiales que pide este punto (comprados o de tus bolsas): con la ruta
     -- fijada, la lista de la compra cuenta lo que falta desde tu nivel actual
+    -- (los recorridos del GPS, opts.gpsWalk, no lo guardan: nadie lo lee de ellos, ver Walk)
+    if not opts.gpsWalk then
     best.need = {}
     best.use = {} -- [itemID] = { [kind] = unidades }: de dónde sale cada material (auditoría)
     for _, a in ipairs(best.actions) do
@@ -2761,6 +2797,7 @@ function Planner:Plan(data, opts)
       best.use[a.item] = u
       local k = a.ahead and "ahead" or a.kind
       u[k] = (u[k] or 0) + a.qty
+    end
     end
     -- Esta receta ya es un paso de la ruta: lo que los siguientes pidan de lo que
     -- fabrica se hace de más en él (ver Acquire)
@@ -2789,7 +2826,7 @@ function Planner:Plan(data, opts)
   plan.freePoints = 0 -- puntos que dan los materiales fabricados por el camino (ver CraftBonus)
   for _, p in ipairs(perPoint) do
     plan.pointNeed[p.skill], plan.pointChance[p.skill] = p.need, p.chance
-    plan.pointNet[p.skill] = (p.cost or 0) - (p.value or 0)
+    if not opts.gpsWalk then plan.pointNet[p.skill] = (p.cost or 0) - (p.value or 0) end -- (solo lo lee Leftover)
     plan.pointUse[p.skill] = p.use -- (tools/route_audit.py)
     if p.free then plan.freePoints = plan.freePoints + 1 end
   end
@@ -3033,7 +3070,7 @@ function Planner:Plan(data, opts)
   plan.ctx = ctx
   plan.net = plan.reagentCost - plan.resale + plan.fees + plan.toolsCost
   plan.reached = reached
-  Planner.WholeCraftShopping(plan)
+  if not opts.gpsWalk then Planner.WholeCraftShopping(plan) end
   return plan
 end
 

@@ -208,7 +208,7 @@ local GetItemInfoCompat = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 -- de veces por los mismos (14.000 en Peletería de 88 a 300); basta con pedirlo una vez
 local requested = {}
 function ES:VendorSellPrice(itemID)
-  local live = select(11, GetItemInfoCompat(itemID))
+  local _, _, _, _, _, _, _, _, _, _, live = GetItemInfoCompat(itemID) -- (el 11.º: sin select, lo llama la ruta miles de veces)
   if live then return live end
   if not requested[itemID] and C_Item and C_Item.RequestLoadItemDataByID then
     requested[itemID] = true

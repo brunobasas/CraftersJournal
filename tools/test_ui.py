@@ -18,8 +18,11 @@ NOW = 2000000
 time = function() return NOW end
 EVENT_FRAMES = {}
 function FireEvent(e, ...)
+  local unit = ...
   for _, f in ipairs(EVENT_FRAMES[e] or {}) do
-    if f._scripts.OnEvent then f._scripts.OnEvent(f, e, ...) end
+    -- (RegisterUnitEvent: como en el juego, solo si el primer argumento es una de sus unidades)
+    local units = f._units and f._units[e]
+    if f._scripts.OnEvent and (not units or units[unit]) then f._scripts.OnEvent(f, e, ...) end
   end
 end
 MOCK_METHODS = {} -- métodos de marcos que el addon ha llamado sin simulación propia
@@ -42,6 +45,15 @@ local function Mock(name)
       EVENT_FRAMES[e] = EVENT_FRAMES[e] or {}
       table.insert(EVENT_FRAMES[e], self)
     end end
+    if k == "RegisterUnitEvent" then return function(self, e, ...)
+      self:RegisterEvent(e)
+      self._units = self._units or {}
+      local units = {}
+      for i = 1, select("#", ...) do units[select(i, ...)] = true end
+      self._units[e] = units
+    end end
+    if k == "GetChildren" then return function(self) return unpack(self._children or {}) end end
+    if k == "IsProtected" then return function() return false end end
     if k == "Show" then return function(self) self._shown = true end end
     if k == "Hide" then return function(self) self._shown = false end end
     if k == "SetShown" then return function(self, v) self._shown = v and true or false end end
@@ -54,7 +66,17 @@ local function Mock(name)
     return function() return Mock(k) end
   end })
 end
-CreateFrame = function(_, name) local f = Mock("frame") if name then _G[name] = f end return f end
+CreateFrame = function(_, name, parent)
+  local f = Mock("frame")
+  if name then _G[name] = f end
+  -- (los hijos, para GetChildren)
+  if type(parent) == "table" then
+    local kids = rawget(parent, "_children") or {}
+    rawset(parent, "_children", kids)
+    kids[#kids + 1] = f
+  end
+  return f
+end
 UIParent, Minimap, GameTooltip = Mock(), Mock(), Mock()
 UISpecialFrames, SlashCmdList = {}, {}
 tinsert = table.insert
@@ -7454,7 +7476,7 @@ step("métodos de marcos que existen en el juego", function()
     SetValueStep SetVertexColor SetVerticalScroll SetWidth SetWordWrap StartMoving Stop
     StopMovingOrSizing UnlockHighlight UnregisterAllEvents UpdateScrollChildRect
     SetGradientAlpha SetRotation CreateMaskTexture AddMaskTexture SetMaxLines SetToplevel GetZoom
-    SetClampRectInsets GetRight
+    SetClampRectInsets GetRight RegisterUnitEvent GetChildren IsProtected
   ]]):gmatch("%a+") do REAL[name] = true end
   -- (SetGradientAlpha ya no existe en el cliente, pero solo se usa protegida con
   -- "elseif tex.SetGradientAlpha" para clientes viejos: HomeUI.lua. SetMaxLines, igual:

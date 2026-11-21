@@ -19,9 +19,17 @@ local function OverBudget()
   return frameStart and debugprofilestop() - frameStart > budget
 end
 
--- Llamado desde dentro de los cálculos largos: cede si se acabó el tiempo del fotograma
+-- Llamado desde dentro de los cálculos largos: cede si se acabó el tiempo del fotograma.
+-- Se llama millones de veces en cada ruta y entre dos llamadas pasan microsegundos: el
+-- reloj se mira una de cada YIELD_EVERY (medido: no alarga los fotogramas)
+local YIELD_EVERY = 16
+local yieldCalls = 0
 function ES.Yield()
-  if frameStart and OverBudget() and coroutine.running() then coroutine.yield() end
+  if not frameStart then return end
+  yieldCalls = yieldCalls + 1
+  if yieldCalls < YIELD_EVERY then return end
+  yieldCalls = 0
+  if debugprofilestop() - frameStart > budget and coroutine.running() then coroutine.yield() end
 end
 
 local function Finish(job, ok, result)

@@ -558,7 +558,7 @@ do
   for _, e in ipairs({ "MERCHANT_SHOW", "MERCHANT_CLOSED", "MERCHANT_UPDATE", "BAG_UPDATE_DELAYED", "GET_ITEM_INFO_RECEIVED" }) do
     ES.SafeRegister(f, e)
   end
-  local queued = false
+  local queued, refreshQueued = false, false
   local function Later(delay)
     C_Timer.After(delay, function()
       if MerchantFrame and MerchantFrame:IsShown() then Vendor:Refresh() end
@@ -584,7 +584,15 @@ do
         end
         return
       end
-      Vendor:Refresh()
+      -- Cada venta o compra trae MERCHANT_UPDATE y BAG_UPDATE_DELAYED, y cada repintado
+      -- repasa todas tus bolsas (Inventory:List, con precios y rutas): uno para los dos
+      if not refreshQueued then
+        refreshQueued = true
+        C_Timer.After(0.1, function()
+          refreshQueued = false
+          if MerchantFrame:IsShown() then Vendor:Refresh() end
+        end)
+      end
     end
   end)
 end

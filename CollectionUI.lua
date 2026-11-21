@@ -316,10 +316,20 @@ local function CreateRow(parent)
 end
 
 -- Degradado vertical del fondo: `top` arriba, `bottom` abajo ({ r, g, b, a })
+-- (cada color se crea una vez: las filas se repintan al desplazar la lista)
+local gradientColors = {}
+local function GradientColor(c)
+  local color = gradientColors[c]
+  if not color then
+    color = CreateColor(unpack(c))
+    gradientColors[c] = color
+  end
+  return color
+end
 local function Gradient(tex, top, bottom)
   if tex.SetGradient and CreateColor then
     tex:SetColorTexture(1, 1, 1, 1)
-    tex:SetGradient("VERTICAL", CreateColor(unpack(bottom)), CreateColor(unpack(top)))
+    tex:SetGradient("VERTICAL", GradientColor(bottom), GradientColor(top))
   else
     tex:SetColorTexture(unpack(top))
   end

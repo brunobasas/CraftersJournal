@@ -874,11 +874,12 @@ end
 -- Se llama al subir un punto y al cambiar las bolsas (fabricar gasta materiales sin
 -- subir siempre un punto)
 ES.phaseState = {}
-function ES:PhaseNotices(profKey)
+-- lines, plan: las filas que el asistente acaba de hacer (A.Update), para no rehacerlas
+function ES:PhaseNotices(profKey, lines, plan)
   local data = ES.Data[profKey]
   local level = data and data.skillLine and ES:GetProfessionSkill(data.skillLine)
   if not (level and ES:RouteLock(profKey)) then return end
-  local lines, plan = ES:RouteLines(profKey, { buy = true })
+  if not lines then lines, plan = ES:RouteLines(profKey, { buy = true, lean = true }) end
   local ph = lines and ES.Planner.Phase(plan, level)
   if not ph then return end
   local cur, items = nil, {}
@@ -931,9 +932,12 @@ do
     local mine = stamp
     C_Timer.After(0.5, function()
       if mine ~= stamp then return end
+      -- (la del asistente no: él rehace sus filas con este mismo cambio de las bolsas y
+      -- los avisos salen de ellas, A.Update; antes se hacían dos veces)
+      local assisted = ES.Assistant and ES.Assistant.BuildsFor and ES.Assistant.BuildsFor()
       for _, p in ipairs(ES.PROFESSIONS or {}) do
         -- (solo las que ya tienen estado: el primer aviso lo pone la subida de nivel)
-        if ES.Data[p.key] and ES.phaseState[p.key] and ES:RouteLock(p.key) then
+        if p.key ~= assisted and ES.Data[p.key] and ES.phaseState[p.key] and ES:RouteLock(p.key) then
           local ok, err = pcall(ES.PhaseNotices, ES, p.key)
           if not ok and ES.RecordError then ES:RecordError("avisos de tramo", err) end
         end
@@ -974,8 +978,11 @@ end
 -- Calcula, poco a poco, las alternativas de cada paso de la ruta y repinta al acabar
 -- (plan.alts[i] = lista de la más barata a la más cara; vacía si no hay otra receta)
 function ES:ComputeAlternatives(page, plan)
+  -- (la misma ruta en otra página, la de la ventana rehecha al cambiar de idioma: sigue
+  -- con lo que ya iba calculado y repinta esa; si no, la página vieja lo cortaba)
+  if plan.altsRunning and plan.altsPage ~= page then plan.altsPage = page return end
   if plan.alts or plan.altsRunning or not plan.choice or not (plan.ctx and plan.ctx.opts) then return end
-  plan.altsRunning = true
+  plan.altsRunning, plan.altsPage = true, page
   local P, data = self.Planner, page.data
   local jobs, results = {}, {}
   for i, st in ipairs(plan.steps) do
@@ -984,7 +991,15 @@ function ES:ComputeAlternatives(page, plan)
   end
   local k = 1
   local function Work()
-    if page.plan ~= plan then plan.altsRunning = nil return end -- ruta nueva: se deja
+    local page = plan.altsPage
+    if page.plan ~= plan then plan.altsRunning, plan.altsPage = nil, nil return end -- ruta nueva: se deja
+    -- Como los cálculos de Jobs.lua: con la ventana cerrada o en combate se espera (se
+    -- mira otra vez cada segundo); antes seguía gastando hasta 8 ms de cada fotograma
+    local main = CraftersJournalMainFrame
+    if C_Timer and ((main and not main:IsShown()) or (InCombatLockdown and InCombatLockdown())) then
+      C_Timer.After(1, Work)
+      return
+    end
     local started = debugprofilestop and debugprofilestop()
     local n = 0
     while k <= #jobs do
@@ -1005,7 +1020,7 @@ function ES:ComputeAlternatives(page, plan)
         return a.delta < b.delta
       end)
     end
-    plan.alts, plan.altsRunning = results, nil
+    plan.alts, plan.altsRunning, plan.altsPage = results, nil, nil
     if page:IsVisible() and page.plan == plan then ES:RenderPlan(page) end
   end
   -- (en el fotograma siguiente: la ruta recién calculada se pinta al acabar su trabajo,
@@ -1615,10 +1630,20 @@ local function ListWidth(page)
 end
 ES.UI.ListWidth = ListWidth
 
+-- ¿Es `itemID` (GET_ITEM_INFO_RECEIVED) uno de los que faltaban al pintar la lista? Solo
+-- esos repintan: un objeto que el servidor no da nunca dejaba la lista repintándose con
+-- cada objeto que llegaba de cualquier otra cosa (bolsas, chat, otros addons)
+function ES.UI.WaitingForItem(page, itemID)
+  return page.pendingItems and itemID ~= nil and page.pendingItemIDs ~= nil and page.pendingItemIDs[itemID] == true
+end
+
 -- Pinta una lista de líneas (ver StyleRow) en page.content con page.rows
 function ES.UI.RenderLines(page, lines)
   local y = 0
   page.pendingItems = false
+  -- (y cuáles: solo su llegada repinta, ver ES.UI.WaitingForItem)
+  local waiting = page.pendingItemIDs
+  if waiting then for id in pairs(waiting) do waiting[id] = nil end else waiting = {} page.pendingItemIDs = waiting end
   local width = ListWidth(page)
   page.content:SetWidth(width)
   local currentY
@@ -1631,7 +1656,7 @@ function ES.UI.RenderLines(page, lines)
     row:SetPoint("TOPLEFT", 0, -y)
     if line.current and not currentY then currentY = y end
     y = y + height + ROW_GAP
-    if line.item and not ES:GetItemData(line.item) then page.pendingItems = true end
+    if line.item and not ES:GetItemData(line.item) then page.pendingItems, waiting[line.item] = true, true end
     row:Show()
   end
   for i = #lines + 1, #page.rows do page.rows[i]:Hide() end
@@ -2105,7 +2130,7 @@ function ES:CreateProfessionPage(page, profKey)
     if success ~= false and itemID and waiting and waiting[itemID] then self.recalcQueued = true end
     -- (sin verse, nada más: yendo por el mundo llegan sin parar; se repinta al verse)
     if not self:IsVisible() then return end
-    if not (self.pendingItems or self.recalcQueued) then return end
+    if not (self.recalcQueued or ES.UI.WaitingForItem(self, itemID)) then return end
     -- Llegan en oleadas: se espera a que paren (cada uno reinicia la espera) y se
     -- recalcula una vez. Con 0,5 s desde el primero, cada oleada era un cálculo entero
     self.infoStamp = (self.infoStamp or 0) + 1
@@ -2450,7 +2475,8 @@ function ES.CraftsAtLevel(recipeID, level)
 end
 do
   local f = CreateFrame("Frame")
-  ES.SafeRegister(f, "UNIT_SPELLCAST_SUCCEEDED")
+  -- (solo tus lanzamientos: con todas las unidades llegaba uno por cada hechizo de cualquiera a tu alrededor)
+  if not (f.RegisterUnitEvent and pcall(f.RegisterUnitEvent, f, "UNIT_SPELLCAST_SUCCEEDED", "player")) then ES.SafeRegister(f, "UNIT_SPELLCAST_SUCCEEDED") end
   f:SetScript("OnEvent", function(_, _, unit, _, spellID)
     if unit ~= "player" or not spellID then return end
     for _, p in ipairs(ES.PROFESSIONS or {}) do
@@ -4177,6 +4203,10 @@ local function RouteLines(plan, page, opts)
       end
     end
   end
+  -- opts.lean (asistente y avisos de tramo): sin las filas del final (aviso de dónde se
+  -- para, "Con lo que llevas", recetas quitadas, total), que no usan. "Con lo que llevas"
+  -- repasa todas las recetas con tus bolsas, y esto se hace con cada cambio de las bolsas
+  if opts and opts.lean then return lines end
   if plan.stoppedAt then
     lines[#lines + 1] = { title = ORANGE .. L["El plan se queda en "] .. plan.stoppedAt .. "|r", sub = StopReason(plan) }
   end
@@ -4331,8 +4361,8 @@ end
 
 -- Totales de ventas de la vista Profit: al vendedor (lo seguro, lo que cuenta la ruta)
 -- y siguiendo el consejo de cada fila (AH y vendedor). anyAH: algo va a la AH
-local function SalesTotals(plan)
-  local inBags = InventoryByItem()
+local function SalesTotals(plan, inBags)
+  inBags = inBags or InventoryByItem()
   local income, advised, anyAH = 0, 0, false
   for _, d in ipairs(plan.destinations or {}) do
     local advice, _, value = DestinationAdvice(d, inBags)
@@ -4345,14 +4375,14 @@ end
 ES.ProfitSalesTotals = SalesTotals -- (para pruebas)
 
 -- Líneas de la vista Profit: qué hacer con todo lo que fabricas
-local function ProfitLines(plan, page)
+local function ProfitLines(plan, page, inBags)
   local lines = {}
   local dests = {}
   for _, d in ipairs(plan.destinations) do dests[#dests + 1] = d end
   table.sort(dests, function(a, b) return a.income + (a.ahExtra or 0) > b.income + (b.ahExtra or 0) end)
   local total, extra = 0, 0
   local advised, anyAH = 0, false -- (total siguiendo el consejo de cada fila)
-  local inBags = InventoryByItem()
+  inBags = inBags or InventoryByItem() -- (el de RenderPlan si ya lo tiene: Inventory:List una vez por pintado)
   for _, d in ipairs(dests) do
     local name, texture = ItemLabel(d.itemID, L["Objeto "] .. d.itemID)
     local parts = {} -- cuántas fabricas: en la columna de la izquierda
@@ -4851,10 +4881,14 @@ function ES:RenderPlan(page)
   end
   -- Posible total siguiendo el consejo (AH y vendedor), bajo el total seguro
   page.totalAHInfo = nil
+  local inBags -- (lo de las bolsas de este pintado: también lo usa la vista Profit)
   if page.totalAH then
     local text = ""
     if plan and #plan.steps > 0 then
-      local ok, income, advised, anyAH = pcall(SalesTotals, plan)
+      local ok, income, advised, anyAH = pcall(function()
+        inBags = InventoryByItem()
+        return SalesTotals(plan, inBags)
+      end)
       if ok and anyAH and math.abs(advised - income) >= 1 then
         local advisedNet = plan.net - (advised - income)
         page.totalAHInfo = { net = plan.net, advisedNet = advisedNet }
@@ -4945,7 +4979,7 @@ function ES:RenderPlan(page)
 
   local lines = {}
   if plan and #plan.steps > 0 then
-    if page.view == "profit" then lines = ProfitLines(plan, page)
+    if page.view == "profit" then lines = ProfitLines(plan, page, inBags)
     elseif page.view == "shop" then lines = ShopLines(plan, page)
     else
       lines = RouteLines(plan, page)

@@ -135,14 +135,20 @@ local NAV_LEFT = 14                -- desde la izquierda del asistente (como las
 local TWO_PI = 2 * math.pi
 local CONTINENT = 2                -- Enum.UIMapType.Continent
 
--- El continente de un mapa (subiendo por sus padres), o nil
+-- El continente de un mapa (subiendo por sus padres), o nil. Los mapas del juego no
+-- cambian: lo hallado se guarda (la flecha lo pregunta varias veces por segundo)
+local continentCache = {}
 local function Continent(map)
+  local cached = map and continentCache[map]
+  if cached then return cached end
   local info = map and C_Map and C_Map.GetMapInfo and C_Map.GetMapInfo(map)
   local guard = 0
   while info and info.mapType ~= CONTINENT and (info.parentMapID or 0) > 0 and guard < 8 do
     info, guard = C_Map.GetMapInfo(info.parentMapID), guard + 1
   end
-  return info and info.mapType == CONTINENT and info.mapID or nil
+  local result = info and info.mapType == CONTINENT and info.mapID or nil
+  if result then continentCache[map] = result end
+  return result
 end
 
 -- Ancho y alto de un mapa en yardas (de sus esquinas en el mundo; vale para cualquier eje)
@@ -168,6 +174,9 @@ end
 -- Dónde está el PNJ respecto a ti: yardas al este y al sur. Si no se puede: nil y por
 -- qué ("continent": en otro continente; "here": aquí no hay posición, p. ej. en una
 -- mazmorra; "unknown": no se sabe dónde está el PNJ)
+-- (el PNJ en el mapa de tu continente no cambia mientras no cambien él ni el continente:
+-- se guarda el último, así cada cálculo de la flecha no lo vuelve a pedir al juego)
+local targetFor, targetMine, targetMap, targetX, targetY, targetTx, targetTy
 function A.Relative(npc)
   if not (npc and npc.map and C_Map and C_Map.GetBestMapForUnit and C_Map.GetPlayerMapPosition) then
     return nil, "unknown"
@@ -177,13 +186,19 @@ function A.Relative(npc)
   if Continent(npc.map) ~= mine then return nil, "continent" end
   local me = C_Map.GetPlayerMapPosition(mine, "player")
   if not me then return nil, "here" end
-  local ok, instance, world = pcall(C_Map.GetWorldPosFromMapPos, npc.map, CreateVector2D(npc.x, npc.y))
-  if not (ok and world and C_Map.GetMapPosFromWorldPos) then return nil, "unknown" end
-  local ok2, _, pos = pcall(C_Map.GetMapPosFromWorldPos, instance, world, mine)
-  if not (ok2 and pos) then return nil, "unknown" end
+  local tx, ty
+  if targetFor == npc and targetMine == mine and targetMap == npc.map and targetX == npc.x and targetY == npc.y then
+    tx, ty = targetTx, targetTy
+  else
+    local ok, instance, world = pcall(C_Map.GetWorldPosFromMapPos, npc.map, CreateVector2D(npc.x, npc.y))
+    if not (ok and world and C_Map.GetMapPosFromWorldPos) then return nil, "unknown" end
+    local ok2, _, pos = pcall(C_Map.GetMapPosFromWorldPos, instance, world, mine)
+    if not (ok2 and pos) then return nil, "unknown" end
+    tx, ty = pos:GetXY()
+    targetFor, targetMine, targetMap, targetX, targetY, targetTx, targetTy = npc, mine, npc.map, npc.x, npc.y, tx, ty
+  end
   local w, h = MapYards(mine)
   if not w then return nil, "unknown" end
-  local tx, ty = pos:GetXY()
   local px, py = me:GetXY()
   return (tx - px) * w, (ty - py) * h
 end
@@ -207,16 +222,21 @@ local function MapName(map)
 end
 
 -- "Está en Kalimdor" y "Barco en Humedales", o nil si no se sabe
+-- (los textos del último cruce se guardan: la flecha los pide varias veces por segundo)
+local hintRoute, hintLang, hintPlace, hintCrossing
 function A.TravelHint(npc)
   local to = npc and Continent(npc.map)
   local route = to and CROSSINGS[UnitFactionGroup and UnitFactionGroup("player") or ""]
   route = route and route[to]
   if not route then return nil end
+  if route == hintRoute and ES.lang == hintLang then return hintPlace, hintCrossing end
   local places = {}
   for _, map in ipairs(route.from) do places[#places + 1] = MapName(map) end
   local where = table.concat(places, L[" o "])
-  return string.format(L["Está en %s"], MapName(to)),
-    string.format(route.kind == "boat" and L["Barco en %s"] or L["Zepelín en %s"], where)
+  local place = string.format(L["Está en %s"], MapName(to))
+  local crossing = string.format(route.kind == "boat" and L["Barco en %s"] or L["Zepelín en %s"], where)
+  hintRoute, hintLang, hintPlace, hintCrossing = route, ES.lang, place, crossing
+  return place, crossing
 end
 
 -- Ángulo al PNJ desde hacia donde miras, en el sentido de las agujas del reloj (0 =
@@ -319,6 +339,10 @@ function A.UpdateMinimap(east, south, facing)
 end
 
 local nav -- el panel de la flecha (CreateUI)
+-- Últimos textos de la flecha: se rehacen solo si cambia lo que dicen (yardas y
+-- segundos redondeados, el PNJ, el idioma), no en cada cálculo
+local distYd, distSecs, distLang, distText
+local zoneFor, zoneLang, zoneText
 
 -- Pinta la flecha hacia el destino del paso (state.navNpc); sin destino, se esconde
 local function NavTick()
@@ -355,7 +379,10 @@ local function NavTick()
       nav.hint = crossing -- (también en el tooltip)
     else
       nav.big:SetText(why == "continent" and L["En otro continente"] or GREY .. L["Sin posición aquí"] .. "|r")
-      nav.small:SetText(npc.name .. " · " .. ES.Waypoints.ZoneName(npc))
+      if zoneFor ~= npc or zoneLang ~= ES.lang then
+        zoneFor, zoneLang, zoneText = npc, ES.lang, npc.name .. " · " .. ES.Waypoints.ZoneName(npc)
+      end
+      nav.small:SetText(zoneText)
     end
     return
   end
@@ -378,8 +405,13 @@ local function NavTick()
   -- Tiempo: a tu velocidad de correr (o la de la montura que llevas)
   local speed = GetUnitSpeed and select(2, GetUnitSpeed("player")) or 7
   -- (arriba las yardas y el tiempo; debajo, a quién: si el nombre es largo, baja de línea)
-  nav.big:SetText(string.format(L["%d yd"], math.floor(dist + 0.5)) .. GREY .. "  "
-    .. Duration(dist / math.max(7, speed or 7)) .. "|r")
+  local yd, secs = math.floor(dist + 0.5), dist / math.max(7, speed or 7)
+  local roundSecs = math.floor(secs + 0.5) -- (Duration redondea igual)
+  if yd ~= distYd or roundSecs ~= distSecs or ES.lang ~= distLang then
+    distText = string.format(L["%d yd"], yd) .. GREY .. "  " .. Duration(secs) .. "|r"
+    distYd, distSecs, distLang = yd, roundSecs, ES.lang
+  end
+  nav.big:SetText(distText)
   nav.small:SetText(npc.name)
 end
 
@@ -1354,6 +1386,14 @@ function A.LineKey(line)
     .. "|" .. tostring(line.item) .. "|" .. tostring(line.stepRecipe) .. "|" .. tostring(line.buyRow)
 end
 
+-- La profesión cuyas filas rehace A.Update (las mismas condiciones), o nil
+function A.BuildsFor()
+  if not (ES.db and A.Enabled()) then return nil end
+  local profKey = A.Profession()
+  if profKey and not Hidden(profKey) then return profKey end
+  return nil
+end
+
 function A.Update()
   if not ES.db then return end
   local profKey = A.Enabled() and A.Profession()
@@ -1368,7 +1408,14 @@ function A.Update()
   local rank = data.skillLine and ES:GetProfessionSkill(data.skillLine) or nil
   -- Las filas de la vista Ruta, más las de compra (solo el asistente: la ventana tiene
   -- Materiales y la Lista de compra)
-  local lines = ES:RouteLines(profKey, { buy = true }) or {}
+  local lines, plan = ES:RouteLines(profKey, { buy = true, lean = true })
+  -- Los avisos de tramo en el chat salen de estas mismas filas (ES:PhaseNotices, solo si
+  -- ya tienen estado: el primero lo pone la subida de nivel); así no se rehacen aparte
+  if lines and ES.phaseState and ES.phaseState[profKey] and ES.PhaseNotices then
+    local ok, err = pcall(ES.PhaseNotices, ES, profKey, lines, plan)
+    if not ok and ES.RecordError then ES:RecordError("avisos de tramo", err) end
+  end
+  lines = lines or {}
   -- Los pasos de la ruta: las filas con nivel (sin el total, avisos ni citas)
   local steps, index = {}, nil
   for _, line in ipairs(lines) do
@@ -1777,6 +1824,11 @@ do
     elseif event == "PLAYER_ENTERING_WORLD" then
       -- (los datos del personaje y las profesiones ya están: Core.lua)
       C_Timer.After(1, A.Refresh)
+    elseif frame and state.profKey then
+      -- Al salir del combate solo falta volver a poner el botón seguro (lo único que no
+      -- se puede en combate: lo demás se actualiza igual). Antes se rehacía la ruta
+      -- entera tras cada pelea. Celebrando un paso hecho, nada: al acabar se pinta (EndHold)
+      if not state.hold then Paint() end
     else
       A.Refresh()
     end

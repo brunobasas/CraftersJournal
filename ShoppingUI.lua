@@ -106,10 +106,10 @@ function ES:CreateShoppingPage(page)
     ES.SafeRegister(page, e)
   end
   ES.SafeRegister(page, "BAG_UPDATE_DELAYED") -- (la lista del tramo cuenta lo que llevas)
-  page:SetScript("OnEvent", function(self, event)
+  page:SetScript("OnEvent", function(self, event, itemID)
     -- (sin verse, nada: al abrirse se pinta entera, OnShow)
     if not self:IsVisible() then return end
-    if event == "GET_ITEM_INFO_RECEIVED" and not self.pendingItems then return end
+    if event == "GET_ITEM_INFO_RECEIVED" and not ES.UI.WaitingForItem(self, itemID) then return end
     if self.refreshQueued then return end
     self.refreshQueued = true
     C_Timer.After(0.3, function()

@@ -38,10 +38,22 @@ local function Mock(name)
       if UNKNOWN_EVENTS[e] then error('Attempt to register unknown event "' .. e .. '"') end
       if not EVENT_ORDER[e] then EVENT_ORDER[e] = true EVENT_ORDER[#EVENT_ORDER + 1] = e end
       self._events[e] = true
+      if self._units then self._units[e] = nil end
       FRAMES[self] = true
     end end
-    if k == "UnregisterEvent" then return function(self, e) self._events[e] = nil end end
-    if k == "UnregisterAllEvents" then return function(self) self._events = {} end end
+    -- Como en el juego: el evento solo llega si su primer argumento es una de esas unidades
+    if k == "RegisterUnitEvent" then return function(self, e, ...)
+      self:RegisterEvent(e)
+      self._units = self._units or {}
+      local units = {}
+      for i = 1, select("#", ...) do units[select(i, ...)] = true end
+      self._units[e] = units
+    end end
+    if k == "UnregisterEvent" then return function(self, e)
+      self._events[e] = nil
+      if self._units then self._units[e] = nil end
+    end end
+    if k == "UnregisterAllEvents" then return function(self) self._events, self._units = {}, nil end end
     if k == "IsEventRegistered" then return function(self, e) return self._events[e] or false end end
     if k == "GetWidth" or k == "GetHeight" or k == "GetEffectiveScale" or k == "GetStringWidth"
       or k == "GetFrameLevel" or k == "GetLeft" or k == "GetTop" or k == "GetRight" or k == "GetBottom" then
@@ -90,6 +102,8 @@ local function Mock(name)
       return function(self) local c = Mock(k) c._parent = self return c end
     end
     if k == "GetParent" then return function(self) return self._parent end end
+    if k == "GetChildren" then return function(self) return unpack(self._children or {}) end end
+    if k == "IsProtected" then return function() return false end end
     if k == "GetName" then return function(self) return self._globalName end end
     -- Como en WoW: solo los métodos (con mayúscula) existen; los campos propios no
     if type(k) ~= "string" or not k:match("^%u") then return nil end
@@ -102,13 +116,23 @@ MockFrame = Mock
 CreateFrame = function(_, name, parent)
   local f = Mock("frame")
   f._parent = parent
+  -- (los hijos, para GetChildren)
+  if type(parent) == "table" then
+    local kids = rawget(parent, "_children") or {}
+    rawset(parent, "_children", kids)
+    kids[#kids + 1] = f
+  end
   if name then f._globalName = name _G[name] = f end
   return f
 end
 
 function FireEvent(e, ...)
   local list = {}
-  for f in pairs(FRAMES) do if f._events[e] and f._scripts.OnEvent then list[#list + 1] = f end end
+  local unit = ...
+  for f in pairs(FRAMES) do
+    local units = f._units and f._units[e]
+    if f._events[e] and f._scripts.OnEvent and (not units or units[unit]) then list[#list + 1] = f end
+  end
   for _, f in ipairs(list) do f._scripts.OnEvent(f, e, ...) end
   return #list
 end
@@ -400,4 +424,5 @@ for name in ([[
   SetClampRectInsets GetRight GetBottom GetName IsEventRegistered GetValue
   GetVertexColor SetFixedFrameLevel SetFixedFrameStrata SetStartDelay SetToFinalAlpha
   CreateLine SetStartPoint SetEndPoint SetThickness SetCursorPosition
+  RegisterUnitEvent GetChildren IsProtected
 ]]):gmatch("%a+") do WIDGET_API[name] = true end
