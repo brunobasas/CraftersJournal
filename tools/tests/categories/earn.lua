@@ -136,6 +136,28 @@ test("cambiar la cantidad de una línea con los botones", function()
   OpenPage("money")
 end, { state = "full" })
 
+-- Enfriamiento con el PC reiniciado después de transmutar: GetSpellCooldown da el inicio
+-- desbordado (2^32 ms más tarde). Salía "Listo en 1195 h" con 59 min de verdad (Arcanite Bar)
+test("enfriamiento empezado antes de arrancar el PC: las horas de verdad", function()
+  local ARCANITE, WRAP = 17187, 2 ^ 32 / 1000
+  local left = 59 * 60
+  -- (transmutación: 1 día; empezó hace 23 h y 1 min, contado desde antes del arranque)
+  GetSpellCooldown = function(id)
+    if id == ARCANITE then return NOW - (86400 - left) + WRAP, 86400, 1 end
+    return 0, 0, 1
+  end
+  expect_near(ES.Earn.CooldownLeft(ARCANITE), left, 1, "segundos que faltan")
+  expect_near(ES.charData.cdReady[ARCANITE] - time(), left, 1, "lo guardado")
+  -- Sin desbordar, igual
+  GetSpellCooldown = function() return NOW - (86400 - left), 86400, 1 end
+  expect_near(ES.Earn.CooldownLeft(ARCANITE), left, 1, "segundos que faltan (sin desbordar)")
+  -- Lo guardado antes del arreglo (1193 h de más) no se fía: no se sabe
+  GetSpellCooldown = function() return 0, 0, 1 end
+  ES.charData.cdReady[ARCANITE] = time() + WRAP + left
+  expect_eq(ES.Earn.CooldownLeft(ARCANITE), nil, "lo guardado con 1193 h de más")
+  expect_eq(ES.charData.cdReady[ARCANITE], nil, "se borra lo guardado mal")
+end, { state = "full" })
+
 test("dinero: negativos, NaN e infinito no dan error al pintarse", function()
   for _, v in ipairs({ -12345, 0, 1, 99999999, 0 / 0, math.huge, -math.huge }) do
     no_error(ES.Money, v)

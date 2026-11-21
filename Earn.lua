@@ -675,6 +675,15 @@ local function CDStore()
   return ES.charData.cdReady
 end
 
+-- GetTime cuenta desde que arrancó el ordenador, en milisegundos de 32 bits. Si el
+-- enfriamiento empezó antes (reiniciaste el PC después de transmutar), el juego da su
+-- inicio desbordado: 2^32 ms (unas 1193 h) más tarde de lo que es. Salía "Listo en
+-- 1195 h" con 59 min de verdad (Arcanite Bar)
+local GETTIME_WRAP = 2 ^ 32 / 1000
+-- Ningún enfriamiento de profesión dura tanto: lo guardado más lejos es de antes de
+-- arreglar el desbordamiento (y no se fía)
+local MAX_COOLDOWN = 30 * 86400
+
 -- Enfriamiento del hechizo de la receta: segundos que faltan, o nil si no da uno
 local function SpellCooldownLeft(id)
   local start, duration
@@ -687,7 +696,9 @@ local function SpellCooldownLeft(id)
   end
   -- (más de 2 s: el tiempo global de lanzamiento no cuenta)
   if type(start) == "number" and type(duration) == "number" and start > 0 and duration > 2 then
-    return math.max(0, start + duration - GetTime())
+    local now = GetTime()
+    if start - now > GETTIME_WRAP / 2 then start = start - GETTIME_WRAP end
+    return math.max(0, start + duration - now)
   end
 end
 
@@ -701,6 +712,7 @@ function Earn.CooldownLeft(id)
   end
   local ready = store and store[id]
   if not ready then return nil end
+  if ready - time() > MAX_COOLDOWN then store[id] = nil return nil end
   return math.max(0, ready - time())
 end
 
