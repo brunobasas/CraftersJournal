@@ -140,6 +140,35 @@ test("rangos de Cocina y Primeros auxilios: Experto no pide nivel, Artesano pide
   end
 end, { boot = false })
 
+-- Change reagents-from-other-professions. CurseForge: "76 Mithril Ore that could be
+-- smelted, and it tells me to buy bars". Minería no es una profesión del addon, pero su
+-- fundición está en Data/Mining.lua para que la ruta de Herrería pueda fundir
+test("Minería: solo la fundición, con lo que fabrica cada receta", function()
+  local data = ES.Data.Mining
+  expect(data and type(data.recipes) == "table", "sin ES.Data.Mining")
+  local function Has(id, name, out, reagents)
+    local r = data.recipes[id]
+    expect(r, "falta %s (%d)", name, id)
+    expect_eq(r.out and r.out[1], out, name .. ": lo que fabrica")
+    local got = {}
+    for _, rq in ipairs(r.r) do got[rq[1]] = rq[2] end
+    for item, qty in pairs(reagents) do expect_eq(got[item], qty, string.format("%s: material %d", name, item)) end
+  end
+  Has(10097, "Smelt Mithril", 3860, { [3858] = 1 })
+  Has(2659, "Smelt Bronze", 2841, { [2840] = 1, [3576] = 1 })
+  Has(3569, "Smelt Steel", 3859, { [3575] = 1, [3857] = 1 })
+  local bad, n = {}, 0
+  for id, r in pairs(data.recipes) do
+    n = n + 1
+    if not r.out then bad[#bad + 1] = string.format("%d %s: sin out", id, tostring(r.name)) end
+    if type(r.r) ~= "table" or #r.r == 0 then bad[#bad + 1] = string.format("%d %s: sin materiales", id, tostring(r.name)) end
+    if r.fee or r.scroll or r.train then bad[#bad + 1] = string.format("%d %s: con instructor o pergamino", id, tostring(r.name)) end
+  end
+  Report(bad, "recetas de Minería raras")
+  note("%d recetas de fundición", n)
+  for _, p in ipairs(ES.PROFESSIONS) do expect(p.key ~= "Mining", "Minería no es una profesión del addon") end
+end, { boot = false })
+
 -- Un PNJ con sitio: { nombre, facción, zona, x, y [, ...] }
 local function HasPlace(npc)
   local e = ES.Data.NPCs[npc]

@@ -52,6 +52,12 @@ ID,Name_lang
 2548,Succulent Pork Ribs
 2549,Seasoned Wolf Kabob
 2550,Cooking
+2575,Mining
+2580,Find Minerals
+2656,Smelting
+2657,Smelt Copper
+2658,Smelt Silver
+2659,Smelt Bronze
 2660,Rough Sharpening Stone
 2661,Copper Chain Belt
 2662,Copper Chain Pants
@@ -100,6 +106,9 @@ ID,Name_lang
 3295,Deadly Bronze Poniard
 3296,Heavy Bronze Mace
 3297,Mighty Iron Hammer
+3304,Smelt Tin
+3307,Smelt Iron
+3308,Smelt Gold
 3319,Copper Chain Boots
 3320,Rough Grinding Stone
 3321,Copper Chain Vest
@@ -150,6 +159,7 @@ ID,Name_lang
 3511,Golden Scale Cuirass
 3513,Polished Steel Boots
 3515,Golden Scale Boots
+3569,Smelt Steel
 3753,Handstitched Leather Belt
 3755,Linen Bag
 3756,Embossed Leather Gloves
@@ -486,6 +496,8 @@ ID,Name_lang
 10009,Runed Mithril Hammer
 10013,Ebon Shiv
 10015,Truesilver Champion
+10097,Smelt Mithril
+10098,Smelt Truesilver
 10482,Cured Thick Hide
 10490,Comfortable Leather Hat
 10499,Nightscape Tunic
@@ -716,6 +728,7 @@ ID,Name_lang
 14807,Greater Magic Wand
 14809,Lesser Mystic Wand
 14810,Greater Mystic Wand
+14891,Smelt Dark Iron
 14930,Quickdraw Quiver
 14932,Thick Leather Ammo Pouch
 15255,Mechanical Repair Kit
@@ -740,6 +753,7 @@ ID,Name_lang
 15935,Crispy Bat Wing
 15972,Glinting Steel Dagger
 15973,Searing Golden Blade
+16153,Smelt Thorium
 16639,Dense Grinding Stone
 16640,Dense Weightstone
 16641,Dense Sharpening Stone
@@ -1035,6 +1049,7 @@ ID,Name_lang
 22926,Chromatic Cloak
 22927,Hide of the Wild
 22928,Shifting Cloak
+22967,Smelt Elementium
 23069,EZ-Thro Dynamite II
 23071,Truesilver Transformer
 23077,Gyrofreeze Ice Reflector
@@ -1335,6 +1350,7 @@ ID,Name_lang
 1213628,Enchanted Prayer Tome
 1213633,Enchanted Totem
 1213635,Enchanted Mushroom
+1213638,Smelt Obsidian-Infused Thorium Bar
 1213643,Obsidian Grinding Stone
 1213646,Obsidian Blasting Powder
 1214137,Obsidian Heartseeker
@@ -1415,6 +1431,7 @@ ID,Name_lang
 1229504,Faction Banner
 1229745,Fish Bowl
 1230117,First Aid Kit
+1230161,Lodestone
 1230171,Sharpening Wheel
 1230564,Mana Well
 1230643,Enchanted Lute
@@ -1486,6 +1503,7 @@ ID,Name_lang
 1249632,Viridian Dye
 1249633,Sulfuric Acid
 1249634,Sandpaper
+1249637,Smelt Azerothium
 1249957,Peace Tea
 1249958,Royal Tea
 1249959,Root Tea
@@ -2008,6 +2026,7 @@ ID,Name_lang
 1257493,Ghostweave Hood
 1257494,Earthenweave Crown
 1257495,Bottomless Reagent Bag
+1262975,Rock Garden
 1262978,Cookie's Feast
 1262990,Fishing Rack
 1262996,Toxin Study
@@ -2019,6 +2038,7 @@ ID,Name_lang
 1263034,Repair Bot
 1263056,Arcane Salvager
 1263067,Iron Oven
+1263071,Molten Foundry
 1263073,Master Forge
 1263078,Alchemy Laboratory
 1263079,Sewing Machine
@@ -2245,6 +2265,7 @@ ID,Name_lang
 1301541,Azure Stormsewn Epaulets
 1302598,Rough Copper Chain Boots
 1302604,Light Leather Reagent Bag
+1306126,Smelt Heavy Thorium
 1306520,Torch of Light
 1306521,Steadfast Libram
 1306522,Libram of Infusion
@@ -2341,6 +2362,18 @@ ID,Name_lang
 1240956,Cooking
 1240967,Cooking
 1240980,Cooking
+2576,Mining
+2577,Mining
+2578,Mining
+2579,Mining
+3564,Mining
+10248,Mining
+1235230,Mining
+1240951,Mining
+1240962,Mining
+1240973,Mining
+1240986,Mining
+8388,Find Minerals
 3780,Heavy Armor Kit
 3451,Troll's Blood Elixir
 439128,Moonsteel Broadsword

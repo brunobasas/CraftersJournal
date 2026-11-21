@@ -123,8 +123,11 @@ ID,Name
 2700,Rezept: Saftige Schweinerippchen
 2701,Rezept: Gewürzter Wolfskebab
 2723,Flasche Dalaran Noir
+2770,Kupfererz
+2771,Zinnerz
 2772,Eisenerz
 2775,Silbererz
+2776,Golderz
 2835,Rauer Stein
 2836,Grober Stein
 2838,Schwerer Stein
@@ -220,6 +223,7 @@ ID,Name
 3530,Wollverband
 3531,Schwerer Wollverband
 3575,Eisenbarren
+3576,Zinnbarren
 3577,Goldbarren
 3608,Pläne: Mächtiger Eisenhammer
 3609,Pläne: Kupferne Kettenweste
@@ -286,6 +290,7 @@ ID,Name
 3854,Frosttigerklinge
 3855,Massive Eisenaxt
 3856,Schattensichelaxt
+3857,Kohle
 3858,Mithrilerz
 3859,Stahlbarren
 3860,Mithrilbarren
@@ -795,6 +800,7 @@ ID,Name
 7742,Bauplan: Gnomisches Verbergungsgerät
 7909,Aquamarin
 7910,Sternrubin
+7911,Echtsilbererz
 7912,Robuster Stein
 7913,Barbarische Eisenschultern
 7914,Barbarische Eisenbrustplatte
@@ -1173,6 +1179,7 @@ ID,Name
 11204,Formel: Armschiene - Große Willenskraft
 11205,Formel: Handschuhe - Hochentwickelte Kräuterkunde
 11206,Formel: Umhang - Geringe Beweglichkeit
+11370,Dunkeleisenerz
 11207,Formel: Waffe - Feurige Waffe
 11208,Formel: Waffe - Dämonentöten
 11223,Formel: Armschiene - Abwehr
@@ -1824,6 +1831,7 @@ ID,Name
 17723,Grünes Festtagshemd
 17724,Muster: Grünes Festtagshemd
 17725,Formel: Waffe - Wintermacht
+17771,Elementiumbarren
 17967,Aufbereitete Schuppe von Onyxia
 18045,Zartes Wolfsteak
 18046,Rezept: Zartes Wolfsteak
@@ -1880,6 +1888,7 @@ ID,Name
 18517,Muster: Chromatischer Umhang
 18518,Muster: Balg der Wildnis
 18519,Muster: Veränderlicher Umhang
+18562,Elementiumerz
 18567,Elementarfluxus
 18587,Goblin-Überbrückungskabel XL
 18588,EZ-Thro-Dynamit II
@@ -2430,6 +2439,7 @@ ID,Name
 247786,Magiepartikel
 247789,Übungszauberstab des Novizen
 248822,Todeslotus
+248815,Schweres Thoriumerz
 248819,Teufelskristall
 248820,Tobernit
 248821,Dämonensalbei
@@ -3734,6 +3744,7 @@ ID,Name
 273087,Bauplan: Lagerfeuer des Gesellen
 273092,Bauplan: Reparaturbot
 273096,Bauplan: Gerbrahmen
+273097,Bauplan: Felsgarten
 273099,Bauplan: Spinnrad
 273101,Bauplan: Expertenlagerfeuer
 273102,Bauplan: Krümels Festmahl
@@ -3747,6 +3758,7 @@ ID,Name
 273118,Bauplan: Labor des Seuchenarztes
 273119,Bauplan: Angelhütte
 273121,Bauplan: Nähmaschine
+273122,Bauplan: Geschmolzene Gießerei
 273124,Bauplan: Webstuhl
 273125,Lichs Zeigefinger
 273127,Golemherz
@@ -4103,13 +4115,16 @@ ID,Name
 279943,Spinnrad
 279944,Schleifstein
 279945,Nähmaschine
+279948,Felsgarten
 279949,Reparaturbot
 279950,Materialbot
 279951,Labor des Seuchenarztes
+279952,Geschmolzene Gießerei
 279955,Meisterschmiede
 279956,Manabrunnen
 279957,Krümels Festmahl
 279959,Webstuhl
+279960,Leitstein
 279961,Lagerfeuerset des Gesellen
 279965,Angelständer
 279966,Angelhütte

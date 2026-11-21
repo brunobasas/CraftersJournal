@@ -37,18 +37,42 @@ end
 ES.KnownCount = KnownCount -- (la clave estable de la ruta: ES:KnownStamp)
 
 -- Profesiones del personaje cuyas recetas sabidas cambiaron: su ruta se rehace
+-- Una receta de una profesión (o de la fundición de Minería) también cambia lo que las
+-- otras rutas pueden fabricar (ES:ForeignProducers): se vacía su índice y las rutas que
+-- lo usaban dejan de valer (su firma va en la clave estable)
 local function CheckLearned()
-  local changed = false
+  local changed, foreign = false, false
   for _, prof in ipairs(ES.PROFESSIONS) do
     local data = ES.Data[prof.key]
     if data and data.recipes and ES:GetProfessionSkill(data.skillLine) then
       local n = KnownCount(prof.key)
+      if knownCount[prof.key] ~= n then foreign = true end
       if knownCount[prof.key] and knownCount[prof.key] ~= n then
         ES:InvalidatePlan(prof.key)
         changed = true
       end
       knownCount[prof.key] = n
       ES.knownStamp[prof.key] = n
+    end
+  end
+  for _, p in ipairs(ES.EXTRA_RECIPE_DATA or {}) do
+    if ES.Data[p.key] and ES.Data[p.key].recipes then
+      local n = KnownCount(p.key)
+      if knownCount[p.key] ~= n then foreign = true end
+      if knownCount[p.key] and knownCount[p.key] ~= n then changed = true end
+      knownCount[p.key] = n
+    end
+  end
+  if foreign then
+    local stamps = {}
+    for key, idx in pairs(ES.foreignCache or {}) do stamps[key] = idx.stamp end
+    ES.foreignCache = {}
+    -- (las rutas cuyas recetas de otras profesiones cambiaron)
+    for key, stamp in pairs(stamps) do
+      if ES:ForeignProducers(key).stamp ~= stamp then
+        ES:InvalidatePlan(key)
+        changed = true
+      end
     end
   end
   return changed

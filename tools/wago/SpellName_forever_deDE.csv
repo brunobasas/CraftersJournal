@@ -52,6 +52,12 @@ ID,Name
 2548,Saftige Schweinerippchen
 2549,Gewürzter Wolfskebab
 2550,Kochkunst
+2575,Bergbau
+2580,Mineraliensuche
+2656,Verhüttung
+2657,Kupfer verhütten
+2658,Silber verhütten
+2659,Bronze verhütten
 2660,Rauer Wetzstein
 2661,Kupferner Kettengürtel
 2662,Kupferne Kettenhose
@@ -100,6 +106,9 @@ ID,Name
 3295,Tödlicher Bronzepoignard
 3296,Schwerer bronzener Streitkolben
 3297,Mächtiger Eisenhammer
+3304,Zinn verhütten
+3307,Eisen verhütten
+3308,Gold verhütten
 3319,Kupferne Kettenstiefel
 3320,Rauer Schleifstein
 3321,Kupferne Kettenweste
@@ -150,6 +159,7 @@ ID,Name
 3511,Goldener Schuppenkürass
 3513,Polierte Stahlstiefel
 3515,Goldene Schuppenstiefel
+3569,Stahl verhütten
 3753,Handgenähter Ledergürtel
 3755,Leinentasche
 3756,Geprägte Lederhandschuhe
@@ -484,6 +494,8 @@ ID,Name
 10009,Runenverzierter Mithrilhammer
 10013,Ebenholzmesser
 10015,Echtsilberchampion
+10097,Mithril verhütten
+10098,Echtsilber verhütten
 10482,Geschmeidiger dicker Balg
 10490,Bequemer Lederhut
 10499,Tunika des Nachtschleichers
@@ -714,6 +726,7 @@ ID,Name
 14807,Großer Magiezauberstab
 14809,Geringer Mystikerzauberstab
 14810,Großer Mystikerzauberstab
+14891,Dunkeleisen verhütten
 14930,Schnellziehköcher
 14932,Dicker Ledermunitionsbeutel
 15255,Mechanisches Reparierset
@@ -738,6 +751,7 @@ ID,Name
 15935,Knuspriger Fledermausflügel
 15972,Glitzernder Stahldolch
 15973,Sengende Goldklinge
+16153,Thorium verhütten
 16639,Verdichteter Schleifstein
 16640,Verdichteter Gewichtsstein
 16641,Verdichteter Wetzstein
@@ -1032,6 +1046,7 @@ ID,Name
 22926,Chromatischer Umhang
 22927,Balg der Wildnis
 22928,Veränderlicher Umhang
+22967,Elementium verhütten
 23069,EZ-Thro-Dynamit II
 23071,Echtsilberumwandler
 23077,Gyrofrosteisreflektor
@@ -1328,6 +1343,7 @@ ID,Name
 1213628,Verzauberter Gebetsband
 1213633,Verzaubertes Totem
 1213635,Verzauberter Pilz
+1213638,Obsidianangereicherten Thoriumbarren verhütten
 1213643,Obsidianschleifstein
 1213646,Obsidiansprengpulver
 1214137,Obsidianherzsucher
@@ -1407,6 +1423,7 @@ ID,Name
 1229504,Fraktionsbanner
 1229745,Fischglas
 1230117,Verbandtasche
+1230161,Leitstein
 1230171,Schleifstein
 1230564,Manabrunnen
 1230643,Verzauberte Laute
@@ -1479,6 +1496,7 @@ ID,Name
 1249632,Viridiangrüner Farbstoff
 1249633,Schwefelsäure
 1249634,Sandpapier
+1249637,Azerothium verhütten
 1249957,Ruhetee
 1249958,Königlicher Tee
 1249959,Wurzeltee
@@ -2000,6 +2018,7 @@ ID,Name
 1257493,Geisterzwirnkapuze
 1257494,Irdene Stoffkrone
 1257495,Bodenlose Reagenzientasche
+1262975,Felsgarten
 1262978,Krümels Festmahl
 1262990,Angelständer
 1262996,Studierzimmer für Gifte
@@ -2011,6 +2030,7 @@ ID,Name
 1263034,Reparaturbot
 1263056,Arkaner Wiederverwerter
 1263067,Eisenofen
+1263071,Geschmolzene Gießerei
 1263073,Meisterschmiede
 1263078,Alchemielaboratorium
 1263079,Nähmaschine
@@ -2236,6 +2256,7 @@ ID,Name
 1302161,Überschreibender Singalwirker für Erntearbeiter
 1302598,Raue kupferne Kettenstiefel
 1302604,Leichte Lederreagenzientasche
+1306126,Schweres Thorium verhütten
 1306520,Fackel des Lichts
 1306521,Standhafter Buchband
 1306522,Buchband der Infusion
@@ -2322,6 +2343,18 @@ ID,Name
 1240956,Kochkunst
 1240967,Kochkunst
 1240980,Kochkunst
+2576,Bergbau
+2577,Bergbau
+2578,Bergbau
+2579,Bergbau
+3564,Bergbau
+10248,Bergbau
+1235230,Bergbau
+1240951,Bergbau
+1240962,Bergbau
+1240973,Bergbau
+1240986,Bergbau
+8388,Mineraliensuche
 3780,Schweres Rüstungsset
 3451,Trollblutelixier
 439128,Mondstahlbreitschwert

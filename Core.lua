@@ -99,11 +99,43 @@ function ES.SortProfessionCards(entries)
   end)
 end
 
+-- Otras recetas que no son de una profesión del addon (sin página ni ruta): la fundición
+-- de Minería (Data/Mining.lua). La ruta de otra profesión las usa si el personaje las
+-- sabe (ES:ForeignProducers)
+ES.EXTRA_RECIPE_DATA = {
+  { key = "Mining", label = "Minería" },
+}
+
 function ES:ProfLabel(key)
   for _, p in ipairs(self.PROFESSIONS) do
     if p.key == key then return L[p.name or p.label] end
   end
+  for _, p in ipairs(self.EXTRA_RECIPE_DATA) do
+    if p.key == key then return L[p.label] end
+  end
   return key
+end
+
+-- Las tablas de ES.Data con recetas: las de las profesiones y las de EXTRA_RECIPE_DATA
+function ES:RecipeDataKeys()
+  if not self.recipeDataKeys then
+    local keys = {}
+    for _, p in ipairs(self.PROFESSIONS) do keys[#keys + 1] = p.key end
+    for _, p in ipairs(self.EXTRA_RECIPE_DATA) do keys[#keys + 1] = p.key end
+    self.recipeDataKeys = keys
+  end
+  return self.recipeDataKeys
+end
+
+-- Una receta por su id (el hechizo), de cualquier profesión o de la fundición:
+-- receta, clave de su tabla en ES.Data. nil si no está en los datos
+function ES:RecipeByID(id)
+  if not id then return nil end
+  for _, key in ipairs(self:RecipeDataKeys()) do
+    local data = ES.Data[key]
+    local r = data and data.recipes and data.recipes[id]
+    if r then return r, key end
+  end
 end
 
 local DEFAULTS = {
@@ -236,8 +268,8 @@ end
 function ES:LocalizeRecipeNames()
   local set = ES.NamesFor(self.lang)
   local names = set and set.spells or {}
-  for _, prof in ipairs(self.PROFESSIONS) do
-    for id, r in pairs(ES.Data[prof.key] and ES.Data[prof.key].recipes or {}) do
+  for _, key in ipairs(self:RecipeDataKeys()) do
+    for id, r in pairs(ES.Data[key] and ES.Data[key].recipes or {}) do
       if names[id] then
         r.nameEN = r.nameEN or r.name
         r.name = names[id]
@@ -484,24 +516,100 @@ function ES:RepStamp()
   return table.concat(parts, ",")
 end
 
-function ES:GetOwnedReagents(data)
+-- Lo que llevas de los materiales de una profesión y, con `foreign` (ES:ForeignProducers),
+-- también de los de las recetas de otras profesiones que la ruta puede usar (el Mithril
+-- Ore que se funde para Herrería)
+function ES:GetOwnedReagents(data, foreign)
   local owned, seen = {}, {}
-  for _, r in pairs(data.recipes) do
-    for _, rq in ipairs(r.r) do
-      local itemID = rq[1]
-      if not seen[itemID] then
-        seen[itemID] = true
-        local count = ES:ItemCount(itemID)
-        if count and count > 0 then owned[itemID] = count end
+  local function Count(recipes)
+    for _, r in pairs(recipes) do
+      for _, rq in ipairs(r.r) do
+        local itemID = rq[1]
+        if not seen[itemID] then
+          seen[itemID] = true
+          local count = ES:ItemCount(itemID)
+          if count and count > 0 then owned[itemID] = count end
+        end
       end
     end
   end
+  Count(data.recipes)
+  if foreign then Count(foreign.recipes) end
   -- Herramientas (bastones rúnicos)
   for _, tool in pairs(ES.Data.Tools or {}) do
     local count = ES:ItemCount(tool.item)
     if count and count > 0 then owned[tool.item] = count end
   end
   return owned
+end
+
+-- Recetas de otras profesiones (y de la fundición de Minería) que el personaje sabe y
+-- fabrican algo que usa `profKey`: un minero que sube Herrería funde el mineral en vez
+-- de comprar las barras (CurseForge: "76 Mithril Ore that could be smelted"). También lo
+-- que piden esas recetas (Iron Bar para Smelt Steel). Solo las que ya sabes: la ruta no
+-- propone aprender recetas de otra profesión.
+-- { producers = { [objeto] = { receta, ... } }, recipes = { [receta] = r },
+--   prof = { [receta] = clave de su profesión }, stamp = "ids sabidas" (para la clave estable) }
+-- Se guarda hasta que cambian las recetas sabidas (CheckLearned) o se vacía ES.knownStamp
+ES.foreignCache = {}
+function ES:ForeignProducers(profKey)
+  if self.foreignCacheFor ~= self.knownStamp then
+    self.foreignCache, self.foreignCacheFor = {}, self.knownStamp
+  end
+  local cached = self.foreignCache[profKey]
+  if cached then return cached end
+  local data = ES.Data[profKey]
+  local byItem, profOf, any = {}, {}, false
+  for _, key in ipairs(self:RecipeDataKeys()) do
+    local d = ES.Data[key]
+    -- (de las profesiones, solo las que tiene el personaje: no puede saber recetas de las demás)
+    local has = key ~= profKey and d and d.recipes
+      and (not d.ranks or (d.skillLine and self.GetProfessionSkill and self:GetProfessionSkill(d.skillLine)))
+    if has then
+      if ES.Planner and ES.Planner.Annotate then ES.Planner.Annotate(d) end
+      for id, r in pairs(d.recipes) do
+        if r.out and r.r and #r.r > 0 and self:IsRecipeKnown(id) then
+          local list = byItem[r.out[1]] or {}
+          list[#list + 1] = id
+          byItem[r.out[1]] = list
+          profOf[id] = key
+          any = true
+        end
+      end
+    end
+  end
+  local out = { producers = {}, recipes = {}, prof = {}, stamp = "" }
+  if any and data and data.recipes then
+    -- Lo que usa la profesión y, hacia abajo, lo que usan las recetas que lo fabrican
+    local need, queue = {}, {}
+    local function Need(itemID)
+      if not need[itemID] then need[itemID] = true queue[#queue + 1] = itemID end
+    end
+    for _, r in pairs(data.recipes) do
+      for _, rq in ipairs(r.r or {}) do Need(rq[1]) end
+    end
+    local ids = {}
+    local i = 1
+    while queue[i] do
+      local itemID = queue[i]
+      i = i + 1
+      local list = byItem[itemID]
+      if list then
+        table.sort(list)
+        out.producers[itemID] = list
+        for _, id in ipairs(list) do
+          local r = ES.Data[profOf[id]].recipes[id]
+          out.recipes[id], out.prof[id] = r, profOf[id]
+          ids[#ids + 1] = id
+          for _, rq in ipairs(r.r) do Need(rq[1]) end
+        end
+      end
+    end
+    table.sort(ids)
+    out.stamp = table.concat(ids, ",")
+  end
+  self.foreignCache[profKey] = out
+  return out
 end
 
 ---------------------------------------------------------------------------

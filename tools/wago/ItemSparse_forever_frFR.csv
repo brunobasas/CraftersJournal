@@ -123,8 +123,11 @@ ID,Name
 2700,Recette : Côtes de porc aux herbes
 2701,Recette : Kébab de loup assaisonné
 2723,Bouteille de Dalaran noir
+2770,Minerai de cuivre
+2771,Minerai d'étain
 2772,Minerai de fer
 2775,Minerai d'argent
+2776,Minerai d'or
 2835,Pierre brute
 2836,Pierre grossière
 2838,Pierre lourde
@@ -220,6 +223,7 @@ ID,Name
 3530,Bandage en laine
 3531,Bandage épais en laine
 3575,Barre de fer
+3576,Barre d'étain
 3577,Barre d'or
 3608,Plans : Puissant marteau en fer
 3609,Plans : Lorica en cuivre
@@ -286,6 +290,7 @@ ID,Name
 3854,Tigresse glaciale
 3855,Gigantesque hache en fer
 3856,Croissant des ombres
+3857,Charbon
 3858,Minerai de mithril
 3859,Barre d'acier
 3860,Barre de mithril
@@ -795,6 +800,7 @@ ID,Name
 7742,Schéma : Système d'occultation gnome
 7909,Aigue-marine
 7910,Rubis étoilé
+7911,Minerai de vrai-argent
 7912,Pierre solide
 7913,Epaulières barbares en fer
 7914,Cuirasse barbare en fer
@@ -1183,6 +1189,7 @@ ID,Name
 11288,Baguette magique supérieure
 11289,Baguette mystique inférieure
 11291,Bois d'étoile
+11370,Minerai de sombrefer
 11371,Barre de sombrefer
 11382,Sang de la montagne
 11590,Trousse de réparation mécanique
@@ -1824,6 +1831,7 @@ ID,Name
 17723,Chemise verte de fête
 17724,Patron : Chemise verte de fête
 17725,Formule : Enchantement d'arme (Puissance de l'hiver)
+17771,Barre d'élémentium
 17967,Ecaille d'Onyxia raffinée
 18045,Steak de loup tendre
 18046,Recette : Steak de loup tendre
@@ -1880,6 +1888,7 @@ ID,Name
 18517,Patron : Cape chromatique
 18518,Patron : Peau du Fauve
 18519,Patron : Cape changeante
+18562,Minerai d'élémentium
 18567,Catalyseur élémentaire
 18587,Défibrillateurs gobelins XL
 18588,Dynamite Ev-Lan II
@@ -2433,6 +2442,7 @@ ID,Name
 247755,Élixir de Force mineure
 247786,Granule de magie
 247789,Baguette d’entraînement de novice
+248815,Minerai de thorium lourd
 248819,Gangrecristal
 248820,Torbernite
 248821,Sauge démoniaque
@@ -3734,6 +3744,7 @@ ID,Name
 273087,Plan : feu de camp de compagnon
 273092,Plan : robot réparateur
 273096,Plan : chevalet de tannage
+273097,Plan : jardin de pierres
 273099,Plan : rouet
 273101,Plan : feu de camp de spécialiste
 273102,Plan : festin de Macaron
@@ -3747,6 +3758,7 @@ ID,Name
 273118,Plan : laboratoire de médecin de peste
 273119,Plan : hutte de pêche
 273121,Plan : machine à coudre
+273122,Plan : fonderie en fusion
 273124,Plan : métier à tisser
 273125,Index de liche
 273127,Cœur de golem
@@ -4103,13 +4115,16 @@ ID,Name
 279943,Rouet
 279944,Meule à aiguiser
 279945,Machine à coudre
+279948,Jardin de pierres
 279949,Robot réparateur
 279950,Robot vendeur de composants
 279951,Laboratoire de médecin de peste
+279952,Fonderie en fusion
 279955,Forge magistrale
 279956,Puits de mana
 279957,Festin de Macaron
 279959,Métier à tisser
+279960,Magnétite
 279961,Kit de feu de camp de compagnon
 279965,Râtelier de pêche
 279966,Hutte de pêche

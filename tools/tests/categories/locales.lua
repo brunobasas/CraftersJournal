@@ -81,8 +81,9 @@ end, { boot = false })
 
 test("nombres de los datos: de recetas que existen y sin vacíos", function()
   local recipes = {}
-  for _, prof in ipairs(ProfessionKeys()) do
-    for id in pairs(ES.Data[prof].recipes) do recipes[id] = true end
+  -- (también la fundición de Minería, Data/Mining.lua)
+  for _, key in ipairs(ES:RecipeDataKeys()) do
+    for id in pairs(ES.Data[key].recipes) do recipes[id] = true end
   end
   for _, lang in ipairs({ "es", "de", "fr" }) do
     local set = expect(ES.NamesFor(lang), "sin nombres en %s", lang)

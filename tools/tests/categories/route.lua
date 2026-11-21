@@ -787,3 +787,306 @@ test("alternativas de cada paso: esperan en combate y con la ventana cerrada", f
   RunTimers(5)
   expect(page.plan ~= plan or plan.alts, "al abrir la ventana no se acabaron las alternativas")
 end, { state = "scan" })
+
+-- Materiales con recetas de otras profesiones (spec route-reagent-sources) -----------
+-- CurseForge: "I have 76 Mithril Ore that could be smelted, and it tells me to buy bars".
+-- La ruta solo fabricaba con recetas de la profesión que se sube
+
+local ORE, BAR, SMELT = 3858, 3860, 10097 -- Mithril Ore, Mithril Bar, Smelt Mithril
+local THORIUM_BAR, SMELT_THORIUM = 12359, 16153
+
+-- Precio de un objeto en el escaneo de las pruebas (`qty` a la venta a ese precio)
+local function SetPrice(itemID, unit, qty)
+  qty = qty or 5000
+  ES.db.scans[ES:RealmKey()].items[itemID] = { listings = 4, quantity = qty, minUnit = unit, avgUnit = unit,
+    sellers = 3, topShare = 0.4, median = unit, ladder = { unit, qty } }
+end
+
+-- Aprende (o deja de saber) recetas, como al volver del instructor
+local function Know(ids, known)
+  for _, id in ipairs(ids) do KNOWN_SPELLS[id] = known ~= false or nil end
+  ES.CheckLearned()
+end
+
+-- Lo que hace falta para conseguir `qty` de un objeto en la ruta de `prof` (sus acciones)
+local function AcquireActions(prof, itemID, qty, from, to)
+  local opts = ES:PlanOptions(prof, from or 175, to or 225)
+  local ctx = ES.Planner.NewContext(ES.Data[prof], opts)
+  local cost, _, _, actions = ES.Planner.RecipeCost(ctx, { r = { { itemID, qty } } }, 1, {})
+  return actions or {}, cost
+end
+local function Find(actions, kind, item)
+  for _, a in ipairs(actions) do
+    if a.kind == kind and a.item == item then return a end
+  end
+end
+local function Qty(actions, kind, item)
+  local n = 0
+  for _, a in ipairs(actions) do
+    if a.kind == kind and a.item == item then n = n + a.qty end
+  end
+  return n
+end
+
+local function Shopping(plan, itemID)
+  for _, it in ipairs(plan.shopping or {}) do if it.itemID == itemID then return it end end
+end
+local function Crafted(plan, itemID)
+  for _, c in ipairs(plan.crafted or {}) do if c.itemID == itemID then return c end end
+end
+
+test("recetas de otras profesiones: con Smelt Mithril, Herrería puede fundir Mithril Bar; sin ella, no", function()
+  local idx = ES:ForeignProducers("Blacksmithing")
+  expect(not idx.producers[BAR], "sin saber Smelt Mithril ya está en el índice")
+  expect_eq(idx.stamp, "", "firma sin recetas de otras profesiones")
+  Know({ SMELT })
+  idx = ES:ForeignProducers("Blacksmithing")
+  local list = expect(idx.producers[BAR], "con Smelt Mithril, Mithril Bar no está en el índice de Herrería")
+  expect_eq(list[1], SMELT, "receta que fabrica Mithril Bar")
+  expect_eq(idx.prof[SMELT], "Mining", "profesión de Smelt Mithril")
+  expect_eq(idx.stamp, tostring(SMELT), "firma")
+  -- (Sastrería no usa Mithril Bar: su índice no la tiene ni cambia su firma)
+  expect_eq(ES:ForeignProducers("Tailoring").stamp, "", "firma de Sastrería")
+end, { state = "scan" })
+
+test("un minero que sube Herrería funde el mineral y la compra pide mineral", function()
+  SetPrice(ORE, 300)
+  SetPrice(BAR, 1210)
+  Know({ SMELT })
+  local actions = AcquireActions("Blacksmithing", BAR, 40)
+  local craft = expect(Find(actions, "craft", BAR), "no funde las Mithril Bar")
+  expect_eq(craft.recipe, SMELT, "receta")
+  expect_eq(craft.prof, "Mining", "profesión de la receta")
+  expect_eq(Qty(actions, "ah", ORE), 40, "Mithril Ore comprado")
+  expect_eq(Qty(actions, "ah", BAR), 0, "Mithril Bar comprado")
+  -- La ruta entera: funde, la compra pide mineral y los pasos son de Herrería
+  local plan = PlanRoute("Blacksmithing", 175, 225)
+  local c = expect(Crafted(plan, BAR), "la ruta de Herrería 175-225 no funde Mithril Bar")
+  expect_eq(c.prof, "Mining", "profesión de la fila de fundir")
+  expect_eq(c.recipe and c.recipe.id, SMELT, "receta de la fila de fundir")
+  expect(Shopping(plan, ORE), "la compra no pide Mithril Ore")
+  expect(not Shopping(plan, BAR), "la compra pide Mithril Bar")
+  local bad = RouteProblems("Blacksmithing", plan, 175, 225)
+  expect(#bad == 0, "ruta:\n    %s", table.concat(bad, "\n    "))
+  note("funde %d Mithril Bar; compra %d Mithril Ore", c.quantity, Shopping(plan, ORE).quantity)
+end, { state = "scan" })
+
+test("sin Minería, la ruta de Herrería compra las barras", function()
+  SetPrice(ORE, 300)
+  SetPrice(BAR, 1210)
+  local actions = AcquireActions("Blacksmithing", BAR, 40)
+  expect(not Find(actions, "craft", BAR), "funde sin saber Smelt Mithril")
+  expect_eq(Qty(actions, "ah", BAR), 40, "Mithril Bar comprado")
+  local plan = PlanRoute("Blacksmithing", 175, 225)
+  for _, c in ipairs(plan.crafted) do
+    expect(not c.prof, "fabrica %s con otra profesión (%s)", tostring(c.itemID), tostring(c.prof))
+  end
+  expect(not Shopping(plan, ORE), "la compra pide Mithril Ore")
+  for id in pairs(plan.prepLearn or {}) do expect(not ES.Data.Mining.recipes[id], "propone aprender %d de Minería", id) end
+end, { state = "scan" })
+
+test("si la barra sale más barata que el mineral, la compra hecha", function()
+  SetPrice(ORE, 1300)
+  SetPrice(BAR, 1210)
+  Know({ SMELT })
+  local actions = AcquireActions("Blacksmithing", BAR, 40)
+  expect(not Find(actions, "craft", BAR), "funde aunque la barra sale más barata")
+  expect_eq(Qty(actions, "ah", BAR), 40, "Mithril Bar comprado")
+  -- (y si ahorra menos de lo que se pide a un intermedio por fabricación, tampoco)
+  SetPrice(ORE, 1208)
+  expect(not Find(AcquireActions("Blacksmithing", BAR, 40), "craft", BAR), "funde por 2 cobres de ahorro por barra")
+end, { state = "scan" })
+
+test("un minero que no sabe Smelt Thorium compra Thorium Bar", function()
+  SetPrice(10620, 100) -- Thorium Ore, muy barato
+  SetPrice(ORE, 300)
+  Know({ SMELT })
+  local actions = AcquireActions("Blacksmithing", THORIUM_BAR, 20, 250, 300)
+  expect(not Find(actions, "craft", THORIUM_BAR), "funde Thorium sin saber Smelt Thorium")
+  expect_eq(Qty(actions, "ah", THORIUM_BAR), 20, "Thorium Bar comprado")
+  Know({ SMELT_THORIUM })
+  expect(Find(AcquireActions("Blacksmithing", THORIUM_BAR, 20, 250, 300), "craft", THORIUM_BAR), "sabiendo Smelt Thorium no funde")
+end, { state = "scan" })
+
+test("un peletero que sube Ingeniería hace el Heavy Leather con su receta de Peletería", function()
+  local HEAVY = 4234
+  local rid
+  for id, r in pairs(ES.Data.Leatherworking.recipes) do
+    if r.out and r.out[1] == HEAVY and not r.conversion and (not rid or id < rid) then rid = id end
+  end
+  expect(rid, "no hay receta de Heavy Leather en Peletería")
+  local uses = false
+  for _, r in pairs(ES.Data.Engineering.recipes) do
+    for _, rq in ipairs(r.r) do if rq[1] == HEAVY then uses = true end end
+  end
+  expect(uses, "Ingeniería no usa Heavy Leather: la prueba no prueba nada")
+  SKILLS[ES.Data.Leatherworking.skillLine] = { 150, 225 }
+  SetPrice(HEAVY, 5000)
+  for _, rq in ipairs(ES.Data.Leatherworking.recipes[rid].r) do SetPrice(rq[1], 20) end
+  local actions = AcquireActions("Engineering", HEAVY, 10)
+  expect(not Find(actions, "craft", HEAVY), "fabrica Heavy Leather sin saber la receta")
+  Know({ rid })
+  actions = AcquireActions("Engineering", HEAVY, 10)
+  local craft = expect(Find(actions, "craft", HEAVY), "sabiendo la receta de Peletería no fabrica Heavy Leather")
+  expect_eq(craft.prof, "Leatherworking", "profesión de la receta")
+end, { state = "scan" })
+
+test("Transmute: Arcanite no se usa si Arcanite Bar está en la AH", function()
+  local ARCANITE, TRANSMUTE = 12360, 17187
+  expect(ES.Data.Alchemy.recipes[TRANSMUTE], "no está Transmute: Arcanite en los datos")
+  SKILLS[ES.Data.Alchemy.skillLine] = { 275, 300 }
+  SetPrice(ARCANITE, 90000)
+  for _, rq in ipairs(ES.Data.Alchemy.recipes[TRANSMUTE].r) do SetPrice(rq[1], 10) end
+  Know({ TRANSMUTE })
+  expect(ES:ForeignProducers("Blacksmithing").producers[ARCANITE], "Transmute: Arcanite no está en el índice: la prueba no prueba nada")
+  local actions = AcquireActions("Blacksmithing", ARCANITE, 5, 275, 300)
+  expect(not Find(actions, "craft", ARCANITE), "transmuta aunque Arcanite Bar está en la AH")
+  expect_eq(Qty(actions, "ah", ARCANITE), 5, "Arcanite Bar comprado")
+end, { state = "scan" })
+
+test("con «usar lo de las bolsas», cuentan las barras y el mineral que llevas", function()
+  SetPrice(ORE, 300)
+  SetPrice(BAR, 1210)
+  Know({ SMELT })
+  ES.db.prof = ES.db.prof or {}
+  ES.db.prof.Blacksmithing = { useBags = true }
+  BAGS[BAR] = 17
+  local only = AcquireActions("Blacksmithing", BAR, 312)
+  expect_eq(Qty(only, "owned", BAR), 17, "barras de las bolsas")
+  BAGS[ORE] = 76
+  expect_eq(ES:PlanOptions("Blacksmithing", 175, 225).owned[ORE], 76, "mineral de las bolsas en la ruta")
+  local both = AcquireActions("Blacksmithing", BAR, 312)
+  expect_eq(Qty(both, "owned", BAR), 17, "barras de las bolsas")
+  expect_eq(Qty(both, "owned", ORE), 76, "mineral de las bolsas")
+  expect_eq(Qty(both, "ah", ORE) + Qty(both, "ah", BAR), 312 - 17 - 76, "lo que se compra")
+  expect_eq(Qty(only, "ah", ORE) - Qty(both, "ah", ORE), 76, "mineral comprado de menos con el de las bolsas")
+  -- Y la ruta tiene el mineral entre sus objetos (su cambio la invalida)
+  local plan = PlanRoute("Blacksmithing", 175, 225)
+  expect(Crafted(plan, BAR), "la ruta no funde: la prueba no prueba nada")
+  expect(ES.RouteItems(plan)[ORE], "Mithril Ore no está entre los objetos de la ruta")
+end, { state = "scan" })
+
+test("clave estable: aprender Smelt Thorium cambia la de Herrería y no la de Sastrería", function()
+  SKILLS[ES.Data.Blacksmithing.skillLine] = { 250, 300 }
+  local function K(prof) return ES:StableRouteKey(prof, 250, 300, 300) end
+  local bs, tail = K("Blacksmithing"), K("Tailoring")
+  ES:InvalidatePlan("Tailoring")
+  local tailGen = ES.planGens.Tailoring
+  Know({ SMELT_THORIUM })
+  expect(K("Blacksmithing") ~= bs, "aprender Smelt Thorium no cambia la clave de Herrería")
+  expect_eq(K("Tailoring"), tail, "clave de Sastrería")
+  expect_eq(ES.planGens.Tailoring, tailGen, "aprender Smelt Thorium rehace la ruta de Sastrería")
+  -- Entre sesiones: la guardada no se reutiliza
+  Know({ SMELT_THORIUM }, false)
+  expect_eq(K("Blacksmithing"), bs, "sin Smelt Thorium otra vez")
+end, { state = "scan" })
+
+test("ruta que funde: minar más mineral la invalida y la guardada se rehace con las mismas filas", function()
+  SetPrice(ORE, 300)
+  SetPrice(BAR, 1210)
+  Know({ SMELT })
+  ES.db.prof = ES.db.prof or {}
+  ES.db.prof.Blacksmithing = { useBags = true }
+  BAGS[ORE] = 20
+  local _, plan, cap = PageRoute("Blacksmithing", 175, 225)
+  local c = expect(Crafted(plan, BAR), "la ruta de la página no funde: la prueba no prueba nada")
+  local saved = expect(ES.db.prof.Blacksmithing.lastRoute, "no se guardó la ruta")
+  expect_eq(saved.bags and saved.bags[ORE], 20, "mineral apuntado con la ruta")
+  -- Rehecha tras recargar: las mismas filas de fundir
+  Reload()
+  local again = expect(ES:CachedPlan("Blacksmithing", plan.from, plan.to, cap), "tras recargar no se usa la ruta guardada")
+  local c2 = expect(Crafted(again, BAR), "rehecha, la ruta no funde")
+  expect_eq(c2.quantity, c.quantity, "barras que funde la ruta rehecha")
+  expect_eq(c2.prof, "Mining", "profesión de la fila rehecha")
+  -- Minar más mineral: ya no vale
+  BAGS[ORE] = 35
+  expect(not ES.RouteBagsMatch(saved.bags), "con más mineral la ruta sigue valiendo")
+  Reload()
+  expect(ES:CachedPlan("Blacksmithing", plan.from, plan.to, cap) == nil, "con más mineral se reutiliza la ruta guardada")
+end, { state = "scan" })
+
+-- Lo que cuesta calcular la ruta de un minero que sube Herrería sabiendo todas las
+-- fundiciones, con todos los minerales en la AH (como las rutas de 1 a 300)
+test("ruta de 1 a 300: Blacksmithing de un minero", function()
+  local scan = ES.db.scans[ES:RealmKey()]
+  local ids = {}
+  for id, r in pairs(ES.Data.Mining.recipes) do
+    ids[#ids + 1] = id
+    for _, rq in ipairs(r.r) do
+      if not scan.items[rq[1]] then SetPrice(rq[1], Fixtures.Price(rq[1]), 20 + (rq[1] % 7) * 10) end
+    end
+  end
+  Know(ids)
+  expect(next(ES:ForeignProducers("Blacksmithing").producers), "Herrería sin recetas de Minería: la prueba no prueba nada")
+  local ticks = 0
+  local passes0, cpu0 = ES.Planner.passes, os.clock()
+  debug.sethook(function() ticks = ticks + 1 end, "", 1000)
+  local ok, plan = pcall(PlanRoute, "Blacksmithing", 1, 300)
+  debug.sethook()
+  if not ok then error(plan, 0) end
+  local passes, cpu = ES.Planner.passes - passes0, os.clock() - cpu0
+  budget("pasadas 1-300 Blacksmithing de un minero", passes, 0.15, 5)
+  budget("millones de instrucciones 1-300 Blacksmithing de un minero", math.floor(ticks / 100 + 0.5) / 10, 0.15, 2)
+  note("%.1f s de CPU (solo informativo)", cpu)
+  local bad = RouteProblems("Blacksmithing", plan, 1, 300)
+  expect(#bad == 0, "ruta:\n    %s", table.concat(bad, "\n    "))
+  local smelts = {}
+  for _, c in ipairs(plan.crafted) do
+    if c.prof then smelts[#smelts + 1] = string.format("%d× %s", c.quantity, ES:DataItemName(c.itemID) or c.itemID) end
+  end
+  table.sort(smelts)
+  expect(#smelts > 0, "la ruta de un minero no funde nada")
+  note("%d pasos, total %.0f cobre; funde %s", #plan.steps, plan.net, table.concat(smelts, ", "))
+end, { state = "scan" })
+
+-- La fila de fundir en la vista Ruta (y en el asistente, que usa las mismas filas)
+local function SmeltLine(page)
+  for _, l in ipairs(page.lines or {}) do
+    if l.item == BAR and l.craftProf then return l end
+  end
+end
+
+test("la fila de fundir dice que es con Minería, abre Smelt Mithril y su X hace comprar las barras", function()
+  SetPrice(ORE, 300)
+  SetPrice(BAR, 1210)
+  Know({ SMELT })
+  local page = PageRoute("Blacksmithing", 175, 225)
+  local line = expect(SmeltLine(page), "no hay fila de fundir Mithril Bar en la vista Ruta")
+  expect_eq(line.craftProf, "Mining", "profesión de la fila")
+  expect(tostring(line.title):find(ES:ProfLabel("Mining"), 1, true), "la fila no dice que es con Minería: «%s»", tostring(line.title))
+  -- Pasar el ratón y pulsarla, sin errores; el clic abre Smelt Mithril
+  no_error(line.tooltip, CreateFrame("Frame"))
+  local opened
+  local open, craft = ES.OpenRecipe, ES.CraftRecipe
+  ES.OpenRecipe = function(_, id) opened = id return true end
+  ES.CraftRecipe = function(_, id) opened = id end
+  BAGS[ORE] = 5
+  expect_eq(ES.CraftableFromBags(SMELT), 5, "fundiciones que salen del mineral de las bolsas")
+  no_error(line.onClick)
+  ES.OpenRecipe, ES.CraftRecipe = open, craft
+  expect_eq(opened, SMELT, "receta que abre el clic")
+  -- El asistente lee las mismas filas (las de la ruta empezada)
+  ES:StartRoute(page)
+  RunTimers()
+  local inAssistant
+  for _, l in ipairs(ES:RouteLines("Blacksmithing") or {}) do
+    if l.item == BAR and l.craftProf == "Mining" then inAssistant = l end
+  end
+  expect(inAssistant, "las filas del asistente no tienen la de fundir")
+  expect(tostring(inAssistant.bannerTitle or inAssistant.title):find(ES:ProfLabel("Mining"), 1, true),
+    "en el asistente la fila no dice que es con Minería")
+  -- X: no fundir, comprar las barras
+  line = expect(SmeltLine(page), "con la ruta empezada no hay fila de fundir")
+  expect(line.onSkip, "la fila de fundir no tiene X")
+  line.onSkip()
+  RunTimers()
+  expect(ES.db.prof.Blacksmithing.noCraft[BAR], "la X no apunta Mithril Bar en noCraft")
+  local plan = expect(page.plan, "sin ruta tras la X")
+  expect(not Crafted(plan, BAR), "tras la X la ruta sigue fundiendo")
+  expect(not Shopping(plan, ORE), "tras la X la compra sigue pidiendo Mithril Ore")
+  -- (sin fundir, la ruta puede dejar las recetas de Mithril: las que pidan barras, las compra)
+  local actions = AcquireActions("Blacksmithing", BAR, 40)
+  expect_eq(Qty(actions, "ah", BAR), 40, "tras la X, Mithril Bar comprado")
+  expect(not Find(actions, "craft", BAR), "tras la X se sigue fundiendo")
+end, { state = "scan" })
+

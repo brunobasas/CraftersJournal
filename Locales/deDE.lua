@@ -1382,4 +1382,6 @@ ES.Locales.de = {
   ["Con Auctionator: el escaneo lo hace Auctionator (así guarda su historial de precios) y el addon lee esos mismos datos para todas las pestañas."] = "Mit Auctionator: Auctionator führt den Scan aus (so speichert es seine Preishistorie) und das Addon liest dieselben Daten für alle Reiter.",
   ["Precios del historial de Auctionator: se ponen al día cada vez que escaneas."] = "Preise aus der Auctionator-Historie: sie aktualisieren sich bei jedem Scan.",
   ["Mayús+clic: buscarlo en la AH"] = "Umschalt+Klick: im AH suchen",
+  ["Minería"] = "Bergbau",
+  ["con %s"] = "mit %s",
 }

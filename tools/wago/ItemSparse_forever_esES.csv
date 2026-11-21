@@ -123,8 +123,11 @@ ID,Name
 2700,Receta: costillas de cerdo suculentas
 2701,Receta: kebab de lobo salpimentado
 2723,Botella de Dalaran Noir
+2770,Mineral de cobre
+2771,Mineral de estaño
 2772,Hierro
 2775,Mineral de plata
+2776,Mineral de oro
 2835,Piedra basta
 2836,Piedra burda
 2838,Piedra pesada
@@ -220,6 +223,7 @@ ID,Name
 3530,Venda de lana
 3531,Venda de lana pesada
 3575,Lingote de hierro
+3576,Lingote de estaño
 3577,Lingote de oro
 3608,Diseño: martillo de hierro poderoso
 3609,Diseño: jubón de anillas de cobre
@@ -286,6 +290,7 @@ ID,Name
 3854,Hoja tigre de Escarcha
 3855,Hacha de hierro macizo
 3856,Hacha creciente de las Sombras
+3857,Carbón
 3858,Mineral de mitril
 3859,Lingote de acero
 3860,Lingote de mitril
@@ -795,6 +800,7 @@ ID,Name
 7742,Esquema: aparato de invisibilidad gnómico
 7909,Aguamarina
 7910,Rubí estrella
+7911,Veraplata
 7912,Piedra sólida
 7913,Sobrehombros barbáricos de hierro
 7914,Coraza barbárica de hierro
@@ -1183,6 +1189,7 @@ ID,Name
 11287,Varita mágica inferior
 11289,Varita mística inferior
 11291,Madera de estrella
+11370,Hierro Negro
 11371,Lingote Hierro Negro
 11382,Sangre de la Montaña
 11590,Equipo de reparación mecánico
@@ -1824,6 +1831,7 @@ ID,Name
 17723,Camisa festiva verde
 17724,Patrón: camisa de vacaciones verde
 17725,Fórmula: encantar arma: poderío del invierno
+17771,Barra de elementium
 17967,Escama refinada de Onyxia
 18045,Chuleta de lobo tierno
 18046,Receta: chuleta de lobo tierno
@@ -1880,6 +1888,7 @@ ID,Name
 18517,Patrón: capa cromática
 18518,Patrón: pellejo de las fieras
 18519,Patrón: capa ondeante
+18562,Mena de elementium
 18567,Flujo elemental
 18587,Pinzas de batería goblin XL
 18588,Dinamita EZ-Thro 2
@@ -2434,6 +2443,7 @@ ID,Name
 247786,Mota de magia
 247789,Varita de prácticas de novicio
 249866,Té regio
+248815,Mena de torio pesado
 248819,Cristal vil
 248820,Torbernita
 248821,Salvia demoníaca
@@ -3734,6 +3744,7 @@ ID,Name
 273087,Plano: hoguera de oficial
 273092,Plano: robot de reparaciones
 273096,Plano: bastidor para pieles
+273097,Plano: jardín de piedra
 273099,Plano: rueca
 273101,Plano: hoguera de experto
 273102,Plano: festín de Cocinitas
@@ -3747,6 +3758,7 @@ ID,Name
 273118,Plano: laboratorio de doctor de peste
 273119,Plano: cabaña de pesca
 273121,Plano: máquina de costura
+273122,Plano: fundición de magma
 273124,Plano: telar
 273125,Dedo índice de exánime
 273127,Corazón de gólem
@@ -4103,13 +4115,16 @@ ID,Name
 279943,Rueca
 279944,Rueda de afilar
 279945,Máquina de costura
+279948,Jardín de piedra
 279949,Robot de reparaciones
 279950,Robot de componentes
 279951,Laboratorio de doctor de peste
+279952,Fundición de magma
 279955,Forja de maestro
 279956,Pozo de maná
 279957,Festín de Cocinitas
 279959,Telar
+279960,Magnetita
 279961,Equipo de hoguera de oficial
 279965,Expositor de pesca
 279966,Cabaña de pesca

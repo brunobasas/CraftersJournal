@@ -24,6 +24,7 @@ Data\Alchemy.lua
 Data\Engineering.lua
 Data\Cooking.lua
 Data\FirstAid.lua
+Data\Mining.lua
 Data\Sources.lua
 Data\MatVendors.lua
 Data\Crates.lua

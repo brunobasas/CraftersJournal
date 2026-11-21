@@ -29,7 +29,9 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-PROFS = ["Leatherworking", "Enchanting", "Tailoring", "Blacksmithing", "Alchemy", "Engineering", "Cooking", "FirstAid"]
+# (Mining: solo su fundición, Data/Mining.lua; no es una profesión del addon)
+PROFS = ["Leatherworking", "Enchanting", "Tailoring", "Blacksmithing", "Alchemy", "Engineering", "Cooking", "FirstAid",
+         "Mining"]
 TESTS = ["test_ui.py", "iterate.py", "pilot_cooking.py"]
 
 

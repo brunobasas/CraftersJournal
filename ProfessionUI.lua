@@ -285,15 +285,20 @@ function ES:PlanOptions(profKey, from, to, cap)
     via = via or {}
     via[itemID] = "buy"
   end
+  -- Recetas que sabes de otras profesiones (fundir el mineral para Herrería): la ruta las
+  -- usa como preparación, y con "usar lo de las bolsas" cuenta también sus materiales
+  local foreign = self:ForeignProducers(profKey)
+  if not next(foreign.producers) then foreign = nil end
   return {
     via = via,
+    foreignProducers = foreign,
     -- La última ruta calculada de esta profesión: el GPS la prueba primero (ver PlanGPS).
     -- Tras recargar, la guardada (settings.lastRoute), aunque ya no valga tal cual
     hint = self.lastRoutes[profKey] or self:SavedRouteHint(profKey),
     from = from, to = to, cap = cap,
     hours = 24,
     neutral = self:IsNeutralAH(),
-    owned = settings.useBags and self:GetOwnedReagents(ES.Data[profKey]) or nil,
+    owned = settings.useBags and self:GetOwnedReagents(ES.Data[profKey], foreign) or nil,
     ignoreSupply = true, -- no se mira cuántos hay a la venta: el plan no se para por existencias
     includeScrolls = false, -- recetas de pergamino/drop: pendiente para una versión futura
     reuseCrafted = true,
@@ -547,7 +552,9 @@ function ES:StableRouteKey(profKey, from, to, cap)
     tostring(settings.fewerCrafts), tostring(self.Planner.SKILL_BONUS or 0), -- (Working Overtime)
     tostring(settings.noLimited or false), self:KnownStamp(profKey), trainer,
     self.RepStamp and self:RepStamp() or "", tostring(self.AddonVersion and self.AddonVersion()), RecipeCount(profKey),
-    self.SpecStamp and self:SpecStamp() or "" }, ":")
+    self.SpecStamp and self:SpecStamp() or "",
+    -- (recetas sabidas de otras profesiones que fabrican lo que usa: aprender Smelt Thorium)
+    self:ForeignProducers(profKey).stamp }, ":")
 end
 function ES:PlanKey(profKey, from, to, cap, stable)
   return (stable or self:StableRouteKey(profKey, from, to, cap)) .. ":" .. self.planGen .. "." .. (self.planGens[profKey] or 0)
@@ -2415,11 +2422,7 @@ local openedNotice -- receta de la que ya se avisó "pulsa otra vez" (una vez, s
 -- que pide una fabricación más). Lo que vende un vendedor también limita (hay que
 -- comprarlo antes). nil si la receta no está en los datos
 local function CraftableFromBags(recipeID)
-  local r
-  for _, p in ipairs(ES.PROFESSIONS or {}) do
-    local data = ES.Data[p.key]
-    if data and data.recipes and data.recipes[recipeID] then r = data.recipes[recipeID] break end
-  end
+  local r = ES:RecipeByID(recipeID) -- (también las de la fundición de Minería)
   if not (r and r.r) then return nil end
   -- Sin la herramienta que pide (Arclight Spanner) no se fabrica ni una
   local tool = ES.Planner.MissingTool(r)
@@ -2506,10 +2509,8 @@ function ES:CraftRecipe(recipeID, count)
       -- recetas parecidas (Linen Bag y Linen Belt) no se veía el error hasta el "Creas"
       local name = type(info) == "table" and info.name
       if not name then
-        for _, p in ipairs(ES.PROFESSIONS or {}) do
-          local r = ES.Data[p.key] and ES.Data[p.key].recipes and ES.Data[p.key].recipes[recipeID]
-          if r then name = (r.out and ES:DataItemName(r.out[1])) or r.name break end
-        end
+        local r = ES:RecipeByID(recipeID)
+        if r then name = (r.out and ES:DataItemName(r.out[1])) or r.name end
       end
       name = name or ("#" .. recipeID)
       if count < wanted then
@@ -3559,7 +3560,7 @@ local function RouteLines(plan, page, opts)
       -- principio). Si ya no hace falta, no sale
       -- quantity: lo que tienes que llevar de él (lo fabricado más lo que la ruta saca de
       -- tus bolsas); abajo se le resta lo que llevas
-      local c = { itemID = c0.itemID, recipe = c0.recipe, from = c0.from, quantity = ES.Planner.CraftedTotal(c0) }
+      local c = { itemID = c0.itemID, recipe = c0.recipe, from = c0.from, prof = c0.prof, quantity = ES.Planner.CraftedTotal(c0) }
       if locked and (page.from or 0) > (plan.from or 0) then
         local rem = ES.Planner.CraftedNeedFrom(plan, c0.itemID, page.from, true)
         if rem then c.quantity = math.min(c.quantity, math.ceil(rem - 0.001)) end
@@ -3582,7 +3583,8 @@ local function RouteLines(plan, page, opts)
       local craftNow = not conversion and recipeID and crafts > 0 and ES:IsRecipeKnown(recipeID)
       -- Se empieza a fabricar más tarde que el paso (cuando ya no da puntos: la pólvora
       -- a partir de 40): su fila va después del paso, con ese nivel (la ruta va en orden)
-      local later = c.from and c.from > st.from and not conversion and c.from or nil
+      -- (una de otra profesión no sube puntos de esta: nunca "más tarde")
+      local later = c.from and c.from > st.from and not conversion and not c.prof and c.from or nil
       local current, prepLater
       if later then
         current = locked and not rankPending and (page.from or 0) >= later and (page.from or 0) < st.to and missing > 0
@@ -3657,12 +3659,17 @@ local function RouteLines(plan, page, opts)
         sub = at .. " · " .. sub
         if bannerSub then bannerSub = at .. " · " .. bannerSub end
       end
+      -- Con una receta de otra profesión (Smelt Mithril): de cuál es, en la fila y en el
+      -- asistente. Abre la receta en la ventana de esa profesión (ES:OpenRecipe)
+      if c.prof then
+        title = title .. " " .. GREY .. "(" .. string.format(L["con %s"], ES:ProfLabel(c.prof)) .. ")|r"
+      end
       local line = {
         level = tostring(later or st.from),
         icon = texture or 134400,
         title = title,
         sub = sub, bannerSub = bannerSub,
-        item = c.itemID, current = current,
+        item = c.itemID, current = current, craftProf = c.prof,
         stepRecipe = not conversion and recipeID or nil,
         craftCount = craftNow and crafts or nil, -- (para pruebas)
         onClick = not conversion and recipeID and function()

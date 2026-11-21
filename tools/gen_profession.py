@@ -65,6 +65,11 @@ ALSO_GATHERED = {2318: 393, 2319: 393, 4234: 393, 4304: 393, 8170: 393, 8150: 18
 
 ALL_PROFS = list(SKILL_LINES)
 
+# Minería: no es una profesión del addon (sin página ni ruta). Solo se genera su
+# fundición (Data/Mining.lua) para que la ruta de otra profesión pueda fundir el
+# mineral en vez de comprar las barras, si el personaje sabe la receta
+MINING_LINE = 186
+
 # Instructores (QuestieDB). En Forever cada rango tiene sus instructores, y su
 # subtítulo dice el rango SIGUIENTE al que enseña (comprobado con las guías de
 # Mobalytics: 61 de 61): "Journeyman Tailor" enseña Aprendiz, "Expert" Oficial,
@@ -249,7 +254,7 @@ def load_common():
     sla = {}
     for r in rows("SkillLineAbility_forever"):
         line = int(r["SkillLine"])
-        if line in SKILL_LINES.values():
+        if line in SKILL_LINES.values() or line == MINING_LINE:
             sla.setdefault(line, {})[int(r["Spell"])] = r
     era = defaultdict(dict)
     for r in rows("SkillLineAbility_era"):
@@ -482,8 +487,83 @@ def vendor_items(candidates, item_class):
     return out
 
 
+def lua_name(s):
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def main_mining():
+    """Data/Mining.lua: la fundición de Minería. Las recetas de la ventana de Minería
+    (TradeSkillCategoryID distinto de 0) que fabrican algo que usa como material alguna
+    receta de las profesiones del addon (o de la propia fundición: Iron Bar para Steel).
+    Fuera las de campamento (Lodestone, Rock Garden...), que no son materiales. Sin
+    instructores ni pergaminos: la ruta solo usa las que el personaje ya sabe"""
+    c = load_common()
+    sla = c["sla"][MINING_LINE]
+    used = set()
+    for line in list(SKILL_LINES.values()) + [MINING_LINE]:
+        for spell in c["sla"][line]:
+            used.update(i for i, _ in c["reagents"].get(spell, []))
+    recipes = {}
+    for spell, r in sla.items():
+        if r.get("TradeSkillCategoryID", "") == "0" or spell not in c["creates"] or not c["reagents"].get(spell):
+            continue
+        if any(i not in c["item_info"] for i, _ in c["reagents"][spell]):
+            continue
+        item, qty = c["creates"][spell]
+        if item not in used:
+            continue
+        low, high = int(r["TrivialSkillLineRankLow"]), int(r["TrivialSkillLineRankHigh"])
+        recipes[spell] = (c["reagents"][spell], (item, qty), (int(r["MinSkillLineRank"]), low, (low + high) // 2, high))
+
+    def num(x):
+        return str(int(x)) if float(x).is_integer() else repr(x)
+
+    item_info = c["item_info"]
+    items = set()
+    for reagents, output, _ in recipes.values():
+        items.update(i for i, _ in reagents)
+        items.add(output[0])
+    sell = {i: info[2] for i, info in item_info.items() if info[2] > 0}
+    with open(FOREVER_SELL, encoding="utf-8") as f:
+        for r in csv.DictReader(line for line in f if not line.startswith("#")):
+            sell[int(r["item"])] = int(r["sell"])
+    out = [
+        "-- Generado por tools/gen_profession.py (Mining). No editar a mano.",
+        "-- Datos: cliente de WoW Forever (wago.tools DB2).",
+        "-- Solo la fundición: Minería no es una profesión del addon (no tiene página ni ruta). La",
+        "-- ruta de otra profesión funde con estas recetas si el personaje las sabe (Planner, ForeignProducers).",
+        "-- t = { naranja, amarilla, verde, gris }; r = { {itemID, cantidad} }; out = { itemID, cantidad }",
+        "local _, ES = ...",
+        "ES.Data = ES.Data or {}",
+        "ES.Data.Mining = {",
+        f"  skillLine = {MINING_LINE},",
+        "  recipes = {",
+    ]
+    for sid in sorted(recipes, key=lambda s: (recipes[s][2][1], s)):
+        reagents, output, t = recipes[sid]
+        name = lua_name(c["names"].get(sid, str(sid)))
+        out.append(f'    [{sid}] = {{ name = "{name}", t = {{ %d, %d, %d, %d }}, ' % t
+                   + "r = { " + ", ".join("{ %d, %d }" % rq for rq in reagents) + " }, "
+                   + f"out = {{ {output[0]}, {num(output[1])} }}, oq = {c['item_quality'].get(output[0], 1)} }},")
+    out += ["  },", "}", "", "ES.Data.SellPrices = ES.Data.SellPrices or {}"]
+    for i in sorted(items):
+        if i in sell:
+            out.append(f"ES.Data.SellPrices[{i}] = {sell[i]}")
+    out += ["", "ES.Data.ItemNames = ES.Data.ItemNames or {}"]
+    for i in sorted(items):
+        if i in item_info and item_info[i][0]:
+            out.append(f'ES.Data.ItemNames[{i}] = "{lua_name(item_info[i][0])}"')
+    out.append("")
+    dest = ADDON / "Data" / "Mining.lua"
+    dest.write_text("\n".join(out), encoding="utf-8")
+    print(f"{dest}: {len(recipes)} recetas de fundición: "
+          + ", ".join(c["names"].get(s, str(s)) for s in sorted(recipes)))
+
+
 def main():
     prof = sys.argv[1] if len(sys.argv) > 1 else "Leatherworking"
+    if prof == "Mining":
+        return main_mining()
     skill_line = SKILL_LINES[prof]
     c = load_common()
     sla = c["sla"][skill_line]

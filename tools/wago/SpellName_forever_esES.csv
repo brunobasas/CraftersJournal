@@ -52,6 +52,12 @@ ID,Name
 2548,Costillas de cerdo suculentas
 2549,Kebab de lobo sazonado
 2550,Cocina
+2575,Minería
+2580,Buscar minerales
+2656,Fundir
+2657,Cobre fundido
+2658,Palata fundida
+2659,Bronce fundido
 2660,Piedra de afilar férrea
 2661,Cinturón anillado de cobre
 2662,Pantalones anillados de cobre
@@ -100,6 +106,9 @@ ID,Name
 3295,Puñal mortal de bronce
 3296,Maza pesada de bronce
 3297,Martillo de hierro poderoso
+3304,Chapa fundida
+3307,Hierro fundido
+3308,Oro fundido
 3319,Botas anilladas de cobre
 3320,Piedra de pulir férrea
 3321,Jubón anillado de cobre
@@ -150,6 +159,7 @@ ID,Name
 3511,Coraza de escamas doradas
 3513,Botas de acero lustrosas
 3515,Botas de escamas doradas
+3569,Acero fundido
 3753,Cinturón de cuero cosido a mano
 3755,Bolsa de lino
 3756,Guantes de cuero estampado
@@ -486,6 +496,8 @@ ID,Name
 10009,Martillo de mitril rúnico
 10013,Chafarote de ébano
 10015,Campeón de veraplata
+10097,Mitril fundido
+10098,Veraplata fundida
 10482,Pellejo curado grueso
 10490,Sombrero de cuero cómodo
 10499,Túnica Nochefugaz
@@ -716,6 +728,7 @@ ID,Name
 14807,Varita mágica superior
 14809,Varita mística inferior
 14810,Varita mística superior
+14891,Hierro negro fundido
 14930,Carcaj rápido
 14932,Faltriquera para munición de cuero grueso
 15255,Juego de reparación mecánico
@@ -740,6 +753,7 @@ ID,Name
 15935,Ala crocante de murciélago
 15972,Daga de acero destellante
 15973,Espada dorada punzante
+16153,Torio fundido
 16639,Piedra de pulir densa
 16640,Piedrafuerte densa
 16641,Piedra de afilar densa
@@ -1036,6 +1050,7 @@ ID,Name
 22926,Capa cromática
 22927,Pellejo de lo salvaje
 22928,Capa cambiante
+22967,Elementium fundido
 23069,Dinamita EZ-Thro II
 23071,Transformador de veraplata
 23077,Reflector de hielo girocongelador
@@ -1343,6 +1358,7 @@ ID,Name
 1213628,Libro de plegarias encantado
 1213633,Tótem encantado
 1213635,Seta encantada
+1213638,Fundir lingote de torio imbuido de obsidiana
 1213643,Piedra de pulir de obsidiana
 1213646,Pólvora de obsidiana
 1213709,Cinturón parraférrea
@@ -1436,6 +1452,7 @@ ID,Name
 1229504,Estandarte de facción
 1229745,Cuenco con pescado
 1230117,Equipo de primeros auxilios
+1230161,Magnetita
 1230171,Rueda de afilar
 1230564,Pozo de maná
 1230643,Laúd encantado
@@ -1511,6 +1528,7 @@ ID,Name
 1249632,Tinte viridiano
 1249633,Ácido sulfúrico
 1249634,Papel de lija
+1249637,Azerothium fundido
 1249957,Té de paz
 1249958,Té regio
 1249959,Té de raíz
@@ -2031,6 +2049,7 @@ ID,Name
 1257493,Caperuza Telafantasma
 1257494,Corona de tejido terráneo
 1257495,Bolsa de componentes sin fondo
+1262975,Jardín de piedra
 1262978,Festín de Cocinitas
 1262990,Expositor de pesca
 1262996,Estudio sobre toxinas
@@ -2042,6 +2061,7 @@ ID,Name
 1263034,Robot de reparaciones
 1263056,Recuperador Arcano
 1263067,Horno de hierro
+1263071,Fundición de magma
 1263073,Forja de maestro
 1263078,Laboratorio de alquimia
 1263079,Máquina de costura
@@ -2268,6 +2288,7 @@ ID,Name
 1301541,Cubrehombros azures cosidos por la tormenta
 1302598,Botas de anillas de cobre toscas
 1302604,Bolsa de componentes de cuero ligero
+1306126,Fundir torio pesado
 1306520,Antorcha de luz
 1306521,Tratado sobre firmeza
 1306522,Tratado sobre infusión
@@ -2369,6 +2390,18 @@ ID,Name
 1240956,Cocina
 1240967,Cocina
 1240980,Cocina
+2576,Minería
+2577,Minería
+2578,Minería
+2579,Minería
+3564,Minería
+10248,Minería
+1235230,Minería
+1240951,Minería
+1240962,Minería
+1240973,Minería
+1240986,Minería
+8388,Buscar minerales
 3780,Complemento pesado para armadura
 3451,Elixir de sangre de trol
 439128,Espada ancha de acero lunar

@@ -1069,6 +1069,7 @@ end
 -- (también la Calculadora: el coste de los materiales de la AH, subiendo por la escalera)
 Planner.Ladder, Planner.LadderSupply, Planner.LadderCost = Ladder, LadderSupply, LadderCost
 
+local NONE = {} -- (tabla vacía compartida: no se escribe en ella)
 local function NewContext(data, opts)
   Annotate(data)
   local scan = ES.db.scans[ES:RealmKey()]
@@ -1096,6 +1097,7 @@ local function NewContext(data, opts)
   local shared = opts.shared
   if shared and shared.prices == ctx.prices and shared.to == opts.to then
     ctx.ladders, ctx.supply, ctx.medians, ctx.producers = shared.ladders, shared.supply, shared.medians, shared.producers
+    ctx.foreign, ctx.foreignProf = shared.foreign, shared.foreignProf
   else
     shared = nil
     for itemID, entry in pairs(ctx.prices) do
@@ -1131,9 +1133,29 @@ local function NewContext(data, opts)
         ctx.producers[r.out[1]] = list
       end
     end
+    -- opts.foreignProducers (las rutas: ES:ForeignProducers): recetas que sabes de otras
+    -- profesiones y de la fundición (Smelt Mithril para Herrería). Van detrás de las de
+    -- la profesión y solo como preparación (ver Acquire)
+    local fp = opts.foreignProducers
+    if fp then
+      ctx.foreign, ctx.foreignProf = fp.recipes, fp.prof
+      for itemID, ids in pairs(fp.producers) do
+        local list = ctx.producers[itemID] or {}
+        for _, id in ipairs(ids) do list[#list + 1] = id end
+        ctx.producers[itemID] = list
+      end
+    end
   end
+  ctx.foreign, ctx.foreignProf = ctx.foreign or NONE, ctx.foreignProf or NONE
   return ctx
 end
+
+-- La receta de un id de ctx.producers o de una acción de fabricar: de la profesión o de
+-- otra (ctx.foreign)
+local function CtxRecipe(ctx, rid)
+  return ctx.data.recipes[rid] or ctx.foreign[rid]
+end
+Planner.CtxRecipe = CtxRecipe
 
 local function Copy(t)
   local c = {}
@@ -1272,6 +1294,11 @@ local function Acquire(ctx, itemID, qty, depth, extra, actions, why, skip)
     ctx.visiting[itemID] = true
     for _, rid in ipairs(ctx.producers[itemID]) do
       local r = ctx.data.recipes[rid]
+      -- De otra profesión (Smelt Mithril para Herrería): siempre preparación, como un
+      -- intermedio. Sus colores son de la otra profesión: no se miran contra tu nivel,
+      -- no es un paso (ni ahead) y no bloquea la compra
+      local foreign = not r
+      r = r or ctx.foreign[rid]
       local crafts = qty / r.out[2]
       local subExtra, subActions, total = Copy(extra), {}, 0
       -- Con enfriamiento (Mooncloth, transmutaciones: Planner.Cooldown) no se fabrica lo
@@ -1292,10 +1319,10 @@ local function Acquire(ctx, itemID, qty, depth, extra, actions, why, skip)
       -- mitad de ese paso pediría fabricar algo que sube puntos (los tornillos de las
       -- bombas). Si ya está en gris al empezarlo, se fabrica ahí como preparación, no
       -- todo de golpe en un paso de hace 100 niveles (el Light Leather de las botas)
-      elseif ctx.skill and ctx.made and ctx.made[rid]
+      elseif not foreign and ctx.skill and ctx.made and ctx.made[rid]
         and Planner.Chance(r.t, ctx.stepStart or ctx.skill) > 0 then
         ahead = rid
-      elseif ctx.skill and not r.intermediate and not r.conversion and Planner.Chance(r.t, ctx.skill) > 0 then
+      elseif not foreign and ctx.skill and not r.intermediate and not r.conversion and Planner.Chance(r.t, ctx.skill) > 0 then
         total = nil
         -- Y si la ruta lo fabrica (via "craft"), tampoco se compra mientras tanto: si
         -- no, "compra hasta 40 y fabrica desde 40". Tiene que venir de un paso de la ruta
@@ -1317,7 +1344,8 @@ local function Acquire(ctx, itemID, qty, depth, extra, actions, why, skip)
         or (kind ~= "craft" and (via == "craft" or total + crafts * INTERMEDIATE_CRAFT_COST < best)))
       if better then
         best, kind = total, "craft"
-        craft = { extra = subExtra, actions = subActions, recipe = rid, ahead = ahead == rid }
+        craft = { extra = subExtra, actions = subActions, recipe = rid, ahead = ahead == rid,
+          prof = foreign and ctx.foreignProf[rid] or nil }
       end
     end
     ctx.visiting[itemID] = nil
@@ -1332,7 +1360,8 @@ local function Acquire(ctx, itemID, qty, depth, extra, actions, why, skip)
   if kind == "craft" then
     for k, v in pairs(craft.extra) do extra[k] = v end
     for _, a in ipairs(craft.actions) do actions[#actions + 1] = a end
-    actions[#actions + 1] = { kind = "craft", item = itemID, qty = qty, cost = best, recipe = craft.recipe, ahead = craft.ahead or nil }
+    actions[#actions + 1] = { kind = "craft", item = itemID, qty = qty, cost = best, recipe = craft.recipe, ahead = craft.ahead or nil,
+      prof = craft.prof }
   else
     if kind == "ah" then extra[itemID] = (extra[itemID] or 0) + qty end
     actions[#actions + 1] = { kind = kind, item = itemID, qty = qty, cost = best }
@@ -1346,7 +1375,7 @@ end
 function Planner.CraftUnitCost(ctx, itemID)
   local best, bestRecipe
   for _, rid in ipairs(ctx.producers[itemID] or {}) do
-    local r = ctx.data.recipes[rid]
+    local r = CtxRecipe(ctx, rid)
     local total = 0
     for _, rq in ipairs(r.r) do
       local c = Acquire(ctx, rq[1], rq[2], 1, {}, {}, {}, "all")
@@ -1368,6 +1397,8 @@ end
 -- para Heavy Dynamite, con los mismos umbrales (125/135/145) y que gana dinero vendida
 function Planner.CraftTakesPoints(plan, itemID, recipe)
   if not (recipe and recipe.t) then return nil end
+  -- (una de otra profesión, Smelt Mithril, no da puntos de esta)
+  if plan.ctx and plan.ctx.foreign and plan.ctx.foreign[recipe.id] == recipe then return nil end
   for _, st in ipairs(plan.steps or {}) do
     for _, rg in ipairs(st.reagents or {}) do
       if rg.item == itemID and st.id ~= recipe.id and Planner.Chance(recipe.t, st.from) > 0 then return st end
@@ -1850,7 +1881,7 @@ function Planner.PlanGPS(data, opts)
   local CW = CraftWeight(opts)
   local tpl = NewContext(data, opts)
   opts.shared = { prices = tpl.prices, to = opts.to, ladders = tpl.ladders, supply = tpl.supply,
-    medians = tpl.medians, producers = tpl.producers }
+    medians = tpl.medians, producers = tpl.producers, foreign = tpl.foreign, foreignProf = tpl.foreignProf }
   local RouteScore, scoreMemo = Planner.RouteScore, {}
   local function Score(p) return RouteScore(p, scoreMemo) end
   local best, seen, pool = nil, {}, {}
@@ -2766,7 +2797,7 @@ function Planner:Plan(data, opts)
         aheadQty[a.recipe][best.id] = (aheadQty[a.recipe][best.id] or 0) + a.qty
       elseif a.kind == "craft" then
         -- (from: el nivel en que se empieza a fabricar; antes, si daba puntos, no se podía)
-        craftedQty[a.item] = craftedQty[a.item] or { qty = 0, recipe = a.recipe, from = s }
+        craftedQty[a.item] = craftedQty[a.item] or { qty = 0, recipe = a.recipe, from = s, prof = a.prof }
         craftedQty[a.item].qty = craftedQty[a.item].qty + a.qty
       elseif a.kind == "stock" then
         keptQty[a.item] = (keptQty[a.item] or 0) + a.qty
@@ -2982,8 +3013,9 @@ function Planner:Plan(data, opts)
   -- quantity: las que hay que FABRICAR (lo de tus bolsas ya está descontado); owned:
   -- las que la ruta saca de tus bolsas. Lo que gasta la ruta es la suma (Planner.CraftedTotal)
   for itemID, c in pairs(craftedQty) do
-    plan.crafted[#plan.crafted + 1] = { itemID = itemID, quantity = math.ceil(c.qty - 0.001), recipe = data.recipes[c.recipe], from = c.from,
-      owned = ownedQty[itemID] and math.ceil(ownedQty[itemID] - 0.001) or nil }
+    -- (prof: la receta es de otra profesión, como Smelt Mithril; ver ES:ForeignProducers)
+    plan.crafted[#plan.crafted + 1] = { itemID = itemID, quantity = math.ceil(c.qty - 0.001), recipe = CtxRecipe(ctx, c.recipe), from = c.from,
+      owned = ownedQty[itemID] and math.ceil(ownedQty[itemID] - 0.001) or nil, prof = c.prof }
   end
   -- Recetas de lo que se fabrica por el camino que aún no sabes (Stonescale Oil para
   -- Elixir of Greater Defense: 1g 50s en el instructor). Su precio cuenta en la ruta (y
@@ -3011,7 +3043,8 @@ function Planner:Plan(data, opts)
     for _, st in ipairs(plan.steps) do
       if c.from and st.from < c.from and c.from < st.to and st.reagents[c.itemID] then
         local r = c.recipe
-        if r and not r.intermediate and not r.conversion and Planner.Chance(r.t, st.from) > 0 then
+        -- (una de otra profesión no da puntos de esta: sus colores no cuentan aquí)
+        if r and not c.prof and not r.intermediate and not r.conversion and Planner.Chance(r.t, st.from) > 0 then
           plan.unfollowable = true
         end
         c.from = st.from

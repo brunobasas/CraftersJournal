@@ -123,8 +123,11 @@ ID,Display_lang,BuyPrice,SellPrice,VendorStackCount,MinFactionID,MinReputation,R
 2700,Recipe: Succulent Pork Ribs,400,100,1,0,0,185,110,1,20,0,0,0
 2701,Recipe: Seasoned Wolf Kabob,1600,400,1,0,0,185,100,1,25,0,0,0
 2723,Bottle of Dalaran Noir,50,12,1,0,0,0,0,1,1,0,0,0
+2770,Copper Ore,20,5,1,0,0,0,0,1,10,0,0,0
+2771,Tin Ore,100,25,1,0,0,0,0,1,20,0,0,0
 2772,Iron Ore,600,150,1,0,0,0,0,1,30,0,0,0
 2775,Silver Ore,300,75,1,0,0,0,0,2,10,0,0,0
+2776,Gold Ore,2000,500,1,0,0,0,0,2,25,0,0,0
 2835,Rough Stone,8,2,1,0,0,0,0,1,5,0,0,0
 2836,Coarse Stone,60,15,1,0,0,0,0,1,15,0,0,0
 2838,Heavy Stone,240,60,1,0,0,0,0,1,25,0,0,0
@@ -220,6 +223,7 @@ ID,Display_lang,BuyPrice,SellPrice,VendorStackCount,MinFactionID,MinReputation,R
 3530,Wool Bandage,115,28,1,0,0,2942,50,1,1,0,0,0
 3531,Heavy Wool Bandage,230,57,1,0,0,2942,75,1,1,0,0,0
 3575,Iron Bar,800,200,1,0,0,0,0,1,30,0,0,0
+3576,Tin Bar,140,35,1,0,0,0,0,1,20,0,0,0
 3577,Gold Bar,2400,600,1,0,0,0,0,2,30,0,0,0
 3608,Plans: Mighty Iron Hammer,2000,500,1,0,0,164,120,2,29,0,0,0
 3609,Plans: Copper Chain Vest,100,25,1,0,0,164,30,2,10,0,0,0
@@ -286,6 +290,7 @@ ID,Display_lang,BuyPrice,SellPrice,VendorStackCount,MinFactionID,MinReputation,R
 3854,Frost Tiger Blade,35440,8860,1,0,0,0,0,2,40,17,2,0
 3855,Massive Iron Axe,56243,11248,1,0,0,0,0,2,37,17,2,0
 3856,Shadow Crescent Axe,41544,10386,1,0,0,0,0,2,40,17,2,0
+3857,Coal,500,125,1,0,0,0,0,1,30,0,0,0
 3858,Mithril Ore,1000,250,1,0,0,0,0,1,40,0,0,0
 3859,Steel Bar,240,60,1,0,0,0,0,1,35,0,0,0
 3860,Mithril Bar,1600,400,1,0,0,0,0,1,40,0,0,0
@@ -795,6 +800,7 @@ ID,Display_lang,BuyPrice,SellPrice,VendorStackCount,MinFactionID,MinReputation,R
 7742,Schematic: Gnomish Cloaking Device,2400,600,1,0,0,202,200,1,40,0,1,0
 7909,Aquamarine,4000,1000,1,0,0,0,0,2,45,0,0,0
 7910,Star Ruby,20000,5000,1,0,0,0,0,2,50,0,0,0
+7911,Truesilver Ore,2000,500,1,0,0,0,0,2,40,0,0,0
 7912,Solid Stone,400,100,1,0,0,0,0,1,35,0,0,0
 7913,Barbaric Iron Shoulders,12502,2500,1,0,0,0,0,2,32,3,2,0
 7914,Barbaric Iron Breastplate,16654,3330,1,0,0,0,0,2,32,5,2,0
@@ -1183,6 +1189,7 @@ ID,Display_lang,BuyPrice,SellPrice,VendorStackCount,MinFactionID,MinReputation,R
 11288,Greater Magic Wand,10000,200,1,0,0,0,0,2,23,26,2,0
 11289,Lesser Mystic Wand,17905,450,1,0,0,0,0,2,31,26,2,0
 11291,Star Wood,4500,1125,1,0,0,0,0,1,30,0,0,0
+11370,Dark Iron Ore,2000,500,1,0,0,0,0,1,50,0,0,0
 11371,Dark Iron Bar,2400,600,1,0,0,0,0,1,50,0,0,0
 11382,Blood of the Mountain,3000,750,1,0,0,0,0,2,50,0,0,0
 11590,Mechanical Repair Kit,1000,250,1,0,0,202,200,1,40,0,0,0
@@ -1824,6 +1831,7 @@ ID,Display_lang,BuyPrice,SellPrice,VendorStackCount,MinFactionID,MinReputation,R
 17723,Green Holiday Shirt,3000,750,1,0,0,0,0,1,40,4,0,0
 17724,Pattern: Green Holiday Shirt,1500,375,1,0,0,197,155,1,38,0,0,0
 17725,Formula: Enchant Weapon - Winter's Might,3000,750,1,0,0,333,190,2,38,0,0,0
+17771,Elementium Bar,400000,100000,1,0,0,0,0,5,60,0,0,0
 17967,Refined Scale of Onyxia,20000,5000,1,0,0,0,0,3,60,0,0,0
 18045,Tender Wolf Steak,1200,300,1,0,0,0,0,1,45,0,0,0
 18046,Recipe: Tender Wolf Steak,12000,3000,1,0,0,185,225,1,45,0,0,0
@@ -1880,6 +1888,7 @@ ID,Display_lang,BuyPrice,SellPrice,VendorStackCount,MinFactionID,MinReputation,R
 18517,Pattern: Chromatic Cloak,160000,40000,1,0,0,165,300,4,62,0,0,10656
 18518,Pattern: Hide of the Wild,160000,40000,1,0,0,165,300,4,62,0,0,10660
 18519,Pattern: Shifting Cloak,160000,40000,1,0,0,165,300,4,62,0,0,10658
+18562,Elementium Ore,400000,100000,1,0,0,0,0,4,60,0,0,0
 18567,Elemental Flux,150000,37500,1,0,0,0,0,1,60,0,0,0
 18587,Goblin Jumper Cables XL,8000,2000,1,0,0,202,265,1,53,12,0,0
 18588,Ez-Thro Dynamite II,800,200,1,0,0,0,0,1,40,0,0,0
@@ -2429,6 +2438,7 @@ ID,Display_lang,BuyPrice,SellPrice,VendorStackCount,MinFactionID,MinReputation,R
 247755,Elixir of Minor Force,125,25,1,0,0,0,0,1,5,0,0,0
 247786,Mote of Magic,10,1,1,0,0,0,0,1,5,0,0,0
 247789,Novice's Practice Wand,237,5,1,0,0,0,0,1,6,26,2,0
+248815,Heavy Thorium Ore,1500,375,1,0,0,0,0,1,60,0,0,0
 248819,Fel Crystal,12000,3000,1,0,0,0,0,2,60,0,0,0
 248820,Torbernite,60000,15000,1,0,0,0,0,2,60,0,0,0
 248821,Demonsage,900,225,1,0,0,0,0,1,60,0,0,0
@@ -3734,6 +3744,7 @@ ID,Display_lang,BuyPrice,SellPrice,VendorStackCount,MinFactionID,MinReputation,R
 273087,Blueprint: Journeyman Campfire,1500,375,1,0,0,185,90,2,25,0,0,0
 273092,Blueprint: Repair Bot,1500,375,1,0,0,202,140,2,25,0,0,0
 273096,Blueprint: Tanning Rack,1500,375,1,0,0,165,140,2,25,0,0,0
+273097,Blueprint: Rock Garden,1500,375,1,0,0,186,140,2,25,0,0,0
 273099,Blueprint: Spinning Wheel,1500,375,1,0,0,197,140,2,25,0,0,0
 273101,Blueprint: Expert Campfire,120000,30000,1,0,0,185,200,2,40,0,0,0
 273102,Blueprint: Cookie's Feast,1500,375,1,0,0,185,140,2,25,0,0,0
@@ -3747,6 +3758,7 @@ ID,Display_lang,BuyPrice,SellPrice,VendorStackCount,MinFactionID,MinReputation,R
 273118,Blueprint: Plague Doctor's Laboratory,480000,120000,1,0,0,129,300,2,60,0,0,0
 273119,Blueprint: Fishing Hut,480000,120000,1,0,0,356,300,2,60,0,0,0
 273121,Blueprint: Sewing Machine,480000,120000,1,0,0,165,300,2,60,0,0,0
+273122,Blueprint: Molten Foundry,480000,120000,1,0,0,186,300,2,60,0,0,0
 273124,Blueprint: Loom,480000,120000,1,0,0,197,300,2,60,0,0,0
 273125,Lich's Index Finger,100000,25000,1,0,0,0,0,2,60,0,0,0
 273127,Golem Heart,100000,25000,1,0,0,0,0,2,60,0,0,0
@@ -4103,13 +4115,16 @@ ID,Display_lang,BuyPrice,SellPrice,VendorStackCount,MinFactionID,MinReputation,R
 279943,Spinning Wheel,10000,0,1,0,0,197,140,1,28,0,0,0
 279944,Sharpening Wheel,5000,0,1,0,0,164,20,1,4,0,0,0
 279945,Sewing Machine,40000,0,1,0,0,165,300,1,60,0,0,0
+279948,Rock Garden,10000,0,1,0,0,186,140,1,28,0,0,0
 279949,Repair Bot,10000,0,1,0,0,202,140,1,28,0,0,0
 279950,Reagent Bot,5000,0,1,0,0,202,20,1,4,0,0,0
 279951,Plague Doctor's Laboratory,40000,0,1,0,0,129,300,1,60,0,0,0
+279952,Molten Foundry,40000,0,1,0,0,186,300,1,60,0,0,0
 279955,Master Forge,40000,0,1,0,0,164,300,1,60,0,0,0
 279956,Mana Well,5000,0,1,0,0,171,20,1,4,0,0,0
 279957,Cookie's Feast,20000,0,1,0,0,185,140,1,28,0,0,0
 279959,Loom,40000,0,1,0,0,197,300,1,60,0,0,0
+279960,Lodestone,5000,0,1,0,0,186,20,1,4,0,0,0
 279961,Journeyman Campfire Kit,5000,0,1,0,0,185,140,1,18,0,0,0
 279965,Fishing Rack,4000,0,1,0,0,356,140,1,28,0,0,0
 279966,Fishing Hut,40000,0,1,0,0,356,300,1,60,0,0,0

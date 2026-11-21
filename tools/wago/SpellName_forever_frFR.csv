@@ -52,6 +52,12 @@ ID,Name
 2548,Côtes de porc aux herbes
 2549,Kébab de loup assaisonné
 2550,Cuisine
+2575,Minage
+2580,Découverte de gisements
+2656,Fondre
+2657,Fonte du cuivre
+2658,Fonte de l'argent
+2659,Fonte du bronze
 2660,Pierre à aiguiser brute
 2661,Ceinture en anneaux de cuivre
 2662,Pantalon en anneaux de cuivre
@@ -100,6 +106,9 @@ ID,Name
 3295,Poignard mortel en bronze
 3296,Masse lourde en bronze
 3297,Puissant marteau en fer
+3304,Fonte de l'étain
+3307,Fonte du fer
+3308,Fonte de l'or
 3319,Bottes en anneaux de cuivre
 3320,Silex à aiguiser brut
 3321,Lorica en cuivre
@@ -150,6 +159,7 @@ ID,Name
 3511,Cuirasse en écailles dorées
 3513,Bottes en acier poli
 3515,Bottes en écailles dorées
+3569,Fonte de l'acier
 3753,Ceinture en cuir cousu main
 3755,Sac en lin
 3756,Gants en cuir estampé
@@ -487,6 +497,8 @@ ID,Name
 10009,Marteau runique en mithril
 10013,Kriss d'ébène
 10015,Championne en vrai-argent
+10097,Fonte du mithril
+10098,Fonte du vrai-argent
 10482,Peau épaisse traitée
 10487,Renfort d'armure épais
 10490,Chapeau de cuir confortable
@@ -716,6 +728,7 @@ ID,Name
 14807,Baguette magique supérieure
 14809,Baguette mystique inférieure
 14810,Baguette mystique supérieure
+14891,Fonte du sombrefer
 14930,Carquois de tir rapide
 14932,Giberne en cuir épais
 15255,Trousse de réparation mécanique
@@ -740,6 +753,7 @@ ID,Name
 15935,Aile de chauve-souris croustillante
 15972,Dague d'acier luisante
 15973,Lame dorée flamboyante
+16153,Fonte du thorium
 16639,Silex à aiguiser dense
 16640,Caillou dense
 16641,Pierre à aiguiser dense
@@ -1035,6 +1049,7 @@ ID,Name
 22926,Cape chromatique
 22927,Peau du Fauve
 22928,Cape changeante
+22967,Fonte de l'élémentium
 23066,Fusée rouge
 23069,Dynamite Ev-Lan II
 23071,Altérateur de vrai-argent
@@ -1346,6 +1361,7 @@ ID,Name
 1213628,Tome de prière enchanté
 1213633,Totem enchanté
 1213635,Champignon enchanté
+1213638,Barre de thorium imprégnée d’obsidienne
 1213643,Silex à aiguiser d’obsidienne
 1213646,Poudre explosive d’obsidienne
 1213740,Épaulières sylvestres
@@ -1427,6 +1443,7 @@ ID,Name
 1229504,Bannière de faction
 1229745,Bocal à poisson
 1230117,Trousse de premiers soins
+1230161,Magnétite
 1230171,Meule à aiguiser
 1230564,Puits de mana
 1230643,Luth enchanté
@@ -1499,6 +1516,7 @@ ID,Name
 1249632,Teinture viridienne
 1249633,Acide sulfurique
 1249634,Papier de verre
+1249637,Fonte d’azerothium
 1249957,Thé de sérénité
 1249958,Thé royal
 1249959,Thé aux racines
@@ -2022,6 +2040,7 @@ ID,Name
 1257493,Chaperon en tisse-fantôme
 1257494,Couronne en tisse-terrestre
 1257495,Sac de composants sans fond
+1262975,Jardin de pierres
 1262978,Festin de Macaron
 1262990,Râtelier de pêche
 1262996,Étude des toxines
@@ -2033,6 +2052,7 @@ ID,Name
 1263034,Robot réparateur
 1263056,Récupérateur arcanique
 1263067,Four en fer
+1263071,Fonderie en fusion
 1263073,Forge magistrale
 1263078,Laboratoire d’alchimie
 1263079,Machine à coudre
@@ -2259,6 +2279,7 @@ ID,Name
 1301541,Épaulettes fil-tempête azur
 1302598,Bottes grossières en anneaux de cuivre
 1302604,Sac de composants en cuir léger
+1306126,Fonte de thorium lourd
 1306520,Torche de lumière
 1306521,Libram inébranlable
 1306522,Libram d’imprégnation
@@ -2357,6 +2378,18 @@ ID,Name
 1240956,Cuisine
 1240967,Cuisine
 1240980,Cuisine
+2576,Minage
+2577,Minage
+2578,Minage
+2579,Minage
+3564,Minage
+10248,Minage
+1235230,Minage
+1240951,Minage
+1240962,Minage
+1240973,Minage
+1240986,Minage
+8388,Découverte de gisements
 3451,Élixir de sang de Troll
 439126,Camail en écailles dorées
 439132,Jambières en écailles dorées
