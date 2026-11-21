@@ -98,6 +98,32 @@ function Boot(db)
   return ES.db
 end
 
+-- Claves de lo guardado (Keys.lua) -------------------------------------------
+-- Las tablas de ES.db que van por la clave de la AH o del personaje
+function KeyedTables(db)
+  local list = {}
+  for _, name in ipairs({ "scans", "track", "history", "investPrices", "lastScanFail", "known" }) do
+    if type(db[name]) == "table" then list[name] = db[name] end
+  end
+  if type(db.invest) == "table" and type(db.invest.account) == "table" then list["invest.account"] = db.invest.account end
+  return list
+end
+
+-- Claves que no deben quedar en lo guardado: provisionales, sin reino ni ruleset
+-- ("-Alliance") o sin personaje ("Bruno-"). Devuelve "tabla/clave" de cada una
+function BadKeys(db)
+  local bad = {}
+  for name, t in pairs(KeyedTables(db)) do
+    for k in pairs(t) do
+      if type(k) == "string" and (k:match("^pending%-") or k:sub(1, 1) == "-" or k:sub(-1) == "-") then
+        bad[#bad + 1] = name .. "/" .. k
+      end
+    end
+  end
+  table.sort(bad)
+  return bad
+end
+
 -- Ayudas para la interfaz ----------------------------------------------------
 -- Las pestañas de la ventana, y la página que abre cada una
 TAB_PAGES = { home = "home", shopping = "shopping", money = "money", inventory = "inventory",

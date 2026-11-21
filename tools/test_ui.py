@@ -91,6 +91,9 @@ GetTime = function() return 0 end
 FrameUtil = {}
 UnitExists = function() return true end
 UnitName = function() return "Bruno" end
+-- (el personaje: su clave es nombre y GUID, Keys.lua. Este simulador es un cliente de
+-- antes del parche de Forever: da el reino y no tiene C_GameRules)
+UnitGUID = function(u) if u == "player" then return "Player-1-00000001" end end
 """)
 
 # Globales escritas desde los archivos del addon (los mocks del test no cuentan)

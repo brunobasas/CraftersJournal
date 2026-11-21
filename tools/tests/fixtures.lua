@@ -75,8 +75,10 @@ function Fixtures.Scan(when)
   return { time = when or (NOW - 600), total = total, unique = n, items = items }
 end
 
-local function RealmKey() return REALM .. "-" .. FACTION end
-local function CharKey() return "Bruno-" .. REALM end
+-- Lo guardado, con las claves de antes del parche del cliente de Forever (reino "Realm"):
+-- al arrancar pasa a las nuevas (Keys.lua), así cada prueba prueba también la migración
+local function RealmKey() return "Realm-" .. FACTION end
+local function CharKey() return "Bruno-Realm" end
 
 -- Las primeras recetas (por nivel naranja) de una profesión
 local function FirstRecipes(profKey, n)

@@ -125,18 +125,8 @@ function ES:Print(msg)
   print("|cff33ccffCrafter's Journal|r: " .. tostring(msg))
 end
 
--- Clave por reino + casa de subastas: la de tu facción y la neutral (goblins de
--- Bahía del Botín, Gadgetzan, Vista Eterna) tienen subastas distintas.
-local function FactionKey()
-  return (GetRealmName() or "?") .. "-" .. (UnitFactionGroup("player") or "?")
-end
-
--- La AH de tu facción: la neutral no tiene soporte (ver DetectAuctionHouse). Antes era
--- la última AH que abrió el personaje (ES.db.activeAH): quien pasó por la neutral se
--- quedaba con sus precios; ya no se lee
-function ES:RealmKey()
-  return FactionKey()
-end
+-- La clave de la AH de tu ruleset y bando (ES:RealmKey) y la del personaje
+-- (ES:CharKey): Keys.lua. La AH neutral no tiene soporte (ver DetectAuctionHouse)
 
 -- Al abrir la AH: el subastador neutral (Bahía del Botín, Gadgetzan, Vista Eterna) no
 -- es de ninguna de las dos facciones. La AH neutral no tiene soporte: el addon hace
@@ -153,11 +143,6 @@ local function DetectAuctionHouse()
     ES:Print(L["Casa de Subastas neutral: Crafter's Journal no le da soporte. Aquí no escanea ni abre sus ventanas; sus rutas y precios siguen siendo los de la Casa de Subastas de tu facción."])
   end
   return neutral
-end
-
--- Personaje actual ("Nombre-Reino"): buzón, recetas sabidas, AH activa
-function ES:CharKey()
-  return (UnitName("player") or "?") .. "-" .. (GetRealmName() or "?")
 end
 
 local function ApplyDefaults(db, defaults)
@@ -762,6 +747,9 @@ events:SetScript("OnEvent", function(_, event, arg1)
     CraftersJournalDB = CraftersJournalDB or {}
     ApplyDefaults(CraftersJournalDB, DEFAULTS)
     ES.db = CraftersJournalDB
+    -- La clave de la AH y del personaje, y lo guardado con las de antes a las nuevas
+    -- (Keys.lua: el cliente ya no da el reino)
+    ES.Keys.Refresh()
     -- Escaneos sin hora o sin objetos (lo guardado roto): no sirven y rompían la
     -- ventana al abrirla ("Último escaneo: hace..." con la hora en nil). Fuera
     for key, scan in pairs(ES.db.scans) do

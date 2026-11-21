@@ -29,6 +29,7 @@ local STUCK_BAND = 1.10       -- "las más baratas": hasta un 10% por encima del
 -- crecer los datos guardados (~18 KB por escaneo) y alarga la carga del juego
 local HISTORY_MAX_AGE = 7 * 86400
 local HISTORY_MAX = 200
+History.MAX = HISTORY_MAX -- (Keys.lua, al juntar el historial de dos claves)
 
 -- Solo seguimos los objetos de profesiones (materiales, fabricados, pergaminos)
 -- para que los datos guardados no crezcan demasiado
@@ -112,6 +113,9 @@ function History:Entries(key)
   local history = ES.db.history[key]
   if not history then
     history = {}
+    -- (con la clave provisional, mientras el juego no da el modo, Keys.lua: leer no crea
+    -- nada; lo que se escriba sí, y pasa a la clave buena al llegar)
+    if ES.Keys.IsPending(key) then return history end
     ES.db.history[key] = history
   end
   if not ES.db.historyCleaned then
