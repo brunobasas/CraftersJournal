@@ -3,6 +3,7 @@
 ## 0.67.0
 
 - **Closing the window in combat no longer gets blocked.** Once a route had shown a "Learn recipe" row (a recipe scroll in your bags), the window couldn't be closed with Escape, hidden or moved during combat: the game showed "Crafter's Journal has been blocked from an action". The button that uses the scroll now sits on top of the row only while your mouse is over it, like the star on trainers and vendors, and steps aside when combat starts. Clicking the row out of combat still learns the recipe; in combat it does nothing. (GitHub #11)
+- **Listing on the AH works when the Auction House asks you to confirm.** Sometimes the Auction House asks you to confirm a listing (usually for an unusual price). For listings made from Crafter's Journal, the game's confirmation window did nothing when you clicked Accept, and a few seconds later the chat said the Auction House didn't confirm it. The addon now asks itself, with what you're listing and at what price: Yes lists it, No (or Escape, or closing the AH) cancels it. Listings made from the game's own auction screen are unchanged. (GitHub #10)
 
 ## 0.66.0
 

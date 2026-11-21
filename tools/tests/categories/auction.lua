@@ -536,3 +536,190 @@ test("AH neutral: sin soporte, sin errores", function()
   expect(not ES.ahOpen, "la neutral cuenta como AH abierta")
   NPC_FACTION = "Alliance"
 end, { state = "scan" })
+
+-- Anunciar en la AH (spec ah-posting) ---------------------------------------------
+-- GitHub #10: cuando la AH pide confirmar un anuncio del addon (PostItem devuelve
+-- needsConfirmation), el «Aceptar» del juego no hace nada con él: el addon esconde esa
+-- ventana, pregunta con la suya y confirma con ConfirmPostItem / ConfirmPostCommodity
+
+local POST_ITEM = 2318 -- Light Leather
+local function Before(key) return (ES.L[key]:match("^(.-)%%")) end
+local function SaidSince(from, text)
+  for i = from + 1, #PRINTS do if PRINTS[i]:find(text, 1, true) then return PRINTS[i] end end
+end
+
+-- La AH de Forever simulada mientras dura `fn(ah)`. opts.needs: la AH pide confirmar;
+-- opts.commodity: es un material; opts.confirmError: confirmar da error. ah.calls: las
+-- llamadas a la AH con sus argumentos; ah.popup: la ventana de confirmación del juego
+local function PostingAH(opts, fn)
+  local saved = { C_AuctionHouse, ItemLocation, ES.IsAuctionHouseOpen, StaticPopup_Visible, StaticPopup_Hide }
+  local ah = { calls = {}, popup = false }
+  local function Call(name, needs, fails)
+    return function(...)
+      ah.calls[#ah.calls + 1] = { name, ... }
+      if fails then error("Item not found") end
+      if needs then
+        ah.popup = true -- (el juego saca su ventana con el aviso)
+        FireEvent("AUCTION_HOUSE_POST_WARNING")
+      end
+      return needs
+    end
+  end
+  C_AuctionHouse = {
+    IsThrottledMessageSystemReady = function() return true end,
+    GetItemCommodityStatus = function() return opts.commodity and 2 or 1 end,
+    PostItem = Call("PostItem", opts.needs), PostCommodity = Call("PostCommodity", opts.needs),
+    ConfirmPostItem = Call("ConfirmPostItem", false, opts.confirmError),
+    ConfirmPostCommodity = Call("ConfirmPostCommodity", false, opts.confirmError),
+  }
+  ItemLocation = { CreateFromBagAndSlot = function(_, bag, slot) return { bag = bag, slot = slot } end }
+  StaticPopup_Visible = function(name) return name == "AUCTION_HOUSE_POST_WARNING" and ah.popup end
+  StaticPopup_Hide = function(name) if name == "AUCTION_HOUSE_POST_WARNING" then ah.popup = false end end
+  ES.IsAuctionHouseOpen = function() return true end
+  BAGS[POST_ITEM] = 5
+  ES.Ledger.pendingPost, ES.Ledger.ahBusy = nil, nil
+  local ok, err = pcall(fn, ah)
+  local d = ES.ConfirmFrame()
+  if d then d.pending = nil d:Hide() end
+  ES.Ledger.pendingPost, BAGS[POST_ITEM] = nil, nil
+  C_AuctionHouse, ItemLocation, ES.IsAuctionHouseOpen, StaticPopup_Visible, StaticPopup_Hide = unpack(saved, 1, 5)
+  if not ok then error(err, 0) end
+end
+
+test("pregunta sin casilla (noCheck): siempre pregunta, y Escape la cancela", function()
+  local yes, cancels = 0, 0
+  ES.db.noPostConfirm = true -- (el aviso de anunciar apagado con su casilla)
+  ES:Confirm({ key = "noPostConfirm", title = "T", text = "X", onYes = function() yes = yes + 1 end })
+  expect_eq(yes, 1, "con la opción apagada, el aviso normal no se hace sin preguntar")
+  ES:Confirm({ noCheck = true, title = "T", text = "X", onYes = function() yes = yes + 1 end,
+    onCancel = function() cancels = cancels + 1 end })
+  local d = ES.ConfirmFrame()
+  expect(d._shown and yes == 1, "la pregunta sin casilla se hizo sin preguntar")
+  expect(not d.check._shown and not d.note._shown, "la pregunta sin casilla enseña la casilla")
+  d:Hide() -- (Escape)
+  expect_eq(cancels, 1, "Escape no cancela la pregunta")
+  ES.db.noPostConfirm = nil
+  ES:Confirm({ key = "noPostConfirm", title = "T", text = "X", onYes = function() end, onNo = function() yes = -1 end })
+  expect(d.check._shown, "el aviso normal ya no enseña su casilla")
+  d:Hide()
+  expect(yes ~= -1, "Escape hizo la acción de «No» (onNo)")
+end, { state = "scan" })
+
+-- Anuncia 5 a 1g cada uno, 24 h, y deja pasar el fotograma. Devuelve la pregunta del addon
+local function Post()
+  ES.Ledger:PostOnAH(POST_ITEM, 5, 10000, 24)
+  RunTimers(0)
+  local d = ES.ConfirmFrame()
+  return d and d._shown and d.pending and d or nil
+end
+
+test("la AH pide confirmar un anuncio del addon: sale su pregunta, sin «no confirmó»", function()
+  PostingAH({ needs = true }, function(ah)
+    local from = #PRINTS
+    local d = expect(Post(), "no sale la pregunta del addon")
+    expect(not ah.popup, "la ventana de confirmación del juego sigue a la vista")
+    expect(not d.check._shown, "la pregunta lleva la casilla «No volver a mostrar este aviso»")
+    local text = tostring(d.text:GetText())
+    expect(text:find("5", 1, true) and text:find("24", 1, true), "la pregunta no dice qué se anuncia: %s", text)
+    RunTimers(10)
+    expect(not SaidSince(from, Before("La Casa de Subastas no confirmó el anuncio de %s: míralo en Subastas.")),
+      "con la pregunta abierta, el chat dice que la AH no confirmó el anuncio")
+    expect(#ah.calls == 1, "se confirmó sin pulsar «Sí»")
+  end)
+end, { state = "scan" })
+
+test("la AH no pide confirmar: no sale ninguna pregunta", function()
+  PostingAH({}, function(ah)
+    expect(not Post(), "sale una pregunta aunque la AH no pidió confirmar")
+    FireEvent("AUCTION_HOUSE_AUCTION_CREATED")
+    expect(ES.Ledger.pendingPost == nil, "el anuncio no se dio por hecho")
+  end)
+end, { state = "scan" })
+
+test("«Sí» confirma el mismo anuncio y espera la respuesta de la AH", function()
+  for _, commodity in ipairs({ false, true }) do
+    PostingAH({ needs = true, commodity = commodity }, function(ah)
+      local from = #PRINTS
+      local d = expect(Post(), "no sale la pregunta del addon")
+      d.ok:GetScript("OnClick")(d.ok)
+      local post, confirm = ah.calls[1], expect(ah.calls[2], "«Sí» no confirmó el anuncio")
+      expect_eq(confirm[1], commodity and "ConfirmPostCommodity" or "ConfirmPostItem", "lo que se llama al confirmar")
+      for i = 2, 6 do expect(confirm[i] == post[i], "argumento %d distinto del anuncio: %s / %s", i - 1, tostring(confirm[i]), tostring(post[i])) end
+      expect(not d._shown, "la pregunta sigue abierta tras «Sí»")
+      FireEvent("AUCTION_HOUSE_AUCTION_CREATED")
+      expect(SaidSince(from, Before("Anunciados %d de %s a %s cada uno (%d h).")), "confirmado, el chat no dice «Anunciados»")
+      expect(ES.Ledger.pendingPost == nil, "tras crearse queda un anuncio pendiente")
+    end)
+  end
+end, { state = "scan" })
+
+test("«Sí» y la AH no responde: «no confirmó» a los 4 s del «Sí»", function()
+  PostingAH({ needs = true }, function()
+    local noConfirm = Before("La Casa de Subastas no confirmó el anuncio de %s: míralo en Subastas.")
+    local from = #PRINTS
+    local d = expect(Post(), "no sale la pregunta del addon")
+    NOW = NOW + 3 -- (tardas 3 s en contestar; RunTimers solo avanza la hora hasta un temporizador)
+    d.ok:GetScript("OnClick")(d.ok)
+    NOW = NOW + 3.5 -- (6,5 s desde el anuncio, 3,5 desde el «Sí»)
+    RunTimers(0)
+    expect(not SaidSince(from, noConfirm), "«no confirmó» contando desde el anuncio, no desde el «Sí»")
+    RunTimers(1)
+    expect(SaidSince(from, noConfirm), "sin respuesta tras el «Sí», el chat no dice que la AH no confirmó")
+  end)
+end, { state = "scan" })
+
+test("«Sí» y la AH rechaza el anuncio: el chat dice cuál fue el error", function()
+  ERR_AUCTION_DATABASE_ERROR = ERR_AUCTION_DATABASE_ERROR or "Internal auction error" -- (texto del juego)
+  PostingAH({ needs = true }, function()
+    expect(ES.Ledger.IsAuctionError(ERR_AUCTION_DATABASE_ERROR), "el error de prueba no cuenta como de la AH: la prueba no prueba nada")
+    local from = #PRINTS
+    local d = expect(Post(), "no sale la pregunta del addon")
+    d.ok:GetScript("OnClick")(d.ok)
+    FireEvent("UI_ERROR_MESSAGE", 1, ERR_AUCTION_DATABASE_ERROR)
+    expect(SaidSince(from, ERR_AUCTION_DATABASE_ERROR), "el chat no dice que la AH rechazó el anuncio confirmado")
+    expect(ES.Ledger.pendingPost == nil, "tras el rechazo queda un anuncio pendiente")
+  end)
+end, { state = "scan" })
+
+test("«Sí» y confirmar da error: lo dice y no queda nada pendiente", function()
+  PostingAH({ needs = true, confirmError = true }, function()
+    local from = #PRINTS
+    local d = expect(Post(), "no sale la pregunta del addon")
+    d.ok:GetScript("OnClick")(d.ok)
+    expect(SaidSince(from, ES.L["No se pudo anunciar: "]), "el error al confirmar no sale en el chat")
+    expect(ES.Ledger.pendingPost == nil, "tras el error queda un anuncio pendiente")
+  end)
+end, { state = "scan" })
+
+test("«No», Escape o cerrar la AH cancelan el anuncio sin falsas alarmas", function()
+  for _, how in ipairs({ "No", "Escape", "cerrar la AH" }) do
+    PostingAH({ needs = true }, function(ah)
+      local from = #PRINTS
+      local d = expect(Post(), "%s: no sale la pregunta del addon", how)
+      if how == "No" then d.cancel:GetScript("OnClick")(d.cancel)
+      elseif how == "Escape" then d:Hide() -- (Escape esconde los UISpecialFrames)
+      else FireEvent("AUCTION_HOUSE_CLOSED") end
+      expect(not d._shown, "%s: la pregunta sigue abierta", how)
+      expect(#ah.calls == 1, "%s: se confirmó el anuncio", how)
+      expect(ES.Ledger.pendingPost == nil, "%s: el anuncio sigue pendiente", how)
+      expect(SaidSince(from, Before("Anuncio cancelado: %s")), "%s: el chat no dice que se canceló", how)
+      RunTimers(10)
+      expect(not SaidSince(from, Before("La Casa de Subastas no confirmó el anuncio de %s: míralo en Subastas.")),
+        "%s: el chat dice que la AH no confirmó el anuncio", how)
+      -- Lo siguiente se anuncia sin «la AH está ocupada»
+      local n = ES.Ledger:PostOnAH(POST_ITEM, 5, 10000, 24)
+      expect(n > 0 and #ah.calls == 2, "%s: el siguiente anuncio no se hace", how)
+    end)
+  end
+end, { state = "scan" })
+
+test("un anuncio de la pantalla de Blizzard: su ventana de confirmar no se toca", function()
+  PostingAH({}, function(ah)
+    ah.popup = true -- (anuncio desde la pantalla del juego, que pide confirmar)
+    FireEvent("AUCTION_HOUSE_POST_WARNING")
+    RunTimers(0)
+    expect(ah.popup, "el addon escondió la ventana de confirmar de un anuncio del juego")
+    local d = ES.ConfirmFrame()
+    expect(not (d and d._shown), "sale la pregunta del addon para un anuncio del juego")
+  end)
+end, { state = "scan" })

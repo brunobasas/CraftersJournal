@@ -503,14 +503,32 @@ do
   local f = CreateFrame("Frame")
   for _, e in ipairs({ "TRAINER_SHOW", "TRAINER_UPDATE", "TRAINER_CLOSED", "PLAYER_ENTERING_WORLD",
     "MERCHANT_SHOW", "MERCHANT_CLOSED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED",
-    "AUCTION_HOUSE_THROTTLED_SYSTEM_READY", "AUCTION_HOUSE_AUCTION_CREATED", "CHAT_MSG_SYSTEM", "UI_ERROR_MESSAGE",
+    "AUCTION_HOUSE_THROTTLED_SYSTEM_READY", "AUCTION_HOUSE_AUCTION_CREATED", "AUCTION_HOUSE_POST_WARNING",
+    "CHAT_MSG_SYSTEM", "UI_ERROR_MESSAGE",
     "PLAYER_MONEY", "COMMODITY_PURCHASE_SUCCEEDED", "COMMODITY_PURCHASE_FAILED" }) do
     ES.SafeRegister(f, e)
   end
   f:SetScript("OnEvent", function(_, event, ...)
     if not ES.db then return end
-    if event == "AUCTION_HOUSE_CLOSED" then Ledger.ahClosedAt = Clock() end
+    if event == "AUCTION_HOUSE_CLOSED" then
+      Ledger.ahClosedAt = Clock()
+      -- (la pregunta de confirmar se cierra con la AH: no se anuncia)
+      if Ledger.pendingPost then Ledger:CancelAsked(Ledger.pendingPost) end
+    end
     if event == "AUCTION_HOUSE_SHOW" then Ledger.ahClosedAt = nil end
+    -- La AH pide confirmar un anuncio: si es el del addon (lo dice lo que devolvió
+    -- PostItem: AskPost), fuera la ventana del juego, que no sabe confirmarlo y se
+    -- vería con la del addon. En el fotograma siguiente: el juego la saca con este mismo
+    -- evento. La de un anuncio desde la pantalla del juego no se toca
+    if event == "AUCTION_HOUSE_POST_WARNING" then
+      C_Timer.After(0, function()
+        local p = Ledger.pendingPost
+        if p and p.asking and StaticPopup_Visible and StaticPopup_Visible("AUCTION_HOUSE_POST_WARNING") then
+          StaticPopup_Hide("AUCTION_HOUSE_POST_WARNING")
+        end
+      end)
+      return
+    end
     -- El chat y los errores solo importan en la AH (ver Ledger.Listening). Además, en
     -- mazmorras/combate el juego da los textos como "secretos": ni compararlos ni
     -- leerlos (error de taint)
@@ -920,6 +938,7 @@ local AH_BUSY_REPRINT, AH_BUSY_RESET = 10, 30
 -- s que se espera la confirmación de un anuncio (AUCTION_HOUSE_AUCTION_CREATED o el
 -- "Subasta creada." del chat) antes de darlo por hecho
 local POST_CONFIRM_WAIT = 4
+local WaitPost -- (más abajo, tras PostOnAH)
 
 -- Duraciones de la AH, por su índice en C_AuctionHouse (1, 2, 3). Forever tiene
 -- subastas de 2, 8 y 24 h (Planner.DURATIONS); el cliente moderno, de 12, 24 y 48.
@@ -1033,31 +1052,91 @@ function Ledger:PostOnAH(itemID, n, unit, hours)
   end
   local price = Ledger.PostPrice(unit)
   local duration, postHours = Ledger.DurationIndex(hours, AH, location, itemID, qty, commodity)
-  local ok, err
-  if commodity and AH.PostCommodity then
-    ok, err = pcall(AH.PostCommodity, location, duration, qty, price)
+  -- (con éxito, pcall devuelve true y lo que devuelva la AH: needsConfirmation)
+  local ok, needs
+  commodity = commodity and AH.PostCommodity ~= nil
+  if commodity then
+    ok, needs = pcall(AH.PostCommodity, location, duration, qty, price)
   else
-    ok, err = pcall(AH.PostItem, location, duration, qty, nil, price)
+    ok, needs = pcall(AH.PostItem, location, duration, qty, nil, price)
     if not ok and qty > 1 then -- no acepta varios de una vez: uno (el resto, con otro clic)
       qty = 1
-      ok, err = pcall(AH.PostItem, location, duration, 1, nil, price)
+      ok, needs = pcall(AH.PostItem, location, duration, 1, nil, price)
     end
   end
   if not ok then
-    ES:Print(L["No se pudo anunciar: "] .. tostring(err))
+    ES:Print(L["No se pudo anunciar: "] .. tostring(needs))
     return 0
   end
   -- "Anunciados" solo cuando la AH lo confirma (antes se decía al pedirlo, aunque el
-  -- servidor lo rechazara); si da un error, se dice cuál (ver ConfirmPost)
+  -- servidor lo rechazara); si da un error, se dice cuál (ver ConfirmPost). Con lo
+  -- anunciado, por si la AH pide confirmarlo (AskPost)
   local p = { text = string.format(L["Anunciados %d de %s a %s cada uno (%d h)."], qty, ES:DataItemName(itemID) or itemID, ES.Money(price), postHours),
-    name = ES:DataItemName(itemID) or tostring(itemID) }
+    name = ES:DataItemName(itemID) or tostring(itemID),
+    itemID = itemID, location = location, duration = duration, qty = qty, price = price, hours = postHours,
+    commodity = commodity }
   Ledger.pendingPost = p
-  C_Timer.After(POST_CONFIRM_WAIT, function()
-    -- Sin confirmación ni error: NO se da por hecho (GitHub #6: un anuncio bloqueado
-    -- salía como "Anunciados"). Se dice que no hubo respuesta, para mirarlo en la AH
-    if Ledger.pendingPost == p then Ledger:ConfirmPost(nil) end
-  end)
+  if needs then Ledger:AskPost(p) else WaitPost(p) end
   return qty
+end
+
+-- Espera la respuesta de la AH a `p`. Sin confirmación ni error: NO se da por hecho
+-- (GitHub #6: un anuncio bloqueado salía como "Anunciados"); se dice que no hubo
+-- respuesta, para mirarlo en la AH. Cada espera tiene su turno (p.wait): la del anuncio
+-- no cuenta si la AH pidió confirmarlo, solo la que empieza con el "Sí" (AskPost)
+function WaitPost(p)
+  p.wait = (p.wait or 0) + 1
+  local turn = p.wait
+  C_Timer.After(POST_CONFIRM_WAIT, function()
+    if Ledger.pendingPost == p and p.wait == turn and not p.asking then Ledger:ConfirmPost(nil) end
+  end)
+end
+
+-- La AH pide confirmar el anuncio `p` (PostItem / PostCommodity devolvieron
+-- needsConfirmation, normalmente por un precio raro). El "Aceptar" de la ventana del
+-- juego solo confirma lo anunciado desde su pantalla: con un anuncio del addon no hacía
+-- nada y a los 4 s salía "no confirmó" (GitHub #10). Se pregunta con la ventana del
+-- addon, sin la casilla de no volver a mostrar: es el servidor quien lo pide, y
+-- confirmar pide tu clic. La del juego se esconde (AUCTION_HOUSE_POST_WARNING)
+function Ledger:AskPost(p)
+  p.asking = true
+  local label = ES.UI and ES.UI.ItemLabel and ES.UI.ItemLabel(p.itemID, p.name) or p.name
+  ES:Confirm({
+    noCheck = true, title = L["Confirmar anuncio"],
+    text = string.format(L["La Casa de Subastas pide que confirmes este anuncio: %d × %s a %s cada uno (%d h)."],
+      p.qty, label, ES.Money(p.price), p.hours),
+    closeOn = "AUCTION_HOUSE_CLOSED",
+    onYes = function() Ledger:ConfirmAsked(p) end,
+    onCancel = function() Ledger:CancelAsked(p) end,
+  })
+end
+
+-- "Sí": el mismo anuncio, confirmado (lo primero del clic: ver ES:Confirm)
+function Ledger:ConfirmAsked(p)
+  if Ledger.pendingPost ~= p or not p.asking then return end
+  local AH = C_AuctionHouse
+  local ok, err
+  if p.commodity then
+    ok, err = pcall(AH.ConfirmPostCommodity, p.location, p.duration, p.qty, p.price)
+  else
+    ok, err = pcall(AH.ConfirmPostItem, p.location, p.duration, p.qty, nil, p.price)
+  end
+  p.asking = nil
+  if not ok then
+    Ledger.pendingPost = nil
+    ES:Print(L["No se pudo anunciar: "] .. tostring(err))
+    if ES.AuctionSell then ES.AuctionSell:Refresh() end
+    return
+  end
+  WaitPost(p)
+end
+
+-- "No", Escape o cerrar la AH con la pregunta abierta: no se anuncia
+function Ledger:CancelAsked(p)
+  if Ledger.pendingPost ~= p or not p.asking then return end
+  Ledger.pendingPost = nil
+  ES:Print(string.format(L["Anuncio cancelado: %s"], p.name))
+  if ES.AuctionSell then ES.AuctionSell:Refresh() end
 end
 
 -- ¿Es `message` un error de la AH? Los textos del juego ERR_AUCTION_* (en el idioma

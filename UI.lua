@@ -964,7 +964,10 @@ end
 --            opcional), onYes = función, no y onNo (texto y acción del otro botón,
 --            opcionales), extra (alto de más para un texto largo, opcional),
 --            closeOn = "MERCHANT_CLOSED" o
---            "AUCTION_HOUSE_CLOSED" (opcional: se cierra con esa ventana) }
+--            "AUCTION_HOUSE_CLOSED" (opcional: se cierra con esa ventana),
+--            onCancel (opcional: se cierra sin Sí, con No, Escape o closeOn),
+--            noCheck (sin la casilla ni `key`: una pregunta que no se puede apagar,
+--            como la confirmación que pide la AH, GitHub #10) }
 -- La acción sale del clic en Sí: vender, comprar y anunciar piden un clic del jugador
 ---------------------------------------------------------------------------
 local confirm
@@ -1015,6 +1018,7 @@ local function ConfirmDialog()
     local p = d.pending
     d.pending = nil
     d:Hide()
+    if p and p.onCancel then p.onCancel() end
     if p and p.onNo then
       p.onNo()
       if d.check:GetChecked() then
@@ -1044,10 +1048,14 @@ local function ConfirmDialog()
   d:RegisterEvent("MERCHANT_CLOSED")
   d:RegisterEvent("AUCTION_HOUSE_CLOSED")
   d:SetScript("OnEvent", function(_, event)
-    if d.pending and d.pending.closeOn == event then
-      d.pending = nil
-      d:Hide()
-    end
+    if d.pending and d.pending.closeOn == event then d:Hide() end
+  end)
+  -- Cerrado sin Sí ni No (Escape o closeOn): opts.onCancel. (onNo no: puede ser una
+  -- acción, como "Por tramos" en WholeRouteNotice)
+  d:SetScript("OnHide", function()
+    local p = d.pending
+    d.pending = nil
+    if p and p.onCancel then p.onCancel() end
   end)
   d:Hide()
   return d
@@ -1055,8 +1063,9 @@ end
 ES.ConfirmFrame = function() return confirm end -- (para pruebas)
 
 function ES:Confirm(opts)
-  -- Aviso apagado (casilla "No volver a mostrar" u opción): se hace sin preguntar
-  if self.db and self.db[opts.key] then
+  -- Aviso apagado (casilla "No volver a mostrar" u opción): se hace sin preguntar.
+  -- (opts.noCheck: siempre se pregunta)
+  if not opts.noCheck and self.db and opts.key and self.db[opts.key] then
     opts.onYes()
     return
   end
@@ -1067,13 +1076,17 @@ function ES:Confirm(opts)
   d.warn:SetText(opts.warn or "")
   if opts.warn then d.warn:Show() else d.warn:Hide() end
   local extra = (opts.warn and WARN_H or 0) + (opts.extra or 0) -- (opts.extra: texto más largo)
-  d:SetHeight(170 + extra)
+  local withCheck = not opts.noCheck
+  d:SetHeight((withCheck and 170 or 130) + extra)
+  d.check:SetShown(withCheck)
+  d.checkLabel:SetShown(withCheck)
+  d.note:SetShown(withCheck)
   d.check:ClearAllPoints()
   d.check:SetPoint("TOPLEFT", 24, -78 - extra)
   d.check:SetChecked(false)
   d.checkLabel:SetText(L["No volver a mostrar este aviso"])
-  d.note:SetText(string.format(L["Se vuelve a activar en /cj opciones (%s)."],
-    ES.OptionLabel and ES.OptionLabel(opts.key) or opts.key))
+  d.note:SetText(withCheck and string.format(L["Se vuelve a activar en /cj opciones (%s)."],
+    ES.OptionLabel and ES.OptionLabel(opts.key) or opts.key) or "")
   d.ok:SetText(opts.yes or YES or L["Sí"])
   d.cancel:SetText(opts.no or NO or L["No"])
   d:Show()
