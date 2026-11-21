@@ -300,6 +300,14 @@ function Scanner:Process()
   local sigs = {}
   local id = self.scanID
   local index = first
+  -- Firmas (History.Signature: una cadena por subasta) solo para las que se leen
+  -- después (lighter-memory): las que pueden quedar cerca del mínimo de su objeto
+  -- (hasta STUCK_BAND sobre el mínimo hasta ahora: el mínimo solo baja, así que una más
+  -- cara ya no puede) y las que History:Record busca del escaneo anterior (hasta
+  -- `reach` de su objeto). Las de solo puja no las mira nadie
+  local History = ES.History
+  local band = History.STUCK_BAND
+  local reach = History.PrevReach(ES.db.track and ES.db.track[self.key or ES:RealmKey()])
 
   local function Step()
     if self.scanID ~= id then return end
@@ -332,9 +340,13 @@ function Scanner:Process()
           entry.knownOwners = (entry.knownOwners or 0) + 1
         end
 
-        if ES.History:IsTracked(itemID) then
-          local sig = ES.History.Signature(itemID, count, buyout, ownerKey)
-          ES.History.AddAuction(sigs, sig, self:ReadTimeLeft(i))
+        if History:IsTracked(itemID) then
+          if buyout and buyout > 0 then
+            local unit, min, r = buyout / count, entry.minUnit, reach[itemID]
+            if not min or unit <= min * band or (r and unit <= r) then
+              History.AddAuction(sigs, History.Signature(itemID, count, buyout, ownerKey), self:ReadTimeLeft(i))
+            end
+          end
           -- Escalera de precios: cuántas unidades hay a cada precio por unidad
           if buyout and buyout > 0 then
             entry.ladder = entry.ladder or {}
@@ -381,34 +393,39 @@ end
 -- precio medio, así no se pierden existencias (antes se descartaba y la mediana
 -- y las unidades a la venta salían por debajo de las reales).
 local MAX_LADDER_LEVELS = 40
+-- (tablas de trabajo, las mismas para todos los objetos: una nueva por objeto era
+-- basura en cada escaneo; el resultado se crea al final con su tamaño justo)
+local prices, flat = {}, {}
 local function BuildLadder(levels)
   if not levels then return nil end
-  local prices, total = {}, 0
+  local n, total = 0, 0
   for price, qty in pairs(levels) do
-    prices[#prices + 1] = price
+    n = n + 1
+    prices[n] = price
     total = total + qty
   end
+  for i = #prices, n + 1, -1 do prices[i] = nil end -- (lo del objeto anterior)
   table.sort(prices)
   local median, acc = nil, 0
   for _, price in ipairs(prices) do
     acc = acc + levels[price]
     if acc >= total / 2 then median = price break end
   end
-  local flat = {}
-  for i = 1, math.min(#prices, MAX_LADDER_LEVELS - 1) do
-    flat[#flat + 1] = prices[i]
-    flat[#flat + 1] = levels[prices[i]]
+  local m = 0
+  for i = 1, math.min(n, MAX_LADDER_LEVELS - 1) do
+    flat[m + 1], flat[m + 2] = prices[i], levels[prices[i]]
+    m = m + 2
   end
-  if #prices >= MAX_LADDER_LEVELS then
+  if n >= MAX_LADDER_LEVELS then
     local qty, value = 0, 0
-    for i = MAX_LADDER_LEVELS, #prices do
+    for i = MAX_LADDER_LEVELS, n do
       qty = qty + levels[prices[i]]
       value = value + levels[prices[i]] * prices[i]
     end
-    flat[#flat + 1] = math.floor(value / qty + 0.5)
-    flat[#flat + 1] = qty
+    flat[m + 1], flat[m + 2] = math.floor(value / qty + 0.5), qty
+    m = m + 2
   end
-  return flat, median
+  return { unpack(flat, 1, m) }, median
 end
 
 -- Resumen de lo leído (escaleras de precios y medianas de cada objeto), por tandas de
@@ -434,6 +451,9 @@ function Scanner:Finish(items, sigs, total)
   local ids = {}
   for itemID in pairs(items) do ids[#ids + 1] = itemID end
   local saved, knownOwners, i = {}, 0, 1
+  -- (el mínimo sin redondear de cada objeto con firmas: History:Record lo usa para
+  -- quedarse con las cercanas, el mismo que saldría de las firmas)
+  local mins = {}
   local t0 = debugprofilestop and debugprofilestop()
   local frames = 0
 
@@ -452,6 +472,7 @@ function Scanner:Finish(items, sigs, total)
         if n > top then top = n end
       end
       local ladder, median = BuildLadder(e.ladder)
+      if e.minUnit and ES.History:IsTracked(itemID) then mins[itemID] = e.minUnit end
       saved[itemID] = {
         listings = e.listings,
         quantity = e.quantity,
@@ -474,13 +495,13 @@ function Scanner:Finish(items, sigs, total)
     if t0 then
       ES:ScanLog(string.format("resumen: %d objetos en %d fotogramas, %.0f ms", #ids, frames, debugprofilestop() - t0))
     end
-    self:Save(saved, #ids, knownOwners, sigs, total)
+    self:Save(saved, #ids, knownOwners, sigs, total, mins)
   end
   Step()
 end
 
 -- Guarda el escaneo resumido (ver Finish) y avisa a las vistas
-function Scanner:Save(saved, unique, knownOwners, sigs, total)
+function Scanner:Save(saved, unique, knownOwners, sigs, total, mins)
   self.state = "idle"
   local now = time()
   local key = self.key or ES:RealmKey()
@@ -489,14 +510,20 @@ function Scanner:Save(saved, unique, knownOwners, sigs, total)
   ES.db.scans[key] = scan
 
   -- Foto compacta de los objetos de profesiones para el historial:
-  -- itemID:mínimo:subastas:mediana:unidades a la venta
-  local snap = {}
+  -- ";itemID:mínimo:subastas:mediana:unidades a la venta;..." (por bloques y sin una
+  -- cadena por objeto, como History.Pack: menos basura al acabar el escaneo)
+  local parts, blocks, n = {}, {}, 0
   for itemID, e in pairs(saved) do
     if e.minUnit and ES.History:IsTracked(itemID) then
-      snap[#snap + 1] = itemID .. ":" .. e.minUnit .. ":" .. e.listings .. ":" .. (e.median or e.minUnit) .. ":" .. e.quantity
+      parts[n + 1], parts[n + 2], parts[n + 3], parts[n + 4], parts[n + 5] = ";", itemID, ":", e.minUnit, ":"
+      parts[n + 6], parts[n + 7], parts[n + 8], parts[n + 9], parts[n + 10] = e.listings, ":", e.median or e.minUnit, ":", e.quantity
+      n = n + 10
+      if n >= 500 then blocks[#blocks + 1] = table.concat(parts, "", 1, n) n = 0 end
     end
   end
-  ES.History:Record(key, sigs, ";" .. table.concat(snap, ";"), now)
+  if n > 0 then blocks[#blocks + 1] = table.concat(parts, "", 1, n) end
+  local snap = #blocks > 0 and table.concat(blocks) or ";"
+  ES.History:Record(key, sigs, snap, now, mins)
   local scans = ES.History:Summary()
 
   local msg = string.format(L["Escaneo completado: %d subastas, %d objetos distintos."], total, unique)

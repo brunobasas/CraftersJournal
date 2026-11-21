@@ -178,6 +178,58 @@ function Fixtures.BigMarket(scans, items, auctions)
   return ids
 end
 
+-- Subastas de un escaneo grande con precios como los de una AH real (pruebas de memoria
+-- del escaneo), en la forma de AUCTIONS (tests/wow.lua). Objetos: los de profesiones
+-- (los que el addon sigue) y 3.500 que no lo son. Precio por unidad = base del objeto
+-- × (1 + r), r exponencial de media 0,5: unas pocas cerca del mínimo y muchas más caras,
+-- como en la AH (con precios casi iguales casi todas quedan cerca del mínimo). Una de
+-- cada 20 sin precio de compra (solo puja).
+-- `prev`: las subastas del escaneo anterior; siguen el 70 % (con el mismo tiempo
+-- restante o uno menos) y el resto son nuevas. Siempre las mismas para la misma llamada
+local auctionSeed = 777
+local function ARnd(n) auctionSeed = (auctionSeed * 16807) % 2147483647 return auctionSeed % n end
+local function AUnit() return (ARnd(1000000) + 0.5) / 1000000 end
+local auctionItems
+function Fixtures.AuctionItems()
+  if auctionItems then return auctionItems end
+  local tracked = {}
+  for _, data in pairs(ES.Data) do
+    if type(data) == "table" and data.recipes then
+      for _, r in pairs(data.recipes) do
+        for _, rq in ipairs(r.r) do tracked[rq[1]] = true end
+        if r.out then tracked[r.out[1]] = true end
+        if r.scroll then tracked[r.scroll] = true end
+      end
+    end
+  end
+  auctionItems = {}
+  for id in pairs(tracked) do auctionItems[#auctionItems + 1] = id end
+  table.sort(auctionItems)
+  for i = 1, 3500 do auctionItems[#auctionItems + 1] = 300000 + i end
+  return auctionItems
+end
+
+function Fixtures.RealisticAuctions(n, prev)
+  if not prev then auctionSeed = 777 end
+  local ids = Fixtures.AuctionItems()
+  local out = {}
+  for _, a in ipairs(prev or {}) do
+    if #out < n and ARnd(10) < 7 then
+      out[#out + 1] = { item = a.item, count = a.count, buyout = a.buyout, owner = a.owner, tl = math.max(1, a.tl - ARnd(2)) }
+    end
+  end
+  local COUNTS = { 1, 1, 1, 5, 10, 20 }
+  while #out < n do
+    local id = ids[1 + ARnd(#ids)]
+    local count = COUNTS[1 + ARnd(#COUNTS)]
+    local base = 20 + (id * 7919) % 20000
+    local unit = base * (1 - 0.5 * math.log(AUnit()))
+    local buyout = ARnd(20) == 0 and 0 or math.floor(count * unit)
+    out[#out + 1] = { item = id, count = count, buyout = buyout, owner = "Seller" .. (1 + ARnd(3000)), tl = 1 + ARnd(4) }
+  end
+  return out
+end
+
 -- Lo que se monta con el addon ya arrancado (usa sus propias funciones)
 function Fixtures.After(name)
   if name ~= "full" then return end

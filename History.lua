@@ -17,7 +17,8 @@ local L = ES.L
 --   0 si no se pudo comparar), snap, stuck }
 -- ES.db.track[reino]: { time, v = 3, packed } subastas del último escaneo por firma,
 --   en una cadena (History.Pack; antes v = 2 con sigs = { [firma] = número }, que se
---   sigue leyendo: History.EachSig)
+--   sigue leyendo: History.EachSig). Solo las cercanas al mínimo de su objeto
+--   (History.NearMin); las versiones anteriores las guardaban todas y se leen igual
 
 local History = {}
 ES.History = History
@@ -25,6 +26,9 @@ ES.History = History
 local HOUR = 3600
 local MAX_GAP = 24 * HOUR     -- con más separación todas pudieron caducar: comparar no dice nada
 local STUCK_BAND = 1.10       -- "las más baratas": hasta un 10% por encima del mínimo
+-- (ES.db.track guarda solo estas: también dan la competencia de Market.lua, que mira
+-- hasta su WALL_BAND, así que STUCK_BAND no puede ser menor; lo comprueba una prueba)
+History.STUCK_BAND = STUCK_BAND
 -- Lo que usan las alertas y la tendencia son 7 días: guardar más solo hace
 -- crecer los datos guardados (~18 KB por escaneo) y alarga la carga del juego
 local HISTORY_MAX_AGE = 7 * 86400
@@ -85,12 +89,90 @@ function History.Unpack(packed)
   return counts, total
 end
 
+-- Lo mismo que Unpack, sin crear la tabla: las de "muy largo" (4) y el total
+local function LongAndTotal(packed)
+  local total, long = 0, 0
+  for b = 4, 1, -1 do
+    local c = math.floor(packed / BASE[b])
+    packed = packed - c * BASE[b]
+    total = total + c
+    if b == 4 then long = c end
+  end
+  return long, total
+end
+-- Cuántas subastas hay en total en el número empaquetado (sin crear tablas)
+function History.Total(packed)
+  local _, total = LongAndTotal(packed)
+  return total
+end
+
 -- Las subastas de un escaneo ([firma] = número) en una sola cadena, como se guardan
--- (v = 3). El número cabe sin exponente: como mucho 999.999.999.999 (AddAuction)
+-- (v = 3): ";firma=número;firma=número...". El número cabe sin exponente: como mucho
+-- 999.999.999.999 (AddAuction). Por bloques y sin una cadena "firma=número" por
+-- subasta: con una tabla de todas, juntarla dejaba varias veces su tamaño en basura
+local PACK_BLOCK = 512
 function History.Pack(sigs)
-  local parts = {}
-  for sig, packed in pairs(sigs) do parts[#parts + 1] = sig .. "=" .. packed end
-  return ";" .. table.concat(parts, ";")
+  local parts, blocks, n = {}, {}, 0
+  for sig, packed in pairs(sigs) do
+    parts[n + 1], parts[n + 2], parts[n + 3], parts[n + 4] = ";", sig, "=", packed
+    n = n + 4
+    if n >= PACK_BLOCK then
+      blocks[#blocks + 1] = table.concat(parts, "", 1, n)
+      n = 0
+    end
+  end
+  if n > 0 then blocks[#blocks + 1] = table.concat(parts, "", 1, n) end
+  if #blocks == 0 then return ";" end
+  return table.concat(blocks)
+end
+
+-- Objeto, cantidad y precio de compra de una firma (números), o nil sin precio de compra
+local function SigPrice(sig)
+  local item, count, buyout = sig:match("^(%d+):(%d+):(%d+):")
+  count, buyout = tonumber(count), tonumber(buyout)
+  if not (buyout and buyout > 0 and count and count > 0) then return nil end
+  return tonumber(item), count, buyout
+end
+
+-- De las subastas de un escaneo ([firma] = número), solo las que se leen después: las
+-- de precio por unidad hasta STUCK_BAND sobre el mínimo de su objeto (las "baratas" que
+-- se comparan con el escaneo siguiente y la competencia). Las demás y las de solo puja
+-- no las mira nadie: guardarlas eran ~2,4 MB y ~30 MB de basura en cada escaneo
+-- `mins`: { [itemID] = precio por unidad más bajo } si ya se sabe (el escaneo lo lleva:
+-- el mismo número que saldría de las firmas); si no, se calcula de las firmas
+function History.NearMin(sigs, mins)
+  local min = mins
+  if not min then
+    min = {}
+    for sig in pairs(sigs) do
+      local item, count, buyout = SigPrice(sig)
+      if item and (not min[item] or buyout / count < min[item]) then min[item] = buyout / count end
+    end
+  end
+  local out = {}
+  for sig, packed in pairs(sigs) do
+    local item, count, buyout = SigPrice(sig)
+    if item and min[item] and buyout / count <= min[item] * STUCK_BAND then out[sig] = packed end
+  end
+  return out
+end
+
+-- Hasta qué precio por unidad mira History:Record, por objeto, las subastas del
+-- escaneo anterior (`track`): { [itemID] = precio }. Al leer un escaneo nuevo, las
+-- subastas más caras que eso y que tampoco pueden quedar cerca del mínimo nuevo no
+-- necesitan firma (Scanner:Process)
+function History.PrevReach(track)
+  local min, reach = {}, {}
+  History.EachPrice(track, function(item, count, buyout)
+    if buyout > 0 and count > 0 and (not min[item] or buyout / count < min[item]) then min[item] = buyout / count end
+  end)
+  History.EachPrice(track, function(item, count, buyout)
+    if buyout > 0 and count > 0 then
+      local unit = buyout / count
+      if unit <= min[item] * STUCK_BAND and (not reach[item] or unit > reach[item]) then reach[item] = unit end
+    end
+  end)
+  return reach
 end
 
 -- Recorre las subastas del último escaneo de un reino (ES.db.track[reino]):
@@ -103,6 +185,23 @@ function History.EachSig(track, fn)
     for sig, packed in track.packed:gmatch(";([^;=]+)=(%d+)") do fn(sig, tonumber(packed)) end
   elseif type(track.sigs) == "table" then
     for sig, packed in pairs(track.sigs) do fn(sig, tonumber(packed) or 0) end
+  end
+end
+
+-- Como EachSig, pero da los números de la firma sin crearla: fn(objeto, cantidad,
+-- precio de compra, número empaquetado). Recorrer la cadena firma a firma dejaba una
+-- cadena por subasta más sus partes (Market: la competencia, en cada escaneo)
+function History.EachPrice(track, fn)
+  if type(track) ~= "table" then return end
+  if type(track.packed) == "string" then
+    for item, count, buyout, packed in track.packed:gmatch(";(%d+):(%d+):(%d+):[^;=]*=(%d+)") do
+      fn(tonumber(item), tonumber(count), tonumber(buyout), tonumber(packed))
+    end
+  elseif type(track.sigs) == "table" then
+    for sig, packed in pairs(track.sigs) do
+      local item, count, buyout = sig:match("^(%d+):(%d+):(%d+):")
+      if item then fn(tonumber(item), tonumber(count), tonumber(buyout), tonumber(packed) or 0) end
+    end
   end
 end
 
@@ -137,13 +236,15 @@ end
 
 -- Guarda un escaneo. sigs: [firma] = subastas por categoría de tiempo restante
 -- (ver AddAuction); snap: foto de precios. Devuelve los segundos desde el
--- escaneo anterior si se pudo comparar, o nil.
-function History:Record(key, sigs, snap, now)
+-- escaneo anterior si se pudo comparar, o nil. `mins` (opcional): el precio por unidad
+-- más bajo de cada objeto en este escaneo (History.NearMin)
+function History:Record(key, sigs, snap, now, mins)
   ES.db.track = ES.db.track or {}
   local history = self:Entries(key)
   local prev = ES.db.track[key]
-  -- (empaquetadas en una cadena: una tabla con una clave por firma ocupaba ~5 MB)
-  ES.db.track[key] = { time = now, packed = History.Pack(sigs), v = 3 }
+  -- (empaquetadas en una cadena: una tabla con una clave por firma ocupaba ~5 MB; y
+  -- solo las cercanas al mínimo, las únicas que se leen: History.NearMin)
+  ES.db.track[key] = { time = now, packed = History.Pack(History.NearMin(sigs, mins)), v = 3 }
   if prev and prev.v ~= 2 and prev.v ~= 3 then prev = nil end -- formato antiguo: no comparable
 
   local entry = { time = now, elapsed = 0, snap = snap }
@@ -165,13 +266,13 @@ function History:Record(key, sigs, snap, now)
       local item, count, buyout = sig:match("^(%d+):(%d+):(%d+):")
       count, buyout = tonumber(count), tonumber(buyout)
       if buyout > 0 and count > 0 and buyout / count <= minUnit[item] * STUCK_BAND then
-        local prevCounts, prevTotal = History.Unpack(packed)
+        local prevLong, prevTotal = LongAndTotal(packed)
         local remaining = 0
         if sigs[sig] then
           -- Descontar las nuevas con la misma firma: sobran en total o en "muy
           -- largo" (el tiempo restante nunca sube)
-          local nowCounts, nowTotal = History.Unpack(sigs[sig])
-          local new = math.max(0, nowTotal - prevTotal, nowCounts[4] - prevCounts[4])
+          local nowLong, nowTotal = LongAndTotal(sigs[sig])
+          local new = math.max(0, nowTotal - prevTotal, nowLong - prevLong)
           remaining = math.min(prevTotal, nowTotal - new)
         end
         tot[item] = (tot[item] or 0) + prevTotal

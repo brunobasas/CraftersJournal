@@ -48,7 +48,7 @@ Termina con código 0 si todo pasa y con 1 si falla algo. Al final sale un resum
 | `whatsnew` | Novedades |
 
 - `tools/tests/wow.lua`: la API de WoW simulada (marcos, eventos, `C_Timer` con cola, AH clásica, bolsas, hechizos, profesiones). También un Auctionator simulado: `InstallAuctionator()` lo carga y `AUCTIONATOR_DAYS[itemID] = { { ago = días, max = cobre }, ... }` es su historial por día (`AUCTIONATOR_FAIL` y `AUCTIONATOR_ROWS` para que falle o devuelva otra forma), `AUCTIONATOR_LATEST[itemID] = { price, age }` el último mínimo de su API pública, y su escaneo completo (`Auctionator.State.FullScanFrameRef`: `AUCTIONATOR_FULL_SCANS` cuenta los lanzados, `AUCTIONATOR_WAITING = true` es su propia cuenta atrás). El addon solo escanea con Auctionator: una prueba que escanee necesita `InstallAuctionator()` (sin él, el botón Escanear sale en gris).
-- `tools/tests/fixtures.lua`: lo guardado en tres estados (`empty`, `scan`, `full`) y los precios de la AH, fijos.
+- `tools/tests/fixtures.lua`: lo guardado en tres estados (`empty`, `scan`, `full`) y los precios de la AH, fijos. Para escaneos grandes, `Fixtures.RealisticAuctions(n, anterior)` da `n` subastas en la forma de `AUCTIONS` con precios repartidos como en una AH real (unas pocas cerca del mínimo y muchas más caras); con las del escaneo anterior, sigue el 70 % de ellas. Lo usan las pruebas de memoria del escaneo de la categoría `auction` (`python tools/run_tests.py --only auction`).
 - `tools/tests/framework.lua`: `test`, `expect`… y ayudas para abrir pestañas y calcular rutas.
 - `tools/tests/snapshots/`: las instantáneas guardadas.
 

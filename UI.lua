@@ -245,6 +245,8 @@ local function CreateMainFrame()
   -- otro personaje (o al volver a entrar) se empieza en la portada
   -- El botón de la estrella sobre una fila (Waypoints.lua) no se queda flotando
   f:HookScript("OnHide", function() ES.Waypoints.ReleaseHover() end)
+  -- Cerrada un rato, fuera las cachés que se rehacen al momento (ES:ScheduleIdleRelease)
+  f:HookScript("OnHide", function() ES:ScheduleIdleRelease() end)
   f:SetScript("OnShow", function(self)
     ES.Jobs.Resume() -- rutas pendientes de cuando estaba cerrada (Jobs.lua)
     ES:RefreshScanButtons()
@@ -731,6 +733,29 @@ function ES:ShowMainFrame(page)
   end
 end
 
+-- Con la ventana cerrada IDLE_RELEASE segundos se sueltan las cachés que se rehacen
+-- enseguida al volver a pedirlas (lighter-memory): Ganar dinero (~13 MB tras abrirlo),
+-- Merchant's Favor y los precios de Inversiones. Cada página las rehace al mostrarse
+-- (su OnShow), y la ventana de fabricar pide las ideas de Ganar dinero al abrirse. Las
+-- rutas no: rehacerlas tarda segundos, y la fijada la usa el asistente
+ES.IDLE_RELEASE = 60
+local idleStamp = 0
+function ES:ScheduleIdleRelease()
+  idleStamp = idleStamp + 1
+  local mine = idleStamp
+  C_Timer.After(ES.IDLE_RELEASE, function()
+    -- (otro cierre después de este, o la ventana abierta otra vez)
+    if mine ~= idleStamp or (main and main:IsShown()) then return end
+    ES:ReleaseIdleCaches()
+  end)
+end
+
+function ES:ReleaseIdleCaches()
+  if self.Earn then self.Earn:Clear() end
+  if self.Favor then self.Favor.Clear() end
+  if self.PriceHistory then self.PriceHistory.Clear() end
+end
+
 -- Esconde la ventana si está abierta (sin crearla si aún no existe)
 function ES:HideMainFrame()
   if main and main:IsShown() then main:Hide() end
@@ -772,6 +797,8 @@ function ES:OnScanComplete(scan, followed)
       C_Timer.After(0, function()
         -- ruta empezada que ahora cuesta bastante más
         Timed("ruta empezada", function() self:AnnounceRouteDrift() end)
+        -- y la basura que ha dejado todo esto, en unos segundos (Jobs.lua)
+        self.Jobs.CollectGarbage()
       end)
     end)
   end)

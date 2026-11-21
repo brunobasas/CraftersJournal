@@ -25,6 +25,9 @@ local SUPPLY_AGE = 20 * HOUR    -- comparar con la foto de hace ~1 día
 local SUPPLY_GROWTH = 0.5       -- +50% de unidades a la venta
 local SUPPLY_MIN_UNITS = 10     -- y al menos 10 unidades más
 local WALL_BAND = 1.05          -- "en el precio mínimo": hasta un 5% por encima
+-- (sale de ES.db.track, que guarda solo hasta History.STUCK_BAND sobre el mínimo: no
+-- puede ser mayor que eso; lo comprueba una prueba)
+Market.WALL_BAND = WALL_BAND
 local WALL_LISTINGS = 5
 local MIN_SURVIVAL = 0.02       -- evita log(0) si desaparecen todas
 
@@ -184,9 +187,7 @@ local function Build(stamp, history, track, pause)
   -- Competencia (subastas del último escaneo): el mínimo por unidad, y después cuántas
   -- subastas y unidades hay hasta WALL_BAND por encima
   local function Offer(fn)
-    ES.History.EachSig(track, function(sig, packed)
-      local id, count, buyout = sig:match("^(%d+):(%d+):(%d+):")
-      id, count, buyout = tonumber(id), tonumber(count), tonumber(buyout)
+    ES.History.EachPrice(track, function(id, count, buyout, packed)
       if buyout > 0 and count > 0 then fn(Item(id), buyout / count, count, packed) end
       n = n + 1
       if n % 256 == 0 then pause() end
@@ -197,7 +198,7 @@ local function Build(stamp, history, track, pause)
   end)
   Offer(function(it, unit, count, packed)
     if unit <= it[I_WALL_MIN] * WALL_BAND then
-      local _, k = ES.History.Unpack(packed)
+      local k = ES.History.Total(packed)
       it[I_WALL_LISTINGS], it[I_WALL_UNITS] = it[I_WALL_LISTINGS] + k, it[I_WALL_UNITS] + count * k
     end
   end)

@@ -139,6 +139,54 @@ function Jobs.Busy(key)
   return false
 end
 
+---------------------------------------------------------------------------
+-- Ayudar al recolector de basura tras un escaneo (lighter-memory). Leer un escaneo
+-- completo deja decenas de MB de basura y WoW la recoge poco a poco (todos los addons
+-- comparten un Lua): el gestor de addons enseñaba el addon con 100 MB durante minutos.
+-- Aquí se dan pasos pequeños del recolector durante unos segundos, con un tope de
+-- tiempo por fotograma, hasta que acaban dos ciclos (el primero puede haber empezado
+-- antes de la basura del escaneo). Nunca collectgarbage("collect"): un ciclo entero de
+-- golpe congela el juego. En combate espera. Si el juego no deja, no hace nada
+---------------------------------------------------------------------------
+Jobs.GC_BUDGET = 2          -- ms por fotograma
+Jobs.GC_MAX_SECONDS = 10    -- como mucho, sin contar el combate
+Jobs.GC_MAX_FRAMES = 600    -- (y como mucho tantos fotogramas: fuera del juego el reloj no avanza)
+local GC_STEP_KB = 16
+local GC_STEPS_PER_FRAME = 200 -- (tope de pasos por fotograma, por si no hay reloj)
+local GC_CYCLES = 2
+local gcRun = 0
+
+function Jobs.CollectGarbage()
+  if not C_Timer then return end
+  gcRun = gcRun + 1
+  local run, frames, cycles = gcRun, 0, 0
+  local deadline = (GetTime and GetTime() or 0) + Jobs.GC_MAX_SECONDS
+  local function Frame()
+    if run ~= gcRun then return end -- (otro escaneo empezó otra)
+    if InCombatLockdown and InCombatLockdown() then
+      deadline = deadline + 1
+      C_Timer.After(1, Frame)
+      return
+    end
+    frames = frames + 1
+    if frames > Jobs.GC_MAX_FRAMES or (GetTime and GetTime() > deadline) then return end
+    local collect = collectgarbage
+    if type(collect) ~= "function" then return end
+    local start = debugprofilestop and debugprofilestop()
+    for _ = 1, GC_STEPS_PER_FRAME do
+      local ok, done = pcall(collect, "step", GC_STEP_KB)
+      if not ok then return end
+      if done == true then
+        cycles = cycles + 1
+        if cycles >= GC_CYCLES then return end
+      end
+      if start and debugprofilestop() - start > Jobs.GC_BUDGET then break end
+    end
+    C_Timer.After(0, Frame)
+  end
+  C_Timer.After(0, Frame)
+end
+
 -- ¿Hay en la cola algún trabajo cuyo hueco empiece por `prefix`? ("plan:Alchemy:")
 function Jobs.Queued(prefix)
   for _, job in ipairs(queue) do

@@ -1,5 +1,10 @@
 # Crafter's Journal
 
+## 0.68.0
+
+- **Much less memory after an AH scan.** Reading a full AH scan left a lot of temporary data behind, and since all addons share one Lua memory, WoW's garbage collector took minutes to clean it up: in the meantime your addon list showed Crafter's Journal at 100 MB or more. A scan now creates less than half of that (in our tests, 34 MB instead of 75 MB for 150,000 auctions), with exactly the same prices, market alerts and competition. The addon keeps only the auctions it actually compares later (the cheapest ones of each item, up to 10% above the lowest price) instead of every auction, and builds what it saves with much less waste. Right after a scan, it also helps the garbage collector in small steps for a few seconds (never in combat), so the number goes back down in seconds instead of minutes. (CurseForge)
+- **Less memory while the window is closed.** After the window has been closed for a minute, the addon lets go of what Make Money, Merchant's Favor and Investments keep in memory, which can be over 10 MB once you've opened Make Money. Reopening those tabs works them out again in a moment, with the same results. Your started route and the assistant are kept as they are. WoW doesn't let an addon unload itself, so the addon can't go down to zero, but it now stays much lighter when you're not using it. (CurseForge)
+
 ## 0.67.0
 
 - **Your Investments, scans and prices are back after the Forever client update.** Since the game client update of November 21, the game no longer tells addons which realm you're on, so Investments, your AH scans, prices and your alts' known recipes all showed up empty, even though they were still saved. In Forever the auction house is shared by your ruleset (Normal, PvP, Roleplay...) and faction, so the addon now keeps everything by ruleset and faction, which the game still reports. The first time you log in, what you had saved moves over to the new keys, including anything you added after the update. Each old realm goes to the ruleset of the characters who played there. Note: an older version of the addon won't see the moved data.

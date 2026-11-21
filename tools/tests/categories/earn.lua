@@ -158,6 +158,105 @@ test("enfriamiento empezado antes de arrancar el PC: las horas de verdad", funct
   expect_eq(ES.charData.cdReady[ARCANITE], nil, "se borra lo guardado mal")
 end, { state = "full" })
 
+---------------------------------------------------------------------------
+-- Con la ventana cerrada un rato se sueltan las cachés (lighter-memory, UI.lua)
+---------------------------------------------------------------------------
+local function KB()
+  collectgarbage("collect")
+  collectgarbage("collect")
+  return collectgarbage("count")
+end
+
+-- Las ideas de Ganar dinero en texto (para comparar dos cálculos)
+local function Digest(res)
+  local t = {}
+  for _, list in ipairs({ res.batch or {}, res.vendor or {} }) do
+    for _, idea in ipairs(list) do
+      t[#t + 1] = string.format("%s:%s:%s:%.4f:%.4f:%.4f", tostring(idea.profKey), tostring(idea.e.id), tostring(idea.crafts),
+        idea.profit or 0, idea.invest or 0, idea.sale or 0)
+    end
+  end
+  return table.concat(t, "\n"), #t
+end
+
+local function OpenMoney()
+  ES.db.earnMinProfit = 1 -- (todas las que dejan algo)
+  OpenPage("money")
+  return ES.Earn:Ideas()
+end
+
+test("ventana cerrada un minuto: se sueltan las cachés de Ganar dinero", function()
+  OpenMoney()
+  -- Lo que ocupa la caché de Ganar dinero
+  local with = KB()
+  ES.Earn:Clear()
+  local cache = with - KB()
+  OpenMoney()
+  ES:HideMainFrame()
+  RunTimers(ES.IDLE_RELEASE - 5)
+  local closed = KB()
+  RunTimers(10)
+  local freed = closed - KB()
+  note("caché de Ganar dinero %.0f KB; liberado al minuto %.0f KB", cache, freed)
+  expect(cache > 50, "la caché de Ganar dinero ocupa %.0f KB: la prueba no comprueba nada", cache)
+  expect(freed >= cache * 0.9, "al minuto se liberan %.0f KB y la caché ocupaba %.0f KB", freed, cache)
+end, { state = "full" })
+
+test("ventana cerrada y abierta otra vez antes del minuto: Ganar dinero no se recalcula", function()
+  local res = OpenMoney()
+  ES:HideMainFrame()
+  RunTimers(30)
+  OpenMain()
+  RunTimers(ES.IDLE_RELEASE)
+  expect(ES.Earn:Ideas() == res, "Ganar dinero se recalculó al volver a abrir antes del minuto")
+  -- Abrir y cerrar otra vez: cuenta el último cierre
+  ES:HideMainFrame()
+  RunTimers(30)
+  expect(ES.Earn:Ideas() == res, "se soltó antes del minuto desde el último cierre")
+  RunTimers(ES.IDLE_RELEASE)
+  expect(ES.Earn:Ideas() ~= res, "no se soltó al minuto del último cierre")
+end, { state = "full" })
+
+test("ventana cerrada un minuto: la ruta empezada no se recalcula", function()
+  local _, plan = StartRoute("Tailoring", 1, 75)
+  local calls = 0
+  local Plan = ES.Planner.Plan
+  ES.Planner.Plan = function(...) calls = calls + 1 return Plan(...) end
+  ES:HideMainFrame()
+  local ok, err = pcall(RunTimers, ES.IDLE_RELEASE + 5)
+  ES.Planner.Plan = Plan
+  if not ok then error(err, 0) end
+  expect(ES:LockedPlan("Tailoring") == plan, "la ruta fijada cambió al soltar las cachés")
+  expect_eq(calls, 0, "rutas calculadas con la ventana cerrada")
+end, { state = "full" })
+
+test("soltadas las cachés, Ganar dinero da lo mismo al volver", function()
+  local before, n = Digest(OpenMoney())
+  ES:HideMainFrame()
+  RunTimers(ES.IDLE_RELEASE + 5)
+  local t = os.clock()
+  local after = Digest(OpenMoney())
+  note("%d líneas; recalcular al volver a abrir: %.0f ms (en el Lua de las pruebas)", n, (os.clock() - t) * 1000)
+  expect(n > 0, "sin ideas: la prueba no comprueba nada")
+  expect_eq(after, before, "ideas, cantidades y beneficios")
+end, { state = "full" })
+
+test("soltadas las cachés, la ventana de fabricar calcula sus ideas", function()
+  local res = OpenMoney()
+  local prof = expect(res.batch[1], "sin ideas").profKey
+  local function List()
+    local t = {}
+    for _, idea in ipairs(ES.CraftWindow:List(prof)) do t[#t + 1] = idea.e.id .. "x" .. idea.crafts end
+    return table.concat(t, " ")
+  end
+  local before = List()
+  ES:HideMainFrame()
+  RunTimers(ES.IDLE_RELEASE + 5)
+  expect(ES.Earn:Ideas() ~= res, "no se soltó la caché")
+  expect_eq(List(), before, "ideas de la ventana de fabricar de " .. prof)
+  expect(before ~= "", "la ventana de fabricar no tiene ideas: la prueba no comprueba nada")
+end, { state = "full" })
+
 test("dinero: negativos, NaN e infinito no dan error al pintarse", function()
   for _, v in ipairs({ -12345, 0, 1, 99999999, 0 / 0, math.huge, -math.huge }) do
     no_error(ES.Money, v)

@@ -529,6 +529,401 @@ test("track: 60.000 subastas ocupan la mitad o menos en una cadena", function()
   expect(asString <= asTable / 2, "la cadena ocupa %.1f MB y la tabla %.1f MB", asString / 1024, asTable / 1024)
 end)
 
+---------------------------------------------------------------------------
+-- Escaneo grande con precios realistas (lighter-memory): memoria temporal del
+-- escaneo y lo guardado en ES.db.track, con los mismos resultados
+---------------------------------------------------------------------------
+local BIG_SCAN = 150000
+
+-- ¿Iguales, también dentro de las tablas?
+local function SameDeep(a, b, what)
+  if type(a) ~= "table" or type(b) ~= "table" then
+    if a ~= b then error(string.format("%s: antes %s, ahora %s", what, tostring(a), tostring(b)), 0) end
+    return
+  end
+  for k, v in pairs(a) do SameDeep(v, b[k], what .. "." .. tostring(k)) end
+  for k, v in pairs(b) do
+    if a[k] == nil then error(string.format("%s.%s: antes nada, ahora %s", what, tostring(k), tostring(v)), 0) end
+  end
+end
+
+-- Precio por unidad más bajo de cada objeto seguido (con precio de compra)
+local function MinUnits(auctions)
+  local min = {}
+  for _, a in ipairs(auctions) do
+    if a.buyout > 0 and ES.History:IsTracked(a.item) then
+      local u = a.buyout / a.count
+      if not min[a.item] or u < min[a.item] then min[a.item] = u end
+    end
+  end
+  return min
+end
+
+-- Hace un escaneo completo (con Auctionator) de `auctions`, 16 min después del anterior
+local function DoScan(auctions)
+  AUCTIONS = auctions
+  NOW = NOW + 16 * 60
+  AuctionFrame:Show()
+  FireEvent("AUCTION_HOUSE_SHOW")
+  RunTimers()
+  ES.Scanner:Start()
+  RunTimers()
+  expect(not ES.Scanner:IsBusy(), "el escaneo no termina")
+  AuctionFrame:Hide()
+  FireEvent("AUCTION_HOUSE_CLOSED")
+  RunTimers()
+end
+
+-- Memoria (MB) que crea un escaneo con el recolector parado: lo que el jugador ve
+-- justo al acabar. (Sin dejar que el addon ayude al recolector mientras se mide)
+local function ScanAllocMB(auctions)
+  AUCTIONS = auctions
+  local real = collectgarbage
+  local before = KB()
+  real("stop")
+  collectgarbage = function(opt, ...)
+    if opt == "step" or opt == "collect" then return false end
+    return real(opt, ...)
+  end
+  local ok, err = pcall(DoScan, auctions)
+  local peak = real("count")
+  collectgarbage = real
+  real("restart")
+  if not ok then error(err, 0) end
+  return (peak - before) / 1024
+end
+
+test("subastas realistas: unas pocas cerca del mínimo", function()
+  local auctions = Fixtures.RealisticAuctions(BIG_SCAN)
+  local min = MinUnits(auctions)
+  local near, all = 0, 0
+  for _, a in ipairs(auctions) do
+    if a.buyout > 0 and min[a.item] then
+      all = all + 1
+      if a.buyout / a.count <= min[a.item] * 1.10 then near = near + 1 end
+    end
+  end
+  local share = near / all
+  note("%d subastas de objetos seguidos, %.0f %% cerca del mínimo", all, share * 100)
+  expect(share >= 0.10 and share <= 0.30, "%.0f %% cerca del mínimo (se esperaba un 15-20 %%)", share * 100)
+end, { state = "empty" })
+
+-- Lo que creaban estos dos escaneos antes de lighter-memory (medido con ScanAllocMB y
+-- el código de entonces): cada uno puede crear como mucho la mitad
+local REF_ALLOC_MB = { 74.9, 88.4 }
+
+test("escaneo grande: cada escaneo crea la mitad o menos de memoria que antes", function()
+  InstallAuctionator()
+  local first = Fixtures.RealisticAuctions(BIG_SCAN)
+  local m1 = ScanAllocMB(first)
+  local m2 = ScanAllocMB(Fixtures.RealisticAuctions(BIG_SCAN, first))
+  note("1.er escaneo %.1f MB (antes %.1f), 2.º escaneo %.1f MB (antes %.1f), recolector parado",
+    m1, REF_ALLOC_MB[1], m2, REF_ALLOC_MB[2])
+  expect(m1 <= REF_ALLOC_MB[1] / 2, "el 1.er escaneo crea %.1f MB (tope %.1f)", m1, REF_ALLOC_MB[1] / 2)
+  expect(m2 <= REF_ALLOC_MB[2] / 2, "el 2.º escaneo crea %.1f MB (tope %.1f)", m2, REF_ALLOC_MB[2] / 2)
+end, { state = "empty" })
+
+-- El resumen de cada objeto como lo guardaba el escaneo antes de lighter-memory (copia
+-- de Scanner:Process, Finish y BuildLadder de entonces: no cambiarla con Scanner.lua)
+local function RefSummary(auctions)
+  local items = {}
+  for _, a in ipairs(auctions) do
+    local e = items[a.item]
+    if not e then
+      e = { listings = 0, quantity = 0, buyoutQty = 0, buyoutTotal = 0, owners = {} }
+      items[a.item] = e
+    end
+    e.listings, e.quantity = e.listings + 1, e.quantity + a.count
+    local owner = a.owner ~= "" and a.owner or "?"
+    if owner ~= "?" then
+      e.owners[owner] = (e.owners[owner] or 0) + 1
+      e.knownOwners = (e.knownOwners or 0) + 1
+    end
+    if ES.History:IsTracked(a.item) and a.buyout > 0 then
+      e.ladder = e.ladder or {}
+      local unit = math.floor(a.buyout / a.count + 0.5)
+      e.ladder[unit] = (e.ladder[unit] or 0) + a.count
+    end
+    if a.buyout > 0 then
+      local unit = a.buyout / a.count
+      if not e.minUnit or unit < e.minUnit then e.minUnit = unit end
+      e.buyoutQty, e.buyoutTotal = e.buyoutQty + a.count, e.buyoutTotal + a.buyout
+    end
+  end
+  local function Ladder(levels)
+    if not levels then return nil end
+    local prices, total = {}, 0
+    for price, qty in pairs(levels) do prices[#prices + 1] = price total = total + qty end
+    table.sort(prices)
+    local median, acc = nil, 0
+    for _, price in ipairs(prices) do
+      acc = acc + levels[price]
+      if acc >= total / 2 then median = price break end
+    end
+    local flat = {}
+    for i = 1, math.min(#prices, 39) do flat[#flat + 1] = prices[i] flat[#flat + 1] = levels[prices[i]] end
+    if #prices >= 40 then
+      local qty, value = 0, 0
+      for i = 40, #prices do qty = qty + levels[prices[i]] value = value + levels[prices[i]] * prices[i] end
+      flat[#flat + 1] = math.floor(value / qty + 0.5)
+      flat[#flat + 1] = qty
+    end
+    return flat, median
+  end
+  local out = {}
+  for id, e in pairs(items) do
+    local sellers, top = 0, 0
+    for _, n in pairs(e.owners) do sellers = sellers + 1 if n > top then top = n end end
+    local ladder, median = Ladder(e.ladder)
+    out[id] = { listings = e.listings, quantity = e.quantity, minUnit = e.minUnit and math.floor(e.minUnit + 0.5) or nil,
+      avgUnit = e.buyoutQty > 0 and math.floor(e.buyoutTotal / e.buyoutQty + 0.5) or nil, sellers = sellers > 0 and sellers or nil,
+      topShare = (e.knownOwners or 0) * 2 >= e.listings and math.floor(top / e.knownOwners * 100 + 0.5) / 100 or nil,
+      ladder = ladder, median = median }
+  end
+  return out
+end
+
+test("escaneo grande: el resumen guardado (escalera, vendedores, mediana) es el de antes", function()
+  InstallAuctionator()
+  local first = Fixtures.RealisticAuctions(30000)
+  local second = Fixtures.RealisticAuctions(30000, first)
+  DoScan(first)
+  DoScan(second) -- (el segundo, con escaleras de otro tamaño que las del primero)
+  local scan = ES.db.scans[ES:RealmKey()]
+  local want, n, ladders = RefSummary(second), 0, 0
+  SameDeep(want, scan.items, "items")
+  for _, e in pairs(want) do
+    n = n + 1
+    if e.ladder then ladders = ladders + 1 end
+  end
+  note("%d objetos iguales, %d con escalera", n, ladders)
+  expect(ladders > 1000, "pocos objetos con escalera: la prueba no comprueba nada")
+end, { state = "empty" })
+
+-- Las firmas de un escaneo como las montaba antes el escaneo: todas las subastas de los
+-- objetos seguidos (Scanner:Process antes de lighter-memory)
+local function FullSigs(auctions)
+  local S, t = ES.History, {}
+  for _, a in ipairs(auctions) do
+    if S:IsTracked(a.item) then
+      S.AddAuction(t, S.Signature(a.item, a.count, a.buyout, a.owner ~= "" and a.owner or "?"), a.tl)
+    end
+  end
+  return t
+end
+
+-- "Baratas que siguen" como se calculaban antes, con todas las firmas del escaneo
+-- anterior y del nuevo. Copia de History:Record antes de lighter-memory: no cambiarla
+-- al cambiar History.lua
+local function RefStuck(prev, sigs)
+  local minUnit = {}
+  for sig in pairs(prev) do
+    local item, count, buyout = sig:match("^(%d+):(%d+):(%d+):")
+    count, buyout = tonumber(count), tonumber(buyout)
+    if buyout > 0 and count > 0 and (not minUnit[item] or buyout / count < minUnit[item]) then
+      minUnit[item] = buyout / count
+    end
+  end
+  local rem, tot = {}, {}
+  for sig, packed in pairs(prev) do
+    local item, count, buyout = sig:match("^(%d+):(%d+):(%d+):")
+    count, buyout = tonumber(count), tonumber(buyout)
+    if buyout > 0 and count > 0 and buyout / count <= minUnit[item] * 1.10 then
+      local prevCounts, prevTotal = ES.History.Unpack(packed)
+      local remaining = 0
+      if sigs[sig] then
+        local nowCounts, nowTotal = ES.History.Unpack(sigs[sig])
+        local new = math.max(0, nowTotal - prevTotal, nowCounts[4] - prevCounts[4])
+        remaining = math.min(prevTotal, nowTotal - new)
+      end
+      tot[item] = (tot[item] or 0) + prevTotal
+      rem[item] = (rem[item] or 0) + remaining
+    end
+  end
+  local parts = {}
+  for item, n in pairs(tot) do parts[#parts + 1] = item .. ":" .. rem[item] .. ":" .. n end
+  return ";" .. table.concat(parts, ";")
+end
+
+local function LastEntry() local h = ES.History:Entries() return h[#h] end
+
+test("track: solo las subastas cerca del mínimo (100, 105 y 110 sí; 150 y solo puja no)", function()
+  local S, sigs = ES.History, {}
+  for _, price in ipairs({ 100, 105, 110, 150 }) do S.AddAuction(sigs, S.Signature(2318, 1, price, "Ana"), 4) end
+  S.AddAuction(sigs, S.Signature(2318, 1, 0, "Ana"), 4)
+  local key = ES:RealmKey()
+  S:Record(key, sigs, ";1:1:1", NOW)
+  local got = {}
+  S.EachSig(ES.db.track[key], function(sig) got[#got + 1] = sig end)
+  table.sort(got)
+  expect_eq(table.concat(got, " "), "2318:1:100:Ana 2318:1:105:Ana 2318:1:110:Ana", "subastas guardadas")
+end, { state = "empty" })
+
+test("track: lo guardado cubre la competencia (STUCK_BAND >= WALL_BAND)", function()
+  expect(ES.History.STUCK_BAND >= ES.Market.WALL_BAND,
+    "History.STUCK_BAND (%s) es menor que Market.WALL_BAND (%s): la competencia saldría de menos subastas",
+    tostring(ES.History.STUCK_BAND), tostring(ES.Market.WALL_BAND))
+end, { state = "empty" })
+
+test("track reducido: mismas baratas que siguen, competencia y señales que guardando todas", function()
+  InstallAuctionator()
+  local key = ES:RealmKey()
+  local scans = { Fixtures.RealisticAuctions(30000) }
+  scans[2] = Fixtures.RealisticAuctions(30000, scans[1])
+  scans[3] = Fixtures.RealisticAuctions(30000, scans[2])
+  for i, auctions in ipairs(scans) do
+    DoScan(auctions)
+    if i > 1 then
+      local entry = LastEntry()
+      expect(entry.stuck and #entry.stuck > 100, "escaneo %d: sin baratas que siguen", i)
+      expect_eq(Parts(entry.stuck), Parts(RefStuck(FullSigs(scans[i - 1]), FullSigs(auctions))),
+        "baratas que siguen del escaneo " .. i)
+    end
+  end
+  -- Señales y competencia con lo guardado ahora, y con todas las subastas (como antes)
+  local ids = {}
+  for id in pairs(MinUnits(scans[3])) do ids[#ids + 1] = id end
+  table.sort(ids)
+  BuildIndexNow()
+  local got = {}
+  for _, id in ipairs(ids) do got[id] = { signals = ES.Market:Signals(id), wall = ES.Market:Wall(id) } end
+  local track = ES.db.track[key]
+  -- (otra hora: el índice se rehace; la hora de track no cuenta en ninguna señal)
+  ES.db.track[key] = { time = track.time + 1, packed = ES.History.Pack(FullSigs(scans[3])), v = 3 }
+  expect(#ES.db.track[key].packed > #track.packed * 2, "lo guardado no es más pequeño que todas las subastas")
+  BuildIndexNow()
+  local walls = 0
+  for _, id in ipairs(ids) do
+    SameDeep(ES.Market:Wall(id), got[id].wall, id .. ".wall")
+    SameDeep(ES.Market:Signals(id), got[id].signals, id .. ".signals")
+    if got[id].wall.known then walls = walls + 1 end
+  end
+  note("%d objetos comparados, %d con competencia", #ids, walls)
+  expect(walls > 100, "pocos objetos con competencia: la prueba no comprueba nada")
+end, { state = "empty" })
+
+test("track: primer escaneo tras actualizar, con todas las subastas guardadas por la versión anterior", function()
+  InstallAuctionator()
+  local key = ES:RealmKey()
+  local first = Fixtures.RealisticAuctions(30000)
+  local second = Fixtures.RealisticAuctions(30000, first)
+  local full1 = FullSigs(first)
+  ES.History:Entries() -- (crea el historial del reino)
+  ES.db.track = { [key] = { time = NOW, packed = ES.History.Pack(full1), v = 3 } }
+  DoScan(second)
+  local entry = LastEntry()
+  expect(entry.stuck and #entry.stuck > 100, "no se comparó con lo guardado por la versión anterior")
+  expect_eq(Parts(entry.stuck), Parts(RefStuck(full1, FullSigs(second))), "baratas que siguen")
+  -- Lo nuevo, solo las cercanas al mínimo, y todas ellas
+  local min, n = MinUnits(second), 0
+  ES.History.EachSig(ES.db.track[key], function(sig)
+    local id, count, buyout = sig:match("^(%d+):(%d+):(%d+):")
+    id, count, buyout = tonumber(id), tonumber(count), tonumber(buyout)
+    expect(buyout > 0 and buyout / count <= min[id] * 1.10, "guardada una subasta lejos del mínimo: %s", sig)
+    n = n + 1
+  end)
+  local want = 0
+  for _ in pairs(ES.History.NearMin(FullSigs(second))) do want = want + 1 end
+  expect_eq(n, want, "subastas guardadas cerca del mínimo")
+end, { state = "empty" })
+
+test("track: con precios realistas, lo guardado ocupa 1/4 o menos que todas las subastas", function()
+  InstallAuctionator()
+  local auctions = Fixtures.RealisticAuctions(BIG_SCAN)
+  DoScan(auctions)
+  local kept = #ES.db.track[ES:RealmKey()].packed
+  local all = #ES.History.Pack(FullSigs(auctions))
+  note("guardado %.2f MB; todas %.2f MB (%.0f %%)", kept / 1048576, all / 1048576, kept / all * 100)
+  expect(kept <= all / 4, "lo guardado es el %.0f %% de todas las subastas (tope 25 %%)", kept / all * 100)
+end, { state = "empty" })
+
+---------------------------------------------------------------------------
+-- Tras un escaneo, el addon ayuda al recolector de basura (Jobs.CollectGarbage)
+---------------------------------------------------------------------------
+test("tras un escaneo grande, la basura se recoge en segundos", function()
+  InstallAuctionator()
+  local auctions = Fixtures.RealisticAuctions(BIG_SCAN)
+  KB()
+  collectgarbage("stop") -- (el recolector automático parado: solo recoge lo que ayude el addon)
+  local ok, err = pcall(DoScan, auctions)
+  RunTimers(10)
+  local raw = collectgarbage("count")
+  collectgarbage("restart")
+  if not ok then error(err, 0) end
+  local live = KB()
+  note("al acabar %.1f MB; tras recoger toda la basura %.1f MB (+%.0f %%)", raw / 1024, live / 1024, (raw / live - 1) * 100)
+  expect(raw <= live * 1.25, "quedan %.1f MB sin recoger sobre %.1f MB (tope 25 %%)", (raw - live) / 1024, live / 1024)
+end, { state = "empty" })
+
+test("ayudar al recolector: como mucho 2 ms por fotograma", function()
+  local real, savedClock = collectgarbage, debugprofilestop
+  local clock, steps, frames, worst = 0, 0, {}, 0
+  debugprofilestop = function() return clock end
+  collectgarbage = function(opt, ...)
+    if opt ~= "step" then return real(opt, ...) end
+    clock = clock + 0.3 -- (lo que tarda un paso)
+    steps = steps + 1
+    return false
+  end
+  local ok, err = pcall(function()
+    ES.Jobs.CollectGarbage()
+    for _ = 1, 20 do
+      local before = clock
+      local t = table.remove(TIMERS, 1)
+      if not t then break end
+      t.f()
+      if clock - before > worst then worst = clock - before end
+      frames[#frames + 1] = clock - before
+    end
+  end)
+  collectgarbage, debugprofilestop = real, savedClock
+  for i = #TIMERS, 1, -1 do TIMERS[i] = nil end
+  if not ok then error(err, 0) end
+  note("%d pasos en %d fotogramas; el más largo %.1f ms", steps, #frames, worst)
+  expect(#frames > 1 and steps > 0, "no ayudó al recolector")
+  expect(worst <= ES.Jobs.GC_BUDGET + 0.3 + 1e-9, "un fotograma de %.1f ms (tope %.1f + un paso)", worst, ES.Jobs.GC_BUDGET)
+end, { state = "empty" })
+
+test("ayudar al recolector: si el juego no deja, el escaneo se guarda igual y sin errores", function()
+  InstallAuctionator()
+  local real = collectgarbage
+  local tried = 0
+  collectgarbage = function(opt, ...)
+    if opt == "step" then tried = tried + 1 error("collectgarbage: no permitido") end
+    return real(opt, ...)
+  end
+  local ok, err = pcall(DoScan, Fixtures.RealisticAuctions(3000))
+  collectgarbage = real
+  if not ok then error(err, 0) end
+  expect(tried > 0, "no llegó a intentarlo")
+  expect(ES.db.scans[ES:RealmKey()], "no se guardó el escaneo")
+  -- Y sin collectgarbage
+  collectgarbage = nil
+  ok, err = pcall(DoScan, Fixtures.RealisticAuctions(3000))
+  collectgarbage = real
+  if not ok then error(err, 0) end
+  expect_eq(ES.db.scans[ES:RealmKey()].total, 3000, "no se guardó el segundo escaneo")
+end, { state = "empty" })
+
+test("ayudar al recolector: en combate espera a que acabe", function()
+  InstallAuctionator()
+  local real = collectgarbage
+  local steps = 0
+  collectgarbage = function(opt, ...)
+    if opt == "step" then steps = steps + 1 return false end
+    return real(opt, ...)
+  end
+  IN_COMBAT = true
+  local ok, err = pcall(DoScan, Fixtures.RealisticAuctions(3000))
+  local inCombat = steps
+  IN_COMBAT = false
+  if ok then ok, err = pcall(RunTimers, 5) end
+  collectgarbage = real
+  if not ok then error(err, 0) end
+  expect_eq(inCombat, 0, "pasos del recolector en combate")
+  expect(steps > 0, "al salir del combate no ayudó al recolector")
+end, { state = "empty" })
+
 test("AH neutral: sin soporte, sin errores", function()
   NPC_FACTION = nil
   OpenAH()
