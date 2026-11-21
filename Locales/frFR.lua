@@ -674,7 +674,7 @@ ES.Locales.fr = {
   ["No se puede subir desde "] = "Impossible de monter depuis",
   ["Con recetas de instructor el plan llega hasta "] = "Avec les recettes du maître, le plan atteint",
   ["Sin escaneo de la AH: solo precios de vendedor. Escanea para un coste real.|r"] = "Pas d'analyse de l'HV : prix des marchands seulement. Analysez pour un coût réel.|r",
-  ["Precios de la AH de hace %d min · lo fabricado se cuenta vendido al vendedor"] = "Prix de l'HV d'il y a %d min · ce qui est créé compte comme vendu au marchand",
+  ["Precios de la AH de hace %d min · busca el menor neto: materiales menos ventas al vendedor"] = "Prix de l'HV d'il y a %d min · coût net le plus bas : composants moins ventes au marchand",
   [" · %d fabricaciones menos que la ruta más barata%s|r"] = " · %d créations de moins que le parcours le moins cher%s|r",
   [", por "] = ", pour",
   [" más"] = " de plus",
@@ -1394,6 +1394,5 @@ ES.Locales.fr = {
   ["Aprender la receta va en su propia fila."] = "Apprendre la recette est sur sa propre ligne.",
   ["Cómo elige la ruta"] = "Comment l'itinéraire est choisi",
   ["De media hacen falta %d y se piden %d (%d de margen), por si los puntos tardan en subir. Si te sobran, sirven para el tramo siguiente."] = "En moyenne il en faut %d et %d sont demandés (%d de marge), au cas où les points tardent. S'il en reste, ils servent à l'étape suivante.",
-  ["La ruta busca el menor coste neto: materiales menos ventas al vendedor. Por eso puede no coincidir con las guías."] = "L'itinéraire vise le coût net le plus bas : composants moins ventes au marchand. Il peut différer des guides.",
   ["La ruta busca la forma más barata de subir contando lo que recuperas: los materiales a precio de la AH (o del vendedor, si sale más barato) menos lo que sacas vendiendo al vendedor lo que fabricas, más el instructor. Por eso a veces elige una receta con materiales más caros: se vende mejor o hacen falta menos fabricaciones. Las guías suelen mirar solo los materiales, así que la ruta puede no coincidir con ellas."] = "L'itinéraire cherche la façon la moins chère de monter en comptant ce que vous récupérez : les composants au prix de l'HV (ou du marchand, s'il est moins cher) moins ce que vous tirez de la vente au marchand de ce que vous fabriquez, plus l'entraîneur. C'est pourquoi il choisit parfois une recette aux composants plus chers : elle se revend mieux ou demande moins de créations. Les guides ne regardent souvent que les composants, donc l'itinéraire peut ne pas leur correspondre.",
 }

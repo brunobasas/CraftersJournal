@@ -2093,7 +2093,7 @@ function ES:CreateProfessionPage(page, profKey)
   -- Cómo elige la ruta: busca el menor coste neto (materiales menos ventas al vendedor),
   -- y por eso puede no coincidir con las guías, que solo miran los materiales
   -- (CurseForge: "routes differ from other addons and guides"). En el tooltip del Total
-  -- y de la línea de debajo de las cifras
+  -- y de la línea de estado (statusHover, abajo)
   local function AddHowTooltip()
     GameTooltip:AddLine(L["Cómo elige la ruta"], 1, 0.82, 0)
     GameTooltip:AddLine(L["La ruta busca la forma más barata de subir contando lo que recuperas: los materiales a precio de la AH (o del vendedor, si sale más barato) menos lo que sacas vendiendo al vendedor lo que fabricas, más el instructor. Por eso a veces elige una receta con materiales más caros: se vende mejor o hacen falta menos fabricaciones. Las guías suelen mirar solo los materiales, así que la ruta puede no coincidir con ellas."],
@@ -2124,31 +2124,26 @@ function ES:CreateProfessionPage(page, profKey)
   end)
   totalHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
   page.totalHover = totalHover -- (pruebas)
-  -- La línea, debajo de las cifras de las cuatro primeras columnas (solo el Total usa la
-  -- línea de abajo, con el "con AH"). Sin salto: si no cabe, se corta; el ratón da el
-  -- texto entero
-  page.howLine = Label(strip, "", "GameFontDisableSmall")
-  page.howLine:SetPoint("BOTTOMLEFT", strip, "BOTTOMLEFT", 6, 2)
-  page.howLine:SetWidth(COL_OF.total * COL - 12)
-  page.howLine:SetJustifyH("LEFT")
-  page.howLine:SetWordWrap(false)
-  local howHover = CreateFrame("Frame", nil, strip)
-  howHover:SetAllPoints(page.howLine)
-  howHover:EnableMouse(true)
-  howHover:SetScript("OnEnter", function(self)
-    if (page.howLine:GetText() or "") == "" then return end
-    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    AddHowTooltip()
-    GameTooltip:Show()
-  end)
-  howHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  page.howHover = howHover -- (pruebas)
   page.routeButton:SetPoint("TOPRIGHT", strip, "BOTTOMRIGHT", 0, 0)
   page.status = Label(page, "", "GameFontHighlightSmall")
   page.status:SetPoint("TOPLEFT", strip, "BOTTOMLEFT", 2, -4)
   page.status:SetPoint("RIGHT", page.routeButton, "LEFT", -10, 0)
   page.status:SetJustifyH("LEFT")
   page.status:SetWordWrap(false)
+  -- La línea de estado dice, corto, cómo elige la ruta ("busca el menor neto"); el ratón
+  -- da la explicación entera (como el tooltip del Total). Antes iba en una línea aparte
+  -- bajo las cifras y la página quedaba cargada (dos líneas diciendo casi lo mismo)
+  local statusHover = CreateFrame("Frame", nil, page)
+  statusHover:SetAllPoints(page.status)
+  statusHover:EnableMouse(true)
+  statusHover:SetScript("OnEnter", function(self)
+    if not page.statusExplains then return end
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    AddHowTooltip()
+    GameTooltip:Show()
+  end)
+  statusHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  page.statusHover = statusHover -- (pruebas)
 
   -- Barra de progreso mientras se calcula la ruta (al lado de "Calculando la ruta… 42%")
   page.calcBar = CreateFrame("StatusBar", nil, page)
@@ -4953,7 +4948,6 @@ function ES:RenderPlan(page)
   local stats = page.stats
   if page.calculating and not plan then
     for _, fs in pairs(stats) do fs:SetText(GREY .. "—|r") end
-    if page.howLine then page.howLine:SetText("") end
     page.status:SetText(GREY .. L["Calculando la ruta…"] .. "|r")
     self:UpdateCalcProgress(page)
     page.lines = {}
@@ -4972,11 +4966,6 @@ function ES:RenderPlan(page)
     stats.time:SetText(secs > 0 and DurationIcon(secs) or (GREY .. "—|r"))
   else
     for _, fs in pairs(stats) do fs:SetText(GREY .. "—|r") end
-  end
-  -- Cómo elige la ruta (ver la franja), solo con una ruta con pasos
-  if page.howLine then
-    page.howLine:SetText(plan and #plan.steps > 0
-      and L["La ruta busca el menor coste neto: materiales menos ventas al vendedor. Por eso puede no coincidir con las guías."] or "")
   end
   -- Posible total siguiendo el consejo (AH y vendedor), bajo el total seguro
   page.totalAHInfo = nil
@@ -5009,9 +4998,11 @@ function ES:RenderPlan(page)
   elseif not plan.scanTime then
     status = ORANGE .. L["Sin escaneo de la AH: solo precios de vendedor. Escanea para un coste real.|r"]
   else
-    status = GREY .. string.format(L["Precios de la AH de hace %d min · lo fabricado se cuenta vendido al vendedor"],
+    -- (cómo elige la ruta, corto; el ratón da la explicación entera: statusHover)
+    status = GREY .. string.format(L["Precios de la AH de hace %d min · busca el menor neto: materiales menos ventas al vendedor"],
       math.floor((time() - plan.scanTime) / 60)) .. "|r"
   end
+  page.statusExplains = plan and #plan.steps > 0 and plan.scanTime and not self:RouteLock(page.profKey) or nil
   -- Ruta con coste simbólico por fabricación: cuánto ahorra frente a la más barata
   if plan and plan.cheapest then
     local saved = plan.cheapest.crafts - self.Planner.TotalCrafts(plan)

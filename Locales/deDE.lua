@@ -674,7 +674,7 @@ ES.Locales.de = {
   ["No se puede subir desde "] = "Steigern nicht möglich ab ",
   ["Con recetas de instructor el plan llega hasta "] = "Mit Lehrerrezepten erreicht der Plan ",
   ["Sin escaneo de la AH: solo precios de vendedor. Escanea para un coste real.|r"] = "Kein AH-Scan: nur Händlerpreise. Scanne für echte Kosten.|r",
-  ["Precios de la AH de hace %d min · lo fabricado se cuenta vendido al vendedor"] = "AH-Preise von vor %d Min. · Hergestelltes zählt als an den Händler verkauft",
+  ["Precios de la AH de hace %d min · busca el menor neto: materiales menos ventas al vendedor"] = "AH-Preise von vor %d Min. · niedrigste Nettokosten: Material minus Händlerverkauf",
   [" · %d fabricaciones menos que la ruta más barata%s|r"] = " · %d Herstellungen weniger als die günstigste Route%s|r",
   [", por "] = ", für ",
   [" más"] = " mehr",
@@ -1394,6 +1394,5 @@ ES.Locales.de = {
   ["Aprender la receta va en su propia fila."] = "Das Rezept zu lernen steht in einer eigenen Zeile.",
   ["Cómo elige la ruta"] = "Wie die Route gewählt wird",
   ["De media hacen falta %d y se piden %d (%d de margen), por si los puntos tardan en subir. Si te sobran, sirven para el tramo siguiente."] = "Im Schnitt braucht man %d, verlangt werden %d (%d Reserve), falls die Punkte langsamer kommen. Was übrig bleibt, dient dem nächsten Abschnitt.",
-  ["La ruta busca el menor coste neto: materiales menos ventas al vendedor. Por eso puede no coincidir con las guías."] = "Die Route sucht die niedrigsten Nettokosten: Material minus Händlerverkauf. Daher weicht sie von Guides ab.",
   ["La ruta busca la forma más barata de subir contando lo que recuperas: los materiales a precio de la AH (o del vendedor, si sale más barato) menos lo que sacas vendiendo al vendedor lo que fabricas, más el instructor. Por eso a veces elige una receta con materiales más caros: se vende mejor o hacen falta menos fabricaciones. Las guías suelen mirar solo los materiales, así que la ruta puede no coincidir con ellas."] = "Die Route sucht den günstigsten Weg zum Leveln und rechnet ein, was du zurückbekommst: Material zu AH-Preisen (oder beim Händler, wenn das günstiger ist) minus das, was du beim Händler für das Hergestellte bekommst, plus den Lehrer. Deshalb wählt sie manchmal ein Rezept mit teurerem Material: es lässt sich besser verkaufen oder braucht weniger Herstellungen. Guides schauen meist nur auf das Material, daher kann die Route von ihnen abweichen.",
 }

@@ -1244,22 +1244,27 @@ local function Hover(frame)
   return TooltipLines(fn, frame)
 end
 
-test("la vista Ruta dice cómo elige la ruta, y su tooltip da el texto entero", function()
+-- Lo corto de cómo elige la ruta, tal como sale en la línea de estado
+local HOW_SHORT = Plain(ES.L["Precios de la AH de hace %d min · busca el menor neto: materiales menos ventas al vendedor"]):match("· (.*)$")
+
+-- En la línea de estado, no en una línea aparte: dos líneas diciendo casi lo mismo
+-- dejaban la página cargada
+test("la línea de estado dice cómo elige la ruta, y su tooltip da el texto entero", function()
   local page = PageRoute("Tailoring", 50, 75)
-  local text = Plain(page.howLine:GetText())
-  expect(text ~= "", "con ruta, no sale la línea de cómo elige la ruta")
-  expect_eq(text, Plain(ES.L["La ruta busca el menor coste neto: materiales menos ventas al vendedor. Por eso puede no coincidir con las guías."]), "línea")
-  local lines = Hover(page.howHover)
+  local status = Plain(page.status:GetText())
+  expect(status:find(HOW_SHORT, 1, true), "la línea de estado no dice cómo elige la ruta: «%s»", status)
+  expect(page.howLine == nil, "sigue la línea aparte bajo las cifras")
+  local lines = Hover(page.statusHover)
   expect(LineStarting(lines, ES.L["Cómo elige la ruta"]), "al pasar el ratón no sale «Cómo elige la ruta»")
-  expect(#lines >= 2 and #lines[2] > #text, "el tooltip no da el texto entero")
+  expect(#lines >= 2 and #lines[2] > #HOW_SHORT, "el tooltip no da el texto entero")
 end, { state = "scan" })
 
-test("sin escaneo, no sale la línea de cómo elige la ruta", function()
+test("sin escaneo, la línea de estado no explica cómo elige la ruta", function()
   OpenPage("Tailoring")
   RunTimers()
   local page = expect(ProfessionPage("Tailoring"), "no hay página de Sastrería")
-  expect_eq(Plain(page.howLine:GetText()), "", "línea sin ruta")
-  expect_eq(#Hover(page.howHover), 0, "líneas del tooltip sin ruta")
+  expect(not Plain(page.status:GetText()):find(HOW_SHORT, 1, true), "sin escaneo dice cómo elige la ruta")
+  expect_eq(#Hover(page.statusHover), 0, "líneas del tooltip sin escaneo")
 end, { state = "empty" })
 
 test("el tooltip del Total da su cuenta: materiales menos ventas más instructor", function()

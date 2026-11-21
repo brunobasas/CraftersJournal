@@ -685,7 +685,7 @@ ES.Locales.en = {
   ["No se puede subir desde "] = "Can't level from ",
   ["Con recetas de instructor el plan llega hasta "] = "With trainer recipes the plan reaches ",
   ["Sin escaneo de la AH: solo precios de vendedor. Escanea para un coste real.|r"] = "No AH scan: vendor prices only. Scan for a real cost.|r",
-  ["Precios de la AH de hace %d min · lo fabricado se cuenta vendido al vendedor"] = "AH prices from %d min ago · crafted items count as sold to the vendor",
+  ["Precios de la AH de hace %d min · busca el menor neto: materiales menos ventas al vendedor"] = "AH prices from %d min ago · lowest net cost: materials minus vendor sales",
   [" · %d fabricaciones menos que la ruta más barata%s|r"] = " · %d fewer crafts than the cheapest route%s|r",
   [", por "] = ", for ",
   [" más"] = " more",
@@ -1394,6 +1394,5 @@ ES.Locales.en = {
   ["Aprender la receta va en su propia fila."] = "Learning the recipe is on its own row.",
   ["Cómo elige la ruta"] = "How the route is chosen",
   ["De media hacen falta %d y se piden %d (%d de margen), por si los puntos tardan en subir. Si te sobran, sirven para el tramo siguiente."] = "On average %d are needed and %d are asked for (%d extra), in case points come slower. If you have some left, they're used in the next stage.",
-  ["La ruta busca el menor coste neto: materiales menos ventas al vendedor. Por eso puede no coincidir con las guías."] = "The route looks for the lowest net cost: materials minus vendor sales. So it may not match guides.",
   ["La ruta busca la forma más barata de subir contando lo que recuperas: los materiales a precio de la AH (o del vendedor, si sale más barato) menos lo que sacas vendiendo al vendedor lo que fabricas, más el instructor. Por eso a veces elige una receta con materiales más caros: se vende mejor o hacen falta menos fabricaciones. Las guías suelen mirar solo los materiales, así que la ruta puede no coincidir con ellas."] = "The route looks for the cheapest way to level counting what you get back: materials at AH prices (or the vendor's, if cheaper) minus what you get selling what you craft to a vendor, plus the trainer. That's why it sometimes picks a recipe with pricier materials: it sells back for more or needs fewer crafts. Guides usually look only at materials, so the route may not match them.",
 }
