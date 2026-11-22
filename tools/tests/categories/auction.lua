@@ -277,6 +277,90 @@ test("dos compras iguales seguidas cuentan las dos", function()
   expect_eq(ES:HaveForShopping(765), 10, "dos compras de 5")
 end, { state = "full" })
 
+---------------------------------------------------------------------------
+-- Lo comprado deja de contar al llegar a las bolsas aunque el addon esté cerrado
+-- (Discord: sacaba del buzón las Mithril Bar compradas, las gastaba con el addon
+-- cerrado y la lista seguía diciendo "tienes 70 de 70"; la ruta, 140 Mithril Ore)
+---------------------------------------------------------------------------
+local MITHRIL_BAR, MITHRIL_ORE, SILVERLEAF = 3860, 3858, 765
+
+-- Gana una subasta de n unidades con la AH abierta (el mensaje del juego)
+local function WinAuction(itemID, n)
+  ERR_AUCTION_WON_S = "You won an auction for %s"
+  NOW = NOW + 1 -- (dos compras iguales son dos mensajes, en fotogramas distintos)
+  FireEvent("CHAT_MSG_SYSTEM", string.format("You won an auction for |cffffffff|Hitem:%d::|h[x]|h|rx%d", itemID, n))
+end
+
+-- Cierra la AH: sin ninguna ventana del addon que mire las bolsas
+local function CloseAH()
+  AuctionFrame:Hide()
+  FireEvent("AUCTION_HOUSE_CLOSED")
+  NOW = NOW + 60 -- (fuera ya del margen en que se lee el chat tras cerrarla)
+  RunTimers()
+end
+
+-- Las bolsas pasan a tener n del objeto (lo que el juego avisa al terminar el cambio)
+local function SetBags(itemID, n)
+  BAGS[itemID] = n > 0 and n or nil
+  FireEvent("BAG_UPDATE_DELAYED")
+  RunTimers()
+end
+
+test("compra sacada del buzón y gastada con el addon cerrado: ya no cuenta", function()
+  OpenAH()
+  ES.ahOpen = true
+  WinAuction(MITHRIL_BAR, 70)
+  expect_eq(ES:HaveForShopping(MITHRIL_BAR), 70, "comprado y aún en el correo")
+  CloseAH()
+  SetBags(MITHRIL_BAR, 70) -- (sacadas del buzón)
+  SetBags(MITHRIL_BAR, 0)  -- (gastadas fabricando)
+  expect_eq(ES:HaveForShopping(MITHRIL_BAR), 0, "sigue contando lo que ya se gastó")
+end)
+
+test("varias compras sacadas y gastadas con el addon cerrado no se acumulan", function()
+  for _ = 1, 2 do
+    OpenAH()
+    ES.ahOpen = true
+    WinAuction(MITHRIL_ORE, 70)
+    CloseAH()
+    SetBags(MITHRIL_ORE, 70)
+    SetBags(MITHRIL_ORE, 0)
+  end
+  expect_eq(ES:HaveForShopping(MITHRIL_ORE), 0, "Mithril Ore fantasma")
+end)
+
+test("gastar lo que ya tenías antes de recoger la compra no la confunde", function()
+  BAGS[SILVERLEAF] = 10
+  OpenAH()
+  ES.ahOpen = true
+  WinAuction(SILVERLEAF, 21)
+  expect_eq(ES:HaveForShopping(SILVERLEAF), 31, "10 en las bolsas y 21 en el correo")
+  CloseAH()
+  SetBags(SILVERLEAF, 0)  -- (gastas las 10 que llevabas)
+  SetBags(SILVERLEAF, 21) -- (sacas las 21 del buzón)
+  expect_eq(ES:HaveForShopping(SILVERLEAF), 21, "las de las bolsas, ni más ni menos")
+end)
+
+test("la compra que sigue en el buzón cuenta aunque cambien las bolsas, hasta las 2 h", function()
+  OpenAH()
+  ES.ahOpen = true
+  WinAuction(SILVERLEAF, 21)
+  CloseAH()
+  SetBags(2589, 5)  -- (otras cosas: botín, el vendedor...)
+  SetBags(2589, 0)
+  expect_eq(ES:HaveForShopping(SILVERLEAF), 21, "sin ir al buzón")
+  NOW = NOW + 2 * 3600 + 1
+  SetBags(2589, 3)
+  expect_eq(ES:HaveForShopping(SILVERLEAF), 0, "pasadas 2 h")
+  expect_eq(#(ES.charData.ahOnWay or {}), 0, "la compra caducada sigue guardada")
+end)
+
+test("sin compras de camino, cambiar las bolsas no crea nada", function()
+  ES.charData.ahOnWay = nil
+  SetBags(2589, 5)
+  expect_eq(ES.charData.ahOnWay, nil, "crea la lista de camino")
+end)
+
 test("al abrir la AH: lista de compra y ventana de vender sin errores", function()
   BAGS[2589], BAGS[2318] = 40, 12
   OpenAH()

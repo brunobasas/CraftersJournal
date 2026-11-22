@@ -160,8 +160,10 @@ local function BuildLines(st, ahOpen)
       -- Tramo: lo que cuenta es lo que llevas; en las guardadas, lo comprado desde que la añadiste
       -- (todas las listas cuentan lo que llevas; las de ruta, también lo ya convertido:
       -- 108 Lesser Magic Essence valen como 36 Greater)
+      -- (y lo comprado en la AH que sigue en el correo: cuenta, pero no está en las bolsas)
       local progress = string.format(L["tienes %d de %d"], e.bought, it.need)
         .. (e.converted and (" " .. string.format(L["(%d de lo ya convertido)"], e.converted)) or "")
+        .. (e.mail and (" " .. string.format(L["(%d en el correo)"], e.mail)) or "")
       if e.left == 0 then
         line.title = GREY .. (name or "") .. "|r"
         line.sub = GREEN .. progress .. "|r"

@@ -160,23 +160,35 @@ end
 
 -- Estado de toda la lista:
 --   { lists = { { list, items = { { it, bought (lo que llevas para ella), left,
---       converted (de bought, lo que viene de lo ya convertido; solo en las de ruta) } }, done, total, cost } },
+--       converted (de bought, lo que viene de lo ya convertido; solo en las de ruta),
+--       mail (de bought, lo comprado en la AH que sigue en el correo) } }, done, total, cost } },
 --     done, total (materiales), cost (lo que falta, a los precios de cuando se añadió),
 --     bySource = { ah = { done, total, cost }, vendor = { ... } } }
 function Shopping.Status()
   local res = { lists = {}, done = 0, total = 0, cost = 0,
     bySource = { ah = { done = 0, total = 0, cost = 0 }, vendor = { done = 0, total = 0, cost = 0 } } }
-  -- Lo que llevas de cada material (y lo comprado en la AH que aún está en el correo),
-  -- que se va repartiendo entre las listas
-  local left = {}
+  -- Lo que llevas de cada material y lo comprado en la AH que aún está en el correo
+  -- (Ledger.OnWay), que se va repartiendo entre las listas. Dos montones: primero se
+  -- gastan las bolsas y después el correo, y la fila dice cuánto salió del correo (un
+  -- "tienes 70 de 70" sin tener ninguno en las bolsas no se entendía)
+  local bags, mail = {}, {}
   local function Left(itemID)
-    if left[itemID] == nil then left[itemID] = ES.HaveForShopping and ES:HaveForShopping(itemID) or ES:ItemCount(itemID) or 0 end
-    return left[itemID]
+    if bags[itemID] == nil then
+      bags[itemID] = ES:ItemCount(itemID) or 0
+      mail[itemID] = ES.Ledger and ES.Ledger.OnWay and ES.Ledger.OnWay(itemID) or 0
+    end
+    return bags[itemID] + mail[itemID]
+  end
+  -- Gasta n (ya comprobado que hay): devuelve cuántas salieron del correo
+  local function Spend(itemID, n)
+    local fromBags = math.min(bags[itemID], n)
+    bags[itemID] = bags[itemID] - fromBags
+    mail[itemID] = mail[itemID] - (n - fromBags)
+    return n - fromBags
   end
   local function Take(itemID, need)
     local n = math.min(Left(itemID), need)
-    left[itemID] = left[itemID] - n
-    return n
+    return n, Spend(itemID, n)
   end
   -- Lo que falta de un material de una ruta, de lo ya convertido (conv =
   -- Planner.Conversions; used = intermedios ya gastados así en esa lista): los
@@ -193,7 +205,7 @@ function Shopping.Status()
       local units = math.min(need - got, math.floor(avail * per + 0.001))
       if units > 0 then
         local spend = math.min(avail, math.ceil(units / per - 0.001))
-        left[top] = left[top] - spend
+        Spend(top, spend) -- (lo convertido no se marca como correo: ya dice "de lo convertido")
         used[top] = (used[top] or 0) + spend
         got = got + units
       end
@@ -203,8 +215,8 @@ function Shopping.Status()
   local function AddList(list)
     local s = { list = list, items = {}, done = 0, total = 0, cost = 0 }
     -- (primero lo que llevas tal cual de todos sus materiales; después, lo convertido)
-    local have = {}
-    for i, it in ipairs(list.items) do have[i] = Take(it.itemID, it.need) end
+    local have, fromMail = {}, {}
+    for i, it in ipairs(list.items) do have[i], fromMail[i] = Take(it.itemID, it.need) end
     local converted, used = {}, {}
     if list.conv then
       for i, it in ipairs(list.items) do
@@ -215,7 +227,8 @@ function Shopping.Status()
     for i, it in ipairs(list.items) do
       local missing = it.need - have[i]
       s.items[#s.items + 1] = { it = it, bought = have[i], left = missing,
-        converted = (converted[i] or 0) > 0 and converted[i] or nil }
+        converted = (converted[i] or 0) > 0 and converted[i] or nil,
+        mail = fromMail[i] > 0 and fromMail[i] or nil }
       s.total = s.total + 1
       if missing == 0 then s.done = s.done + 1 else s.cost = s.cost + missing * (it.unit or 0) end
       -- (y por dónde se compra: el panel de la AH solo cuenta lo de la AH)

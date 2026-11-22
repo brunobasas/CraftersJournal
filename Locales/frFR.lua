@@ -247,6 +247,7 @@ ES.Locales.fr = {
   ["Lo que te falta para este tramo, con lo que llevas ahora"] = "Ce qui vous manque encore pour cette étape, avec ce que vous portez maintenant",
   ["tienes %d de %d"] = "vous avez %d sur %d",
   ["(%d de lo ya convertido)"] = "(%d issus de ce que vous avez déjà converti)",
+  ["(%d en el correo)"] = "(%d au courrier)",
   ["Tienes lo de este tramo. Al acabarlo sale el siguiente."] = "Cette étape est couverte. Quand vous la terminez, la suivante apparaît.",
   ["Solo este tramo, con un margen por si los puntos tardan en subir. Al acabarlo sale el siguiente."] = "Seulement cette étape, avec une marge si les points tardent. Quand vous la terminez, la suivante apparaît.",
   ["%sCon lo que llevas puedes intentarlo: %d× %s (%d%% de llegar a %d).|r"] = "%sAvec ce que vous portez, vous pouvez essayer : %d× %s (%d%% de chances d'atteindre %d).|r",

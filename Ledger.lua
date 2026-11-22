@@ -505,11 +505,17 @@ do
     "MERCHANT_SHOW", "MERCHANT_CLOSED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED",
     "AUCTION_HOUSE_THROTTLED_SYSTEM_READY", "AUCTION_HOUSE_AUCTION_CREATED", "AUCTION_HOUSE_POST_WARNING",
     "CHAT_MSG_SYSTEM", "UI_ERROR_MESSAGE",
-    "PLAYER_MONEY", "COMMODITY_PURCHASE_SUCCEEDED", "COMMODITY_PURCHASE_FAILED" }) do
+    "PLAYER_MONEY", "COMMODITY_PURCHASE_SUCCEEDED", "COMMODITY_PURCHASE_FAILED", "BAG_UPDATE_DELAYED" }) do
     ES.SafeRegister(f, e)
   end
   f:SetScript("OnEvent", function(_, event, ...)
     if not ES.db then return end
+    -- Cambian las bolsas: lo comprado que ya llegó deja de contar como de camino,
+    -- aunque no se vea ninguna ventana (Ledger.SweepOnWay)
+    if event == "BAG_UPDATE_DELAYED" then
+      Ledger.SweepOnWay()
+      return
+    end
     if event == "AUCTION_HOUSE_CLOSED" then
       Ledger.ahClosedAt = Clock()
       -- (la pregunta de confirmar se cierra con la AH: no se anuncia)
@@ -725,6 +731,10 @@ end
 --   · pasado ONWAY_TTL, fuera.
 -- El correo no se lee (daba problemas, y lo que llega puede venir de otro sitio: un
 -- intercambio, un alter): solo la compra y tus bolsas.
+-- Se repasa en cada cambio de las bolsas (BAG_UPDATE_DELAYED, Ledger.SweepOnWay),
+-- con el addon abierto o cerrado. Antes solo al pintar la lista, la ruta o el
+-- asistente: sacarlo del buzón y gastarlo con todo cerrado no se veía y seguía
+-- contando hasta las 2 h (Discord: "tienes 70 de 70" Mithril Bar sin tener ninguno).
 -- Por personaje (ES.charData.ahOnWay = { { itemID, n, base, t } })
 ---------------------------------------------------------------------------
 local ONWAY_TTL = 2 * 3600
@@ -755,6 +765,14 @@ function Ledger.OnWay(itemID)
     end
   end
   return left
+end
+
+-- Repaso al cambiar las bolsas: baja la base de lo gastado y quita lo que ya llegó.
+-- Sin compras de camino (lo normal) no hace nada, ni crea la lista. No repinta: las
+-- vistas que se ven ya se repintan con el mismo evento
+function Ledger.SweepOnWay()
+  local list = ES.charData and ES.charData.ahOnWay
+  if type(list) == "table" and #list > 0 then Ledger.OnWay(nil) end
 end
 
 -- Todo lo que sigue de camino: { [itemID] = unidades } (para el paso "Recoge el correo")

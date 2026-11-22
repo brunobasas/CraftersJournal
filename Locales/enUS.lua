@@ -247,6 +247,7 @@ ES.Locales.en = {
   ["Lo que te falta para este tramo, con lo que llevas ahora"] = "What you still need for this stage, with what you carry now",
   ["tienes %d de %d"] = "you have %d of %d",
   ["(%d de lo ya convertido)"] = "(%d from what you already converted)",
+  ["(%d en el correo)"] = "(%d in the mail)",
   ["Tienes lo de este tramo. Al acabarlo sale el siguiente."] = "You have this stage covered. When you finish it, the next one shows up.",
   ["Solo este tramo, con un margen por si los puntos tardan en subir. Al acabarlo sale el siguiente."] = "Only this stage, with a margin in case skill-ups are slow. When you finish it, the next one shows up.",
   ["%sCon lo que llevas puedes intentarlo: %d× %s (%d%% de llegar a %d).|r"] = "%sWith what you carry you can try it: %d× %s (%d%% chance to reach %d).|r",

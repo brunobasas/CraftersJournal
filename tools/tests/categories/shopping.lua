@@ -307,3 +307,69 @@ test("ruta acabada: su lista guardada se quita sola", function()
   ES.Shopping.Status()
   for _, l in ipairs(ES.Shopping.Lists()) do expect(not (l.kind == "route" and l.key == "Tailoring"), "la lista de la ruta acabada sigue") end
 end, { state = "full" })
+
+---------------------------------------------------------------------------
+-- Lo comprado en la AH que sigue en el correo: cuenta, y la fila lo dice (Discord:
+-- "tienes 70 de 70" Mithril Bar sin tener ninguno en las bolsas no se entendía)
+---------------------------------------------------------------------------
+local MITHRIL_BAR, SOLID_STONE, MAGEWEAVE = 3860, 7912, 4338
+
+-- Gana una subasta de n unidades con la AH abierta (el mensaje del juego)
+local function WinAuction(itemID, n)
+  ERR_AUCTION_WON_S = "You won an auction for %s"
+  NOW = NOW + 1
+  FireEvent("CHAT_MSG_SYSTEM", string.format("You won an auction for |cffffffff|Hitem:%d::|h[x]|h|rx%d", itemID, n))
+end
+
+-- Lo que dicen debajo del nombre las filas que se ven, una por línea
+local function Subs(rows)
+  local t = {}
+  for _, r in ipairs(rows or {}) do
+    if r:IsShown() then t[#t + 1] = tostring(r.sub:GetText()) end
+  end
+  return table.concat(t, "\n")
+end
+
+test("la lista de compra dice lo que sigue en el correo", function()
+  BAGS[SOLID_STONE] = 8
+  ES.Shopping.Add("calc", "Dazzling Mithril Rapier", {
+    { itemID = MITHRIL_BAR, quantity = 70, unit = 500, source = "ah" },
+    { itemID = SOLID_STONE, quantity = 20, unit = 140, source = "ah" },
+    { itemID = MAGEWEAVE, quantity = 10, unit = 388, source = "ah" }, -- (algo por comprar: sale la lista de junto a la AH)
+  })
+  AuctionFrame:Show()
+  FireEvent("AUCTION_HOUSE_SHOW")
+  RunTimers()
+  ES.ahOpen = true
+  WinAuction(MITHRIL_BAR, 70)
+  WinAuction(SOLID_STONE, 12)
+  local items = ItemsOf(ES.Shopping.Status(), "calc")
+  expect_eq(items[MITHRIL_BAR].bought, 70, "Mithril Bar que tienes")
+  expect_eq(items[MITHRIL_BAR].mail, 70, "Mithril Bar en el correo")
+  expect_eq(items[SOLID_STONE].bought, 20, "Solid Stone que tienes")
+  expect_eq(items[SOLID_STONE].mail, 12, "Solid Stone en el correo (las 8 de las bolsas cuentan antes)")
+  expect_eq(items[MAGEWEAVE].mail, nil, "Mageweave Cloth sin comprar")
+  local L = ES.L
+  local bar = string.format(L["tienes %d de %d"], 70, 70) .. " " .. string.format(L["(%d en el correo)"], 70)
+  local stone = string.format(L["tienes %d de %d"], 20, 20) .. " " .. string.format(L["(%d en el correo)"], 12)
+  -- Junto a la AH
+  ES:RenderShopping()
+  local mini = expect(ES.ShoppingMini and ES.ShoppingMini(), "sin la lista de junto a la AH")
+  expect(mini:IsShown(), "la lista de junto a la AH no sale")
+  local text = Subs(mini.rows)
+  expect(text:find(bar, 1, true) and text:find(stone, 1, true), "junto a la AH no dice lo del correo:\n%s", text)
+  -- En la pestaña
+  OpenPage("shopping")
+  text = Subs(ES.shoppingPage.rows)
+  expect(text:find(bar, 1, true) and text:find(stone, 1, true), "la pestaña no dice lo del correo:\n%s", text)
+  -- Recogido del buzón: lo mismo, sin nada del correo
+  BAGS[MITHRIL_BAR], BAGS[SOLID_STONE] = 70, 20
+  FireEvent("BAG_UPDATE_DELAYED")
+  RunTimers()
+  items = ItemsOf(ES.Shopping.Status(), "calc")
+  expect(items[MITHRIL_BAR].bought == 70 and items[MITHRIL_BAR].mail == nil, "Mithril Bar recogido sigue en el correo")
+  expect(items[SOLID_STONE].bought == 20 and items[SOLID_STONE].mail == nil, "Solid Stone recogido sigue en el correo")
+  ES:RenderShopping()
+  text = Subs(ES.shoppingPage.rows)
+  expect(not text:find(string.format(L["(%d en el correo)"], 70), 1, true), "recogido y la fila sigue diciendo el correo:\n%s", text)
+end)
