@@ -51,6 +51,7 @@ function PH.DayTime(day) return Day0() + day * DAY + DAY / 2 end
 
 local memo = {} -- [itemID] = resultado o false (sin datos): se olvida al abrir la pestaña
 function PH.Clear() memo = {} end
+ES.MemPart("Inversiones: precios de Auctionator", function() return memo end)
 
 -- Filas de Auctionator -> { { day, price, avail } } ordenadas por día (sin las malas)
 local function ReadDays(itemID)

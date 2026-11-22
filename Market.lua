@@ -72,6 +72,7 @@ local BUILD_BUDGET = 3 -- ms por fotograma
 local building       -- { stamp, co } mientras se construye
 local servedStale    -- se dio un índice viejo (o vacío) mientras se construía el nuevo
 local whenReady = {} -- lo que espera al índice nuevo (Market.WhenReady)
+ES.MemPart("índice de mercado", function() return cache end)
 
 -- (con la clave de la AH: si cambia en la sesión, Keys.lua, el índice de la otra no vale
 -- aunque las dos tengan los mismos escaneos, p. ej. ninguno)
@@ -449,6 +450,7 @@ function Market.Dec(x)
 end
 
 local tsmMemo = {} -- itemID -> datos o false (los de TSM cambian al entrar, no al escanear)
+ES.MemPart("demanda de TSM", function() return tsmMemo end)
 function Market.ClearTSM() tsmMemo = {} end
 
 -- ¿Se puede preguntar a TSM? (instalado y la opción puesta)

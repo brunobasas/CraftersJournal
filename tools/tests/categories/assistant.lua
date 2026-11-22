@@ -148,6 +148,36 @@ test("cambio en las bolsas: las filas de la ruta se hacen una vez", function()
   expect(ES.phaseState.Tailoring.last, "los avisos de tramo no miraron el tramo")
 end, { state = "scan" })
 
+-- Questeando con una ruta empezada y la ventana cerrada, cada botín cambia las bolsas:
+-- lo que trabaja el addon por cada cambio (miles de instrucciones de Lua), con algo que
+-- la ruta no usa y con un material de la ruta. Si sube, el addon pesa más al questear
+test("questeando: lo que trabaja el addon con cada botín", function()
+  A = ES.Assistant
+  StartRoute("Tailoring", 1, 150)
+  A.Update()
+  ES:HideMainFrame()
+  RunTimers(120)
+  local function Loot(itemID)
+    BAGS[itemID] = (BAGS[itemID] or 0) + 1
+    local ticks = 0
+    debug.sethook(function() ticks = ticks + 1 end, "", 1000)
+    local ok, err = pcall(function()
+      FireEvent("BAG_UPDATE")
+      FireEvent("BAG_UPDATE_DELAYED")
+      RunTimers(5)
+    end)
+    debug.sethook()
+    if not ok then error(err, 0) end
+    return ticks
+  end
+  Loot(4865) -- (la primera vez puede preparar cosas: no cuenta)
+  local other = Loot(4865)     -- Ruined Pelt: no es de la ruta
+  local material = Loot(2589)  -- Linen Cloth: sí
+  note("miles de instrucciones por botín: %d (algo que la ruta no usa), %d (un material de la ruta)", other, material)
+  budget("miles de instrucciones por botín fuera de la ruta (Sastrería 1-150)", other, 0.2, 20)
+  budget("miles de instrucciones por botín de la ruta (Sastrería 1-150)", material, 0.2, 20)
+end, { state = "scan" })
+
 -- Al salir del combate solo falta volver a poner el botón seguro: antes se rehacía la
 -- ruta entera tras cada pelea (PR #8)
 test("al salir del combate el asistente se repinta sin rehacer la ruta", function()

@@ -169,6 +169,73 @@ test("Minería: solo la fundición, con lo que fabrica cada receta", function()
   for _, p in ipairs(ES.PROFESSIONS) do expect(p.key ~= "Mining", "Minería no es una profesión del addon") end
 end, { boot = false })
 
+-- Spec recipe-trainers. Discord: la flecha de «Entrenar Soft-soled Linen Boots» llevaba a
+-- Lawrence Schneider (Journeyman Tailor) y quien la enseñaba era Sellandus (Expert
+-- Tailor). Forever bajó la receta de 80 a 55 (tramo de Aprendiz), pero la sigue
+-- enseñando el instructor de Classic, el del tramo de Oficial. Los datos de Forever
+-- (Wowhead) decían que Lawrence también, y la receta se quedaba sin `tr`
+test("Soft-soled Linen Boots la enseña Sellandus, no Lawrence Schneider", function()
+  local r = expect(ES.Data.Tailoring.recipes[3845], "Soft-soled Linen Boots (3845) no está en los datos")
+  local tr = expect(r.tr, "Soft-soled Linen Boots sin `tr`: la fila «Entrenar» lleva a cualquier instructor de Aprendiz")
+  local has = {}
+  for _, npc in ipairs(tr) do has[npc] = true end
+  expect(has[5567], "Sellandus (5567) no está entre los que la enseñan")
+  expect(not has[1300], "Lawrence Schneider (1300) está entre los que la enseñan")
+end, { boot = false })
+
+-- Quién enseña cada receta en Classic (tools/cmangos/trainer_spells.csv, filas sin rank_step)
+local function ClassicTeachers()
+  local f = assert(io.open(ADDON_DIR .. "/tools/cmangos/trainer_spells.csv", "rb"))
+  local teach = {}
+  local header = true
+  for line in f:lines() do
+    if header then
+      header = false
+    else
+      local npc, spell, rest = line:match("^(%d+),(%d+),(.*)$")
+      local step = rest and rest:match(",([^,]*)%s*$")
+      if npc and (step == nil or step == "" or step == "\r") then
+        spell = tonumber(spell)
+        teach[spell] = teach[spell] or {}
+        teach[spell][#teach[spell] + 1] = tonumber(npc)
+      end
+    end
+  end
+  f:close()
+  return teach
+end
+
+-- Forever bajó el nivel de muchas recetas a un tramo más bajo que el de todos sus
+-- instructores de Classic (Soft-soled Linen Boots: de 80 a 55). Sin `tr`, la fila
+-- «Entrenar» lleva a un instructor del tramo por nivel, que no la tiene
+test("ninguna receta de instructor manda al tramo equivocado", function()
+  local classic = ClassicTeachers()
+  local function Bit(level)
+    return level <= 75 and 1 or level <= 150 and 2 or level <= 225 and 4 or 8
+  end
+  local bad = {}
+  for _, prof in ipairs(ProfessionKeys()) do
+    local data = ES.Data[prof]
+    local masks = {}
+    for _, t in ipairs(data.trainers) do masks[t[1]] = t[2] end
+    for id, r in pairs(data.recipes) do
+      if r.fee and r.train and not r.tr then
+        local bit, known, inRank = Bit(r.train), 0, false
+        for _, npc in ipairs(classic[id] or {}) do
+          if masks[npc] and npc < 200000 then
+            known = known + 1
+            if math.floor(masks[npc] / bit) % 2 == 1 then inRank = true end
+          end
+        end
+        if known > 0 and not inRank then
+          bad[#bad + 1] = string.format("%s %d %s (aprender a %d)", prof, id, tostring(r.name), r.train)
+        end
+      end
+    end
+  end
+  Report(bad, "recetas que solo enseñan instructores de un tramo más alto y no dicen quién", 60)
+end, { boot = false })
+
 -- Un PNJ con sitio: { nombre, facción, zona, x, y [, ...] }
 local function HasPlace(npc)
   local e = ES.Data.NPCs[npc]

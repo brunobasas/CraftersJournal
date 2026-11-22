@@ -24,6 +24,7 @@ end
 -- intermedio solo con recetas que sabes: knownProducers). Uno solo: las escaleras de
 -- precios de todo el escaneo se preparan una vez. Caché por escaneo y profesiones
 local ctxCache
+ES.MemPart("Merchant's Favor", function() return ctxCache end)
 local function Context()
   local scan = ES.db.scans and ES.db.scans[ES:RealmKey()]
   local profs = ES.Earn and ES.Earn.MyProfessions() or {}

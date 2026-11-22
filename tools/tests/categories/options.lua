@@ -450,3 +450,49 @@ test("comandos /cj sin errores", function()
     RunTimers()
   end
 end, { state = "full" })
+
+-- /cj mem (DevTools.lua, solo en la copia de desarrollo): las cachés que cuelgan de
+-- variables locales (ES.MemPart) se ven, y no van a parar a "el resto"
+test("/cj mem: mide las cachés de variables locales", function()
+  UpdateAddOnMemoryUsage = function() end
+  GetAddOnMemoryUsage = function() return collectgarbage("count") end
+  OpenPage("money")
+  local names, parts = {}, {}
+  for _, part in ipairs(ES.MemParts) do
+    local ok, v = pcall(part.get)
+    expect(ok, "%s: %s", part.name, tostring(v))
+    names[#names + 1] = part.name
+    parts[part.name] = v
+  end
+  local all = table.concat(names, " | ")
+  for _, want in ipairs({ "índice de mercado", "Ganar dinero: ideas y costes por profesión", "dónde conseguir cada receta" }) do
+    expect(all:find(want, 1, true), "/cj mem no mide «%s» (hay: %s)", want, all)
+  end
+  local earn = parts["Ganar dinero: ideas y costes por profesión"]
+  expect(earn and (earn[1] or next(earn[2])), "con Ganar dinero abierto, su caché sale vacía")
+  for i = #PRINTS, 1, -1 do PRINTS[i] = nil end
+  SlashCmdList.CRAFTERSJOURNAL("mem")
+  local out = table.concat(PRINTS, "\n")
+  expect(out:find("Memoria:", 1, true) and out:find("el resto", 1, true), "/cj mem no informa:\n%s", out)
+end, { state = "full" })
+
+-- /cj cpu (DevTools.lua): cronometra lo que corre con la ventana cerrada
+test("/cj cpu: cronometra el asistente al cambiar las bolsas", function()
+  StartRoute("Tailoring", 1, 75)
+  ES:HideMainFrame()
+  RunTimers()
+  SlashCmdList.CRAFTERSJOURNAL("cpu")
+  BAGS[2589] = (BAGS[2589] or 0) + 3
+  FireEvent("BAG_UPDATE_DELAYED")
+  RunTimers()
+  for i = #PRINTS, 1, -1 do PRINTS[i] = nil end
+  SlashCmdList.CRAFTERSJOURNAL("cpu")
+  local out = table.concat(PRINTS, "\n")
+  local n = out:match("(%d+)×%s+máx%s+[%d.]+ ms%s+asistente: releer la ruta")
+  expect(n and tonumber(n) >= 1, "/cj cpu no cuenta el asistente:\n%s", out)
+  -- /cj cpu reset vuelve a cero
+  SlashCmdList.CRAFTERSJOURNAL("cpu reset")
+  for i = #PRINTS, 1, -1 do PRINTS[i] = nil end
+  SlashCmdList.CRAFTERSJOURNAL("cpu")
+  expect(not table.concat(PRINTS, "\n"):find("asistente: releer la ruta", 1, true), "tras reset sigue contando lo de antes")
+end, { state = "scan" })

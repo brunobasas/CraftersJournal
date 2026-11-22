@@ -86,6 +86,7 @@ end
 function WP.ResetCache()
   npcs, items = {}, {}
 end
+ES.MemPart("PNJ y objetos leídos de Questie", function() return { npcs, items } end)
 
 -- ¿Se sabe dónde está cada PNJ? Con los datos propios (Data/Sources.lua,
 -- generados desde QuestieDB) siempre; si faltaran, con QuestieDB en el juego.
@@ -217,6 +218,7 @@ function WP.ZoneName(npc)
 end
 
 local quests = {}
+ES.MemPart("misiones leídas de Questie", function() return quests end)
 
 -- Una misión: nombre, quién la da, nivel mínimo y bando ("" los dos)
 function WP.Quest(questID)
@@ -500,6 +502,7 @@ WP.SOURCED_PROFESSIONS = {
 }
 
 local sourceCache, sourceKey = {}, nil
+ES.MemPart("dónde conseguir cada receta", function() return sourceCache end)
 
 -- Fuentes de la receta para tu personaje y la mejor (la más barata):
 --   quest  = misión de tu bando que la da (gratis)

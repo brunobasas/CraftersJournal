@@ -25,6 +25,19 @@ MOCK_METHODS = {} -- métodos de marcos que el addon ha llamado sin simulación 
 TOOLTIP = {}      -- líneas añadidas a cualquier tooltip
 UNKNOWN_EVENTS = { AUCTION_OWNED_LIST_UPDATE = true, REPLICATE_ITEM_LIST_UPDATE = true }
 
+-- Avisa con `script` (OnShow / OnHide) a un marco que acaba de verse o dejar de verse y
+-- a los suyos que estaban mostrados (en ese orden, como el juego)
+function VisibilityChanged(f, script)
+  if f._scripts[script] then f._scripts[script](f) end
+  local kids = rawget(f, "_children")
+  if not kids then return end
+  local copy = {}
+  for i, c in ipairs(kids) do copy[i] = c end
+  for _, c in ipairs(copy) do
+    if c._shown then VisibilityChanged(c, script) end
+  end
+end
+
 local function Mock(name)
   local m = { _scripts = {}, _events = {}, _name = name, _shown = false }
   return setmetatable(m, { __index = function(t, k)
@@ -67,18 +80,31 @@ local function Mock(name)
     if k == "GetCenter" then return function() return 0, 0 end end
     if k == "SetAttribute" then return function(self, a, v) self._attributes = self._attributes or {} self._attributes[a] = v end end
     if k == "GetAttribute" then return function(self, a) return self._attributes and self._attributes[a] end end
+    -- Como en el juego: OnShow / OnHide cuando cambia si se ve (IsVisible), para él y
+    -- para los suyos que estaban mostrados (abrir la ventana avisa a la página elegida y
+    -- a lo que lleva dentro; mostrar algo dentro de una ventana cerrada no avisa aún)
     if k == "Show" then return function(self)
-      local was = self._shown
+      local was = self:IsVisible()
       self._shown = true
-      if not was and self._scripts.OnShow then self._scripts.OnShow(self) end
+      if not was and self:IsVisible() then VisibilityChanged(self, "OnShow") end
     end end
     if k == "Hide" then return function(self)
-      local was = self._shown
+      local was = self:IsVisible()
       self._shown = false
-      if was and self._scripts.OnHide then self._scripts.OnHide(self) end
+      if was then VisibilityChanged(self, "OnHide") end
     end end
     if k == "SetShown" then return function(self, v) if v then self:Show() else self:Hide() end end end
-    if k == "IsShown" or k == "IsVisible" then return function(self) return self._shown end end
+    if k == "IsShown" then return function(self) return self._shown end end
+    -- Como en el juego: visible si él y todos los que lo contienen se ven (una página de
+    -- la ventana cerrada no se ve aunque esté elegida)
+    if k == "IsVisible" then return function(self)
+      local f = self
+      while f do
+        if not f._shown then return false end
+        f = f._parent
+      end
+      return true
+    end end
     if k == "SetEnabled" then return function(self, v) self._enabled = v and true or false end end
     if k == "IsEnabled" then return function(self) return self._enabled ~= false end end
     if k == "GetChecked" then return function(self) return self._checked end end
@@ -134,6 +160,7 @@ MockFrame = Mock
 
 CreateFrame = function(_, name, parent, template)
   local f = Mock("frame")
+  f._shown = true -- (como en el juego: un marco nuevo se muestra; se ve si su padre se ve)
   f._parent = parent
   f._template = template -- (la plantilla: IsProtected)
   -- (los hijos, para GetChildren)

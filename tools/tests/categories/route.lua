@@ -270,6 +270,67 @@ for _, prof in ipairs({ "Alchemy", "Blacksmithing", "Enchanting", "Engineering",
   end)
 end
 
+-- Icono "Recetas en verde" (CurseForge: "an option to NOT use green skill up recipes";
+-- "Menos fabricaciones" dejaba 20 o más puntos verdes en varias rutas 1-300)
+local function GreenPoints(prof, plan)
+  local out = {}
+  for _, st in ipairs(plan.steps) do
+    local r = ES.Data[prof].recipes[st.id]
+    for s = st.from, st.to - 1 do
+      if r and r.t and s >= r.t[3] then out[#out + 1] = { s = s, name = r.nameEN or r.name } end
+    end
+  end
+  return out
+end
+
+test("icono recetas en verde: activado por defecto, el clic lo cambia y recalcula", function()
+  OpenPage("Enchanting")
+  local page = expect(ProfessionPage("Enchanting"), "falta la página de Enchanting")
+  local b = expect(page.greenButton, "falta el icono de recetas en verde")
+  expect(not b.cross:IsShown(), "el icono sale tachado por defecto")
+  expect_eq(ES:PlanOptions("Enchanting", 1, 300).noGreen, nil, "por defecto la ruta usa verdes")
+  local key = ES:StableRouteKey("Enchanting", 1, 300, 300)
+  b:GetScript("OnClick")(b)
+  RunTimers()
+  expect_eq(ES.db.prof.Enchanting.noGreen, true, "el clic no lo desactiva")
+  expect(b.cross:IsShown(), "desactivado no sale tachado")
+  expect_eq(ES:PlanOptions("Enchanting", 1, 300).noGreen, true, "no pasa al plan")
+  expect(ES:StableRouteKey("Enchanting", 1, 300, 300) ~= key, "la caché no distingue el icono")
+  b:GetScript("OnClick")(b)
+  RunTimers()
+  expect_eq(ES.db.prof.Enchanting.noGreen, nil, "el segundo clic no lo vuelve a activar")
+  expect_eq(ES:StableRouteKey("Enchanting", 1, 300, 300), key, "activado, la clave de siempre")
+  -- Sin la opción, el recargo de siempre
+  expect_eq(ES.Planner.GreenRisk({ 1, 2, 3, 13 }, 8, 0.5), ES.Planner.GreenRisk({ 1, 2, 3, 13 }, 8, 0.5, {}), "recargo sin la opción")
+  expect(ES.Planner.GreenRisk({ 1, 2, 3, 13 }, 8, 0.5, { noGreen = true }) > 10 * ES.Planner.GreenRisk({ 1, 2, 3, 13 }, 8, 0.5), "con la opción, el recargo no sube")
+end)
+
+test("sin recetas en verde: las rutas 1-300 solo las usan donde no hay otra", function()
+  -- Medido con los precios de las pruebas: sin la opción, Enchanting 45 puntos verdes,
+  -- Cooking 52, Tailoring 31 y First Aid 65. Sin verdes solo quedan los forzados:
+  -- Tailoring 285-300 (Venomspew Gloves, Mooncloth Reagent Bag) y First Aid 210-270
+  -- (Mageweave Bandage)
+  local FORCED = { Tailoring = 285, FirstAid = 210 }
+  for _, prof in ipairs({ "Enchanting", "Cooking", "Tailoring", "FirstAid" }) do
+    local before = PlanRoute(prof, 1, 300)
+    local greenBefore = #GreenPoints(prof, before)
+    ES.db.prof = ES.db.prof or {}
+    ES.db.prof[prof] = ES.db.prof[prof] or {}
+    ES.db.prof[prof].noGreen = true
+    ES.lastRoutes = {}
+    local plan = PlanRoute(prof, 1, 300)
+    ES.db.prof[prof].noGreen = nil
+    expect_eq(plan.reached, before.reached, prof .. ": sin verdes llega a otro nivel")
+    expect(#RouteProblems(prof, plan, 1, 300) == 0, "%s: ruta sin verdes no válida", prof)
+    local green = GreenPoints(prof, plan)
+    for _, g in ipairs(green) do
+      expect(FORCED[prof] and g.s >= FORCED[prof], "%s: punto verde evitable a %d (%s)", prof, g.s, g.name)
+    end
+    expect(#green < greenBefore, "%s: los mismos puntos verdes con y sin la opción (%d)", prof, greenBefore)
+    note("%s: %d puntos verdes -> %d · total %.0f -> %.0f c", prof, greenBefore, #green, before.net, plan.net)
+  end
+end)
+
 -- Spec recipe-requirements. CurseForge: "filter and not include recipes that require a
 -- specialization, like Tribal Leatherworking" (Frostsaber Boots en la ruta de Peletería)
 test("sin especialización, ninguna ruta 1-300 usa recetas de especialización", function()
@@ -305,6 +366,44 @@ test("con una especialización, solo se aprenden sus recetas", function()
   KNOWN_SPELLS[17039] = true -- Master Swordsmith
   expect(ES.Planner.LearnSkill(rapier, opts), "con Master Swordsmith no se puede aprender Blazing Rapier")
 end)
+
+-- Spec recipe-trainers. Discord: la fila «Entrenar Soft-soled Linen Boots» llevaba a
+-- Lawrence Schneider (Journeyman Tailor, no la tiene) y quien la enseña es Sellandus
+-- (Expert Tailor), los dos en Ventormenta. El jugador, al lado de Lawrence
+test("la fila «Entrenar» de Soft-soled Linen Boots lleva a Sellandus, no a Lawrence", function()
+  local BOOTS, LAWRENCE, SELLANDUS = 3845, 1300, 5567
+  -- Las demás recetas que aún dan puntos a 55, «ya no se enseñan»: la ruta va por las botas
+  ES.db.trainerMissing = {}
+  for id, r in pairs(ES.Data.Tailoring.recipes) do
+    if id ~= BOOTS and r.t[4] > 55 then ES.db.trainerMissing[id] = "gone" end
+  end
+  local page, plan = StartRoute("Tailoring", 55, 80)
+  local uses = false
+  local names = {}
+  for _, s in ipairs(plan.steps) do
+    uses = uses or s.id == BOOTS
+    names[#names + 1] = string.format("%d-%d %s", s.from, s.to, tostring(ES.Data.Tailoring.recipes[s.id] and ES.Data.Tailoring.recipes[s.id].name or s.id))
+  end
+  expect(uses, "la ruta 55-80 no usa Soft-soled Linen Boots: la prueba no prueba nada (%s)", table.concat(names, ", "))
+  -- En Ventormenta, más cerca de Lawrence (53.5, 81.5) que de Sellandus (52.2, 83.1)
+  CreateVector2D = function(a, b) return { x = a, y = b } end
+  C_Map = C_Map or {}
+  C_Map.GetWorldPosFromMapPos = function(m, v)
+    local wx, wy = m * 10 + v.x, v.y
+    return 1, { GetXY = function() return wx, wy end }
+  end
+  UnitPosition = function() return 1453 * 10 + 0.535, 0.812, 0, 1 end
+  ES:SelectProfessionView(page, "route")
+  RunTimers()
+  local row
+  for _, l in ipairs(page.lines or {}) do
+    if l.trainerLearn and l.learnID == BOOTS then row = l end
+  end
+  row = expect(row, "no hay fila «Entrenar Soft-soled Linen Boots»")
+  local to = expect(row.go and row.go(), "la fila «Entrenar» no lleva a ningún instructor")
+  expect(to ~= LAWRENCE, "la fila «Entrenar» lleva a Lawrence Schneider, que no la enseña")
+  expect_eq(to, SELLANDUS, "instructor de la fila «Entrenar»")
+end, { state = "scan" })
 
 -- Desde un nivel intermedio con recetas aprendidas: no las vuelve a cobrar
 for _, case in ipairs({ { "Leatherworking", 120 }, { "Tailoring", 150 }, { "Cooking", 100 }, { "Blacksmithing", 90 } }) do

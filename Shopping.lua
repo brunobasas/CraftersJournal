@@ -126,7 +126,8 @@ function Shopping.PhaseList(profKey)
   local data = ES.Data[profKey]
   if not (plan and data) then return nil end
   local level = math.max(plan.from, ES:GetProfessionSkill(data.skillLine) or plan.from)
-  local list = { t = 0, kind = "phase", key = profKey, live = true, items = {} }
+  -- (conv: lo ya convertido cuenta como su material, como en Materiales: ver Status)
+  local list = { t = 0, kind = "phase", key = profKey, live = true, items = {}, conv = ES.Planner.Conversions(plan, level) }
   -- (la misma regla que Materiales y la ventana del vendedor: Planner.RouteNeed)
   local wanted, phase = ES.Planner.RouteNeed(profKey, plan, level) -- [itemID] = { need, expected }
   if Shopping.ByPhase(profKey) then
@@ -158,7 +159,8 @@ function Shopping.PhaseLists()
 end
 
 -- Estado de toda la lista:
---   { lists = { { list, items = { { it, bought (lo que llevas para ella), left } }, done, total, cost } },
+--   { lists = { { list, items = { { it, bought (lo que llevas para ella), left,
+--       converted (de bought, lo que viene de lo ya convertido; solo en las de ruta) } }, done, total, cost } },
 --     done, total (materiales), cost (lo que falta, a los precios de cuando se añadió),
 --     bySource = { ah = { done, total, cost }, vendor = { ... } } }
 function Shopping.Status()
@@ -167,18 +169,53 @@ function Shopping.Status()
   -- Lo que llevas de cada material (y lo comprado en la AH que aún está en el correo),
   -- que se va repartiendo entre las listas
   local left = {}
-  local function Take(itemID, need)
+  local function Left(itemID)
     if left[itemID] == nil then left[itemID] = ES.HaveForShopping and ES:HaveForShopping(itemID) or ES:ItemCount(itemID) or 0 end
-    local n = math.min(left[itemID], need)
+    return left[itemID]
+  end
+  local function Take(itemID, need)
+    local n = math.min(Left(itemID), need)
     left[itemID] = left[itemID] - n
     return n
   end
+  -- Lo que falta de un material de una ruta, de lo ya convertido (conv =
+  -- Planner.Conversions; used = intermedios ya gastados así en esa lista): los
+  -- intermedios que se cuentan se quitan de lo que llevas, para que no valgan también
+  -- en otra lista (Discord: 108 Lesser Magic Essence convertidas no contaban como las 36
+  -- Greater de la ruta y la lista volvía a pedirlas)
+  local function TakeConverted(conv, used, itemID, need)
+    local got = 0
+    for _, x in ipairs(conv.inside[itemID] or {}) do
+      if got >= need then break end
+      local top, per = x[1], x[2]
+      local avail = math.min(math.max(0, Left(top) - (conv.reserved[top] or 0)),
+        (conv.cap[top] or math.huge) - (used[top] or 0))
+      local units = math.min(need - got, math.floor(avail * per + 0.001))
+      if units > 0 then
+        local spend = math.min(avail, math.ceil(units / per - 0.001))
+        left[top] = left[top] - spend
+        used[top] = (used[top] or 0) + spend
+        got = got + units
+      end
+    end
+    return got
+  end
   local function AddList(list)
     local s = { list = list, items = {}, done = 0, total = 0, cost = 0 }
-    for _, it in ipairs(list.items) do
-      local have = Take(it.itemID, it.need)
-      local missing = it.need - have
-      s.items[#s.items + 1] = { it = it, bought = have, left = missing }
+    -- (primero lo que llevas tal cual de todos sus materiales; después, lo convertido)
+    local have = {}
+    for i, it in ipairs(list.items) do have[i] = Take(it.itemID, it.need) end
+    local converted, used = {}, {}
+    if list.conv then
+      for i, it in ipairs(list.items) do
+        converted[i] = TakeConverted(list.conv, used, it.itemID, it.need - have[i])
+        have[i] = have[i] + converted[i]
+      end
+    end
+    for i, it in ipairs(list.items) do
+      local missing = it.need - have[i]
+      s.items[#s.items + 1] = { it = it, bought = have[i], left = missing,
+        converted = (converted[i] or 0) > 0 and converted[i] or nil }
       s.total = s.total + 1
       if missing == 0 then s.done = s.done + 1 else s.cost = s.cost + missing * (it.unit or 0) end
       -- (y por dónde se compra: el panel de la AH solo cuenta lo de la AH)

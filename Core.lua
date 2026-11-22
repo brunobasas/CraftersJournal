@@ -5,6 +5,13 @@ _G.CraftersJournal = ES
 ES.ICON = "Interface\\Icons\\Trade_BlackSmithing" -- martillo y yunque: profesiones (minimapa y lista de addons)
 ES.ahOpen = false
 
+-- Cachés que cuelgan de variables locales de un archivo y no de ES (el índice de
+-- mercado, las ideas de Ganar dinero...): /cj mem (DevTools.lua, solo en la copia de
+-- desarrollo) no las vería y saldrían en "el resto". Cada archivo apunta las suyas:
+-- ES.MemPart("nombre", function() return lo_que_ocupa end)
+ES.MemParts = {}
+function ES.MemPart(name, get) ES.MemParts[#ES.MemParts + 1] = { name = name, get = get } end
+
 -- AH abierta: por el evento o porque su ventana está a la vista (si el evento se
 -- pierde, el botón de escanear no debe quedarse en gris con la AH delante)
 -- El cliente puede tener las dos ventanas (moderna y clásica): vale cualquiera
@@ -172,9 +179,23 @@ local function DetectAuctionHouse()
   ES.neutralAH = neutral or nil
   if neutral and not ES.neutralWarned then
     ES.neutralWarned = true -- (una vez por sesión: no en cada visita)
-    ES:Print(L["Casa de Subastas neutral: Crafter's Journal no le da soporte. Aquí no escanea ni abre sus ventanas; sus rutas y precios siguen siendo los de la Casa de Subastas de tu facción."])
+    ES:NeutralAHNotice()
   end
   return neutral
+end
+
+-- Aviso en una ventana (antes, una línea en el chat que pasaba desapercibida): en la
+-- neutral el addon aún no funciona. Su casilla "No volver a mostrar este aviso" lo
+-- apaga (ES.db.noNeutralAHNotice); se vuelve a encender en /cj opciones
+function ES:NeutralAHNotice()
+  if not self.Confirm then return end
+  self:Confirm({
+    key = "noNeutralAHNotice", single = true, extra = 32,
+    title = L["Casa de Subastas neutral"],
+    text = L["Crafter's Journal aún no funciona en la Casa de Subastas neutral. Aquí no escanea ni abre sus ventanas; tus rutas y precios siguen siendo los de la Casa de Subastas de tu facción."],
+    yes = L["Aceptar"], closeOn = "AUCTION_HOUSE_CLOSED",
+    onYes = function() end,
+  })
 end
 
 local function ApplyDefaults(db, defaults)
@@ -200,6 +221,7 @@ local GetItemInfoInstantCompat = (C_Item and C_Item.GetItemInfoInstant) or GetIt
 -- del addon y el del cliente: ES.ReleaseUnusedNames). Un jugador en inglés no
 -- convierte ninguno.
 local expandedNames = {} -- [idioma] = { spells, items }
+ES.MemPart("nombres de otros idiomas convertidos", function() return expandedNames end)
 function ES.NamesFor(lang)
   local set = expandedNames[lang]
   if set then return set end

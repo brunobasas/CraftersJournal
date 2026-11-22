@@ -346,6 +346,9 @@ def load_common():
                 teachers[spell].add(npc)
                 if spell not in fees or cost < fees[spell][0]:
                     fees[spell] = (cost, req, False)
+    # (lo de CMaNGOS, antes de que lo reemplacen los datos de Forever: ver cm_teachers en
+    # build, para no mandar a un instructor que Forever pone de más)
+    cm_teachers = {s: set(n) for s, n in teachers.items()}
     # Instructores de Forever (FOREVER_TRAINERS): quién enseña cada receta, a qué nivel y
     # por cuánto. Mandan sobre CMaNGOS (Classic): Forever cambió niveles y movió recetas
     # de rango. Su nivel ya es el de Forever. Precio: el más alto entre sus instructores
@@ -375,7 +378,7 @@ def load_common():
                 item_ability=item_ability,
                 item_quality=item_quality, item_bop=item_bop,
                 tools=tools, tools2=tools2, tool_masks=tool_masks, fees=fees, ranks=ranks, trainers=trainers,
-                teachers=teachers, untaught=untaught)
+                teachers=teachers, cm_teachers=cm_teachers, untaught=untaught)
 
 
 ALLIANCE_RACES = 1 | 4 | 8 | 64     # humano, enano, elfo de la noche, gnomo
@@ -771,6 +774,24 @@ def main():
             if who and not (who & by_rank):
                 known = sorted(who & {npc for npc, _ in trainers}) or sorted(who)
                 parts.append("tr = { " + ", ".join(str(n) for n in known) + " }")
+            elif who:
+                # Forever bajó el nivel de muchas recetas a un tramo más bajo que el de sus
+                # instructores, pero las siguen enseñando los de Classic. Discord: la flecha
+                # de Soft-soled Linen Boots (de 80 a 55) llevaba a Lawrence Schneider
+                # (Journeyman Tailor) y la enseña Sellandus (Expert Tailor). Los datos de
+                # Forever (Wowhead) ponían a Lawrence de más; CMaNGOS no, pero tampoco sabe lo
+                # que Forever quitó (Heavy Mithril Breastplate: solo Brikk Keencraft). Un
+                # instructor de Classic la enseña si lo dicen los dos; si no tienen ninguno en
+                # común, vale lo que haya. Si ninguno es del tramo por nivel, tr = los del
+                # tramo más bajo de ellos y los nuevos de Forever (Zephras) de ese tramo
+                masks = dict(trainers)
+                common = who & c["cm_teachers"].get(sid, set())
+                classic = {n for n in (common or who) if n in masks and n < FOREVER_NPC_IDS}
+                if classic and not any(masks[n] & bit for n in classic):
+                    low = min(b for n in classic for b in RANK_BIT.values() if masks[n] & b)
+                    at = {n for n in classic if masks[n] & low}
+                    at |= {n for n in who if n >= FOREVER_NPC_IDS and masks.get(n, 0) & low}
+                    parts.append("tr = { " + ", ".join(str(n) for n in sorted(at)) + " }")
         elif sid in scrolls:
             scroll = scrolls[sid]
             # Nivel que pide el pergamino; si no lo dice, amarilla - 10 (el umbral

@@ -169,6 +169,39 @@ test("con Auctionator, Escanear en gris si Auctionator aún no deja otro escaneo
   expect(not ES.Scanner:IsBusy(), "se quedó escaneando")
 end, { state = "empty" })
 
+-- CurseForge: con el botón Escanear de Auctionator, el de Crafter's Journal sobraba
+test("opción: quitar el botón de Crafter's Journal de encima de la AH", function()
+  InstallAuctionator()
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  OpenAH()
+  local button = expect(CraftersJournalAHButton, "no hay botón encima de la AH")
+  local list = expect(ES.ahListButton, "no hay botón de la lista de compra")
+  expect(button:IsShown(), "el botón no sale por defecto")
+  expect(list._anchorTo == button, "la lista de compra no va junto al botón")
+  -- Se quita al momento, con la AH abierta: la lista de compra pasa a la esquina
+  ES:SetOption("noAHButton", false)
+  expect_eq(ES.db.noAHButton, true, "opción guardada")
+  expect(not button:IsShown(), "el botón sigue con la opción quitada")
+  expect(list:IsShown(), "se fue también la lista de compra")
+  expect(list._anchorTo == list:GetParent(), "la lista de compra sigue pegada al botón escondido")
+  -- Al volver a abrir la AH tampoco sale
+  AuctionFrame:Hide()
+  FireEvent("AUCTION_HOUSE_CLOSED")
+  RunTimers()
+  OpenAH()
+  expect(not button:IsShown(), "el botón vuelve al abrir la AH")
+  -- El escaneo de Auctionator (su botón) se sigue leyendo
+  QueryAuctionItems("", nil, nil, 0, nil, nil, true, false, nil)
+  ES.Scanner:OnForeignScan("legacy")
+  RunTimers()
+  local scan = expect(ES.db.scans[ES:RealmKey()], "sin el botón no se leyó el escaneo de Auctionator")
+  expect_eq(scan.items[2318].minUnit, 25, "Light Leather")
+  -- Y vuelve al activarla
+  ES:SetOption("noAHButton", true)
+  expect(button:IsShown(), "el botón no vuelve al activar la opción")
+  expect(list._anchorTo == button, "la lista de compra no vuelve junto al botón")
+end, { state = "empty" })
+
 test("historial: tres escaneos y lo que se vendió entre ellos", function()
   local n, comparisons = ES.History:Summary()
   expect_eq(n, 3, "escaneos en el historial")
@@ -929,6 +962,43 @@ test("AH neutral: sin soporte, sin errores", function()
   OpenAH()
   expect(ES.neutralAH, "no detecta la neutral")
   expect(not ES.ahOpen, "la neutral cuenta como AH abierta")
+  NPC_FACTION = "Alliance"
+end, { state = "scan" })
+
+-- Antes era una línea en el chat que pasaba desapercibida
+test("AH neutral: una ventana avisa de que aún no funciona (una vez por sesión, se puede apagar)", function()
+  local text = ES.L["Crafter's Journal aún no funciona en la Casa de Subastas neutral. Aquí no escanea ni abre sus ventanas; tus rutas y precios siguen siendo los de la Casa de Subastas de tu facción."]
+  NPC_FACTION = nil
+  OpenAH()
+  local d = expect(ES.ConfirmFrame(), "no sale ninguna ventana")
+  expect(d:IsShown(), "no sale la ventana del aviso")
+  expect_eq(d.text._text, text, "texto del aviso")
+  expect(d.ok:IsShown() and not d.cancel:IsShown(), "el aviso debería tener un solo botón (Aceptar)")
+  -- Al cerrar la AH se va
+  AuctionFrame:Hide()
+  FireEvent("AUCTION_HOUSE_CLOSED")
+  RunTimers()
+  expect(not d:IsShown(), "el aviso sigue tras cerrar la AH")
+  -- Una vez por sesión
+  OpenAH()
+  expect(not d:IsShown(), "el aviso sale en cada visita")
+  -- En otra sesión vuelve; con "No volver a mostrar este aviso" ya no
+  ES.neutralWarned = nil
+  AuctionFrame:Hide()
+  FireEvent("AUCTION_HOUSE_CLOSED")
+  RunTimers()
+  OpenAH()
+  expect(d:IsShown(), "el aviso no vuelve en otra sesión")
+  d.check:SetChecked(true)
+  d.ok:GetScript("OnClick")(d.ok)
+  expect(not d:IsShown(), "Aceptar no cierra el aviso")
+  expect_eq(ES.db.noNeutralAHNotice, true, "la casilla no apaga el aviso")
+  ES.neutralWarned = nil
+  AuctionFrame:Hide()
+  FireEvent("AUCTION_HOUSE_CLOSED")
+  RunTimers()
+  OpenAH()
+  expect(not d:IsShown(), "el aviso sale apagado")
   NPC_FACTION = "Alliance"
 end, { state = "scan" })
 

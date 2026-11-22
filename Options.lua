@@ -24,6 +24,11 @@ local L = ES.L
 --                            quien la tenía desactivada sigue sin las dos (ver Migrate)
 --   ES.db.noPostConfirm    = true: anunciar en la AH sin preguntar antes (AuctionSellUI.lua,
 --                            Sell.Post). Se apaga también con "No volver a preguntar"
+--   ES.db.noAHButton       = true: sin el botón "Crafter's Journal: Escanear" encima de
+--                            la AH (UI.lua, PlaceAHButtons). Los escaneos de Auctionator se
+--                            siguen leyendo igual. CurseForge: ya tenían su botón Escanear
+--   ES.db.noNeutralAHNotice = true: sin la ventana que avisa de que el addon aún no
+--                            funciona en la Casa de Subastas neutral (Core.lua)
 -- Todas salen por defecto (es lo normal del addon); la primera vez que sale cada una
 -- se dice en el chat que se puede quitar aquí (ES:WindowTip)
 ---------------------------------------------------------------------------
@@ -202,6 +207,8 @@ function ES:ApplyOptions(key, on)
   -- abras la AH, o ya con el botón de encima de la AH)
   local mini = self.ShoppingMini and self.ShoppingMini()
   if key == "noAuctionWindows" and not on and mini then mini:Hide() end
+  -- (el botón de encima de la AH: al momento si está abierta; si no, al abrirla)
+  if key == "noAHButton" and self.ahOpen and self.PlaceAHButtons then self:PlaceAHButtons() end
 end
 
 local OPTIONS = {
@@ -226,6 +233,11 @@ local OPTIONS = {
     enabled = function() return true end,
     apply = function() if ES.RefreshAllViews then ES:RefreshAllViews() end ES:ApplyOptions() end },
   -- Casa de Subastas
+  { key = "noAHButton", cat = "auction", label = "Botón de Crafter's Journal encima de la AH",
+    desc = "Abre el addon y pide el escaneo completo de Auctionator. Desactivado, el addon sigue leyendo los escaneos de Auctionator (su botón Escanear o el automático al abrir la AH); ábrelo con /cj o el botón del minimapa." },
+  -- (Core.lua, NeutralAHNotice: también se apaga con la casilla de su ventana)
+  { key = "noNeutralAHNotice", cat = "auction", label = "Aviso en la Casa de Subastas neutral",
+    desc = "Al abrir la Casa de Subastas neutral (Bahía del Botín, Gadgetzan, Vista Eterna), una ventana avisa de que Crafter's Journal aún no funciona en ella." },
   { key = "noAuctionSellWindow", cat = "auction", label = "Vender en la AH desde tus bolsas",
     desc = "Al abrir la AH: una ventana con lo de tus bolsas que se vende mejor en la AH. Clic en una fila para anunciarlo." },
   { key = "noPostConfirm", cat = "auction", label = "Confirmar antes de anunciar en la AH",

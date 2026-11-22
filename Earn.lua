@@ -335,6 +335,7 @@ local cache
 -- `keepMarket`: solo las ideas (bolsas, cantidades); sin él, todo (aprendes una receta,
 -- escaneo nuevo...)
 local marketMemo = {}
+ES.MemPart("Ganar dinero: ideas y costes por profesión", function() return { cache, marketMemo } end)
 function Earn:Clear(keepMarket)
   cache = nil
   if not keepMarket then marketMemo = {} end

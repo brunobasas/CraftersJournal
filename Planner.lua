@@ -800,6 +800,61 @@ function Planner.CraftedNeedFrom(plan, itemID, level, withOwned)
   return q
 end
 
+-- Lo ya convertido de una ruta: la ruta pide Runecloth para hacer Bolt of Runecloth, y
+-- al convertirlo el Runecloth bajaba y la ruta volvía a pedir comprarlo (Discord). Por
+-- cada intermedio que fabrica la ruta (plan.crafted), lo que llevas de él vale lo que
+-- lleva de cada material (y así hacia abajo, hasta 3 niveles).
+-- `level`: de cada intermedio cuenta como mucho lo que la ruta aún gasta desde ahí (los
+-- de más no son material de la ruta: si no, sobrarían Bolts y faltaría el Runecloth
+-- suelto que pide otra receta).
+-- Devuelve { inside = { [material] = { { intermedio, unidades por intermedio } } },
+--   cap = { [intermedio] = cuántos cuentan como mucho }, reserved = { [intermedio] = cuántos
+--   son de pasos pasados } }
+function Planner.Conversions(plan, level)
+  local made, cap = {}, {}
+  for _, c in ipairs(plan.crafted or {}) do
+    if c.recipe and c.recipe.r and c.recipe.out then
+      made[c.itemID] = c.recipe
+      local rem = level and Planner.CraftedNeedFrom(plan, c.itemID, level)
+      -- (solo lo fabricado: lo de tus bolsas al calcular la ruta no pidió su material)
+      cap[c.itemID] = rem and math.ceil(rem - 0.001) or c.quantity
+    end
+  end
+  -- (lo que la ruta da por hecho en pasos pasados, Planner.MadeNeed, ya es de esos pasos:
+  -- no vale además como su material. 21 Cured Medium Hide para las Hillman's Shoulders
+  -- contaban también como Medium Hide y la compra pedía una menos de las que faltaban)
+  local reserved = {}
+  for itemID, q in pairs(level and Planner.MadeNeed(plan, level) or {}) do reserved[itemID] = math.ceil(q - 0.001) end
+  local inside = {}
+  local function Walk(top, itemID, per, depth)
+    local r = made[itemID]
+    if not r or depth > 3 then return end
+    local outN = math.max(1, r.out[2] or 1)
+    for _, rg in ipairs(r.r) do
+      local q = per * rg[2] / outN
+      inside[rg[1]] = inside[rg[1]] or {}
+      table.insert(inside[rg[1]], { top, q })
+      Walk(top, rg[1], q, depth + 1)
+    end
+  end
+  for itemID in pairs(made) do Walk(itemID, itemID, 1, 1) end
+  return { inside = inside, cap = cap, reserved = reserved }
+end
+
+-- Lo que llevas de un material contando lo ya convertido (Planner.Conversions).
+-- bags(itemID): lo que hay en las bolsas. Devuelve have(itemID)
+function Planner.ConvertedHave(plan, bags, level)
+  local conv = Planner.Conversions(plan, level)
+  local function Held(itemID)
+    return math.min(math.max(0, bags(itemID) - (conv.reserved[itemID] or 0)), conv.cap[itemID] or math.huge)
+  end
+  return function(itemID)
+    local n = bags(itemID)
+    for _, x in ipairs(conv.inside[itemID] or {}) do n = n + math.floor(Held(x[1]) * x[2] + 0.001) end
+    return n
+  end
+end
+
 -- Cuántas de un intermedio de plan.crafted gasta la ruta entera: las que fabricas y
 -- las que saca de tus bolsas. Con "usar lo de tus bolsas", quantity ya no cuenta las
 -- tuyas, y la fila les restaba otra vez lo que llevas: 57 Bolt of Silk Cloth, 10 en
@@ -852,9 +907,17 @@ end
 -- Discord, Red Linen Bag). Así, entre un verde y un naranja o amarillo que cuestan
 -- parecido, gana el seguro. El coste que enseña la ruta sigue siendo el medio
 Planner.GREEN_RISK = 0.5
-function Planner.GreenRisk(t, skill, chance)
+-- Icono "Recetas en verde" desactivado (opts.noGreen): el recargo se dispara y la ruta
+-- usa una receta naranja o amarilla siempre que haya una, aunque cueste más; en verde
+-- solo donde no hay otra (Tailoring 285-300, First Aid 210-270). No es un filtro: la
+-- ruta nunca se queda sin receta. CurseForge: "an option to NOT use green skill up
+-- recipes"; "Menos fabricaciones" apenas las quitaba en niveles altos. Con 20 sale lo
+-- mismo que con 100 en las rutas 1-300
+Planner.NO_GREEN_RISK = 20
+function Planner.GreenRisk(t, skill, chance, opts)
   if not (t and t[3]) or skill < t[3] or not chance or chance <= 0 or chance >= 1 then return 0 end
-  return Planner.GREEN_RISK * math.sqrt(1 - chance) / chance
+  local k = opts and opts.noGreen and Planner.NO_GREEN_RISK or Planner.GREEN_RISK
+  return k * math.sqrt(1 - chance) / chance
 end
 
 -- Recetas con enfriamiento (Transmute: Iron to Gold, una al día; Mooncloth, cada
@@ -1618,6 +1681,7 @@ local DEFAULT_CAST = 3        -- s si el juego no dice el lanzamiento
 local MIN_CAST = 1.5
 local CRAFT_OVERHEAD = 0.5
 local castMemo = {}
+ES.MemPart("tiempos de fabricar", function() return castMemo end)
 -- Lo que se tarda en fabricar toda la ruta (sus pasos, como la fila del total): para
 -- comparar rutas por tiempo y no solo por oro (la franja de resumen)
 function Planner.RouteSeconds(plan)
@@ -1690,7 +1754,7 @@ function Planner.RouteScore(plan, memo)
     local risk = 0
     for s = st.from, st.to - 1 do
       local p = plan.pointChance and plan.pointChance[s]
-      risk = risk + Planner.GreenRisk(st.recipe and st.recipe.t, s, p)
+      risk = risk + Planner.GreenRisk(st.recipe and st.recipe.t, s, p, opts)
     end
     if risk > 0 then score = score + risk * (math.max(0, st.unitCost) + RecipeWeight(opts, st.id)) end
   end
@@ -1761,7 +1825,7 @@ local function PointCost(ctx, rc, s)
           net = net * PROFIT_FULL_CRAFTS / crafts + CRAFT_COST * (crafts - PROFIT_FULL_CRAFTS)
         end
         -- En verde, algo de mala suerte (como en Plan: Planner.GreenRisk)
-        local risk = Planner.GreenRisk(rc.r.t, s, chance)
+        local risk = Planner.GreenRisk(rc.r.t, s, chance, ctx.opts)
         if risk > 0 then net, crafts = net + cost / crafts * risk, crafts + risk end
         v = { net / (1 + g), crafts / (1 + g) }
       end
@@ -2783,7 +2847,7 @@ function Planner:Plan(data, opts)
             -- Coste simbólico de cada fabricación (solo al elegir; ver Plan)
             local score = net + (opts.craftCost or 0) * crafts
             -- En verde, algo de mala suerte (solo al elegir: Planner.GreenRisk)
-            local risk = Planner.GreenRisk(r.t, s, chance)
+            local risk = Planner.GreenRisk(r.t, s, chance, opts)
             if risk > 0 then score = score + (cost / crafts + (opts.craftCost or 0)) * risk end
             local span = math.max(1, math.min(r.t[4], opts.to) - s)
             local feeSpan

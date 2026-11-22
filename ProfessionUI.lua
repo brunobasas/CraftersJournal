@@ -331,6 +331,9 @@ function ES:PlanOptions(profKey, from, to, cap)
     -- que no cambia el coste y evita pasos de 20 fabricaciones por punto para ahorrar un
     -- cobre; encendido: cada fabricación pesa FEWER_CRAFTS_WEIGHT)
     craftWeight = settings.fewerCrafts and self.Planner.FEWER_CRAFTS_WEIGHT or nil,
+    -- Icono "Recetas en verde" desactivado: naranja o amarilla siempre que haya una
+    -- (Planner.GreenRisk con NO_GREEN_RISK; por defecto se usan)
+    noGreen = settings.noGreen or nil,
   }
 end
 
@@ -567,7 +570,9 @@ function ES:StableRouteKey(profKey, from, to, cap)
   local trainer = self.db.trainerStamp and self.db.trainerStamp[profKey] or 0
   return table.concat({ profKey, scan and scan.time or 0, from, to, tostring(cap), tostring(settings.useBags),
     tostring(settings.useQuests), self:RealmKey(), ExcludedKey(settings), tostring(settings.useFavor),
-    tostring(settings.fewerCrafts), tostring(self.Planner.SKILL_BONUS or 0), -- (Working Overtime)
+    -- (icono "Recetas en verde" desactivado: solo cambia la clave si lo está)
+    tostring(settings.fewerCrafts) .. (settings.noGreen and "/sinVerdes" or ""),
+    tostring(self.Planner.SKILL_BONUS or 0), -- (Working Overtime)
     tostring(settings.noLimited or false), self:KnownStamp(profKey), trainer,
     self.RepStamp and self:RepStamp() or "", tostring(self.AddonVersion and self.AddonVersion()), RecipeCount(profKey),
     self.SpecStamp and self:SpecStamp() or "",
@@ -844,49 +849,10 @@ local function AttemptHint(page, plan)
     "|cff66ccff", try.crafts, try.recipe.name, math.floor(try.prob * 100 + 0.5), skill + 1)
 end
 
--- Lo que llevas de un material contando lo que ya convertiste: la ruta pide Runecloth
--- para hacer Bolt of Runecloth, y al convertirlo el Runecloth bajaba y la ruta volvía a
--- pedir comprarlo (Discord). Por cada intermedio que fabrica la ruta (plan.crafted), lo
--- que llevas de él vale lo que lleva de cada material (y así hacia abajo).
--- bags(itemID): lo que hay en las bolsas. Devuelve have(itemID)
--- `level`: de cada intermedio cuenta como mucho lo que la ruta aún gasta desde ahí (los
--- de más no son material de la ruta: si no, sobrarían Bolts y faltaría el Runecloth
--- suelto que pide otra receta)
+-- Lo que llevas de un material contando lo que ya convertiste (Planner.ConvertedHave:
+-- la misma regla que la Lista de compra). bags(itemID): lo que hay en las bolsas
 local function ConvertedHave(plan, bags, level)
-  local made, cap = {}, {}
-  for _, c in ipairs(plan.crafted or {}) do
-    if c.recipe and c.recipe.r and c.recipe.out then
-      made[c.itemID] = c.recipe
-      local rem = level and ES.Planner.CraftedNeedFrom(plan, c.itemID, level)
-      -- (solo lo fabricado: lo de tus bolsas al calcular la ruta no pidió su material)
-      cap[c.itemID] = rem and math.ceil(rem - 0.001) or c.quantity
-    end
-  end
-  -- (lo que la ruta da por hecho en pasos pasados, Planner.MadeNeed, ya es de esos pasos:
-  -- no vale además como su material. 21 Cured Medium Hide para las Hillman's Shoulders
-  -- contaban también como Medium Hide y la compra pedía una menos de las que faltaban)
-  local reserved = level and ES.Planner.MadeNeed(plan, level) or {}
-  local function Held(itemID)
-    return math.min(math.max(0, bags(itemID) - math.ceil((reserved[itemID] or 0) - 0.001)), cap[itemID] or math.huge)
-  end
-  local inside = {} -- [material] = { { intermedio, unidades por intermedio } }
-  local function Walk(top, itemID, per, depth)
-    local r = made[itemID]
-    if not r or depth > 3 then return end
-    local outN = math.max(1, r.out[2] or 1)
-    for _, rg in ipairs(r.r) do
-      local q = per * rg[2] / outN
-      inside[rg[1]] = inside[rg[1]] or {}
-      table.insert(inside[rg[1]], { top, q })
-      Walk(top, rg[1], q, depth + 1)
-    end
-  end
-  for itemID in pairs(made) do Walk(itemID, itemID, 1, 1) end
-  return function(itemID)
-    local n = bags(itemID)
-    for _, x in ipairs(inside[itemID] or {}) do n = n + math.floor(Held(x[1]) * x[2] + 0.001) end
-    return n
-  end
+  return ES.Planner.ConvertedHave(plan, bags, level)
 end
 
 -- Lo que llevas para la ruta (bolsas y correo, con lo ya convertido): Planner.RouteNeed
@@ -1530,6 +1496,9 @@ local STEP_VALUE_COL = 130 -- ancho reservado al valor (cabe "+99g 99s 99c")
 local function SetStepper(row, line)
   local onStep = line.onStep
   if not onStep then
+    -- (también la función: guardaba la idea de Ganar dinero de la última vez, y con ella
+    -- todo su cálculo, aunque ya se hubiera soltado)
+    row.onStep = nil
     if row.stepper then row.stepper:Hide() end
     return
   end
@@ -1676,6 +1645,24 @@ function ES.UI.WaitingForItem(page, itemID)
   return page.pendingItems and itemID ~= nil and page.pendingItemIDs ~= nil and page.pendingItemIDs[itemID] == true
 end
 
+-- Una fila que se esconde olvida lo que llevaba (sus funciones de clic y tooltip guardan
+-- los datos de lo pintado: una idea de Ganar dinero con todo su cálculo, un paso de
+-- ruta...). Si no, seguían en memoria aunque ya no se usaran
+local function ForgetRow(row)
+  row.tooltip, row.item, row.go, row.ahItem, row.useItem = nil, nil, nil, nil, nil
+  row.onClick, row.onRightClick, row.onStep = nil, nil, nil
+  row.onSkip, row.skipTip, row.skipTitle = nil, nil, nil
+end
+
+-- Vacía la lista de una página (las filas, escondidas y sin sus datos): lo que pintaba
+-- ya no se guarda. Se vuelve a pintar al mostrarse (ES:ReleaseIdleCaches)
+function ES.UI.ClearLines(page)
+  for _, row in ipairs(page and page.rows or {}) do
+    ForgetRow(row)
+    row:Hide()
+  end
+end
+
 -- Pinta una lista de líneas (ver StyleRow) en page.content con page.rows
 function ES.UI.RenderLines(page, lines)
   local y = 0
@@ -1698,7 +1685,10 @@ function ES.UI.RenderLines(page, lines)
     if line.item and not ES:GetItemData(line.item) then page.pendingItems, waiting[line.item] = true, true end
     row:Show()
   end
-  for i = #lines + 1, #page.rows do page.rows[i]:Hide() end
+  for i = #lines + 1, #page.rows do
+    ForgetRow(page.rows[i])
+    page.rows[i]:Hide()
+  end
   page.content:SetHeight(math.max(1, y))
   -- Con menos filas que antes (dejar la ruta la rehace desde tu nivel, más corta), que
   -- no se quede desplazada más allá del final: el juego no lo limita solo y las
@@ -1917,11 +1907,12 @@ function ES:CreateProfessionPage(page, profKey)
   -- isOn() lee el ajuste; toggle() lo cambia; lines() da el texto del tooltip
   local function FilterIcon(anchor, texture, title, isOn, toggle, lines)
     local b = CreateFrame("Button", nil, head, "BackdropTemplate")
-    -- (24 px y 3 de separación: con 26 y 4 el quinto icono, el de vendedores de stock
-    -- limitado, empujaba el primero encima de la casilla del objetivo)
-    b:SetSize(24, 24)
+    -- (22 px y 2 de separación: con 26 y 4 el quinto icono, el de vendedores de stock
+    -- limitado, empujaba el primero encima de la casilla del objetivo; con el sexto,
+    -- el de recetas en verde, a 24 y 3 tampoco cabían. Así ocupan 8 px más que los cinco)
+    b:SetSize(22, 22)
     -- Centrados en vertical con los botones de vista (Ruta, Materiales, Profit)
-    b:SetPoint("RIGHT", anchor, "LEFT", anchor == prev and -8 or -3, 0)
+    b:SetPoint("RIGHT", anchor, "LEFT", anchor == prev and -6 or -2, 0)
     b:SetBackdrop({ edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 10 })
     b.icon = b:CreateTexture(nil, "ARTWORK")
     b.icon:SetPoint("TOPLEFT", 3, -3)
@@ -2016,6 +2007,18 @@ function ES:CreateProfessionPage(page, profKey)
     function()
       return { settings.fewerCrafts and L["La ruta paga un poco más a cambio de fabricar menos y más rápido: evita las recetas en verde que piden varias fabricaciones por punto y las que tardan mucho en fabricarse."]
         or L["La ruta más barata, aunque pida más fabricaciones."] }
+    end)
+
+  -- Recetas en verde (CurseForge: no usarlas nunca; "Menos fabricaciones" apenas las
+  -- quitaba en niveles altos). Desactivado: naranja o amarilla siempre que haya una
+  -- (Planner.GreenRisk con opts.noGreen). Por defecto se usan
+  page.greenButton = FilterIcon(page.fewerButton, "Interface\\Icons\\INV_Misc_Dice_01",
+    L["Recetas en verde"],
+    function() return not settings.noGreen end,
+    function() settings.noGreen = not settings.noGreen or nil end,
+    function()
+      return { not settings.noGreen and L["La ruta usa recetas en verde cuando salen más baratas, contando algo de mala suerte: en verde no todas las fabricaciones suben punto."]
+        or L["La ruta usa una receta naranja o amarilla siempre que haya una, aunque cueste algo más: así los últimos puntos no dependen de la suerte. En verde, solo en los niveles donde no hay otra."] }
     end)
 
   -- Franja de resumen: materiales, ventas al vendedor, instructor y herramientas, total.

@@ -209,6 +209,97 @@ test("el aviso de ruta entera: «Por tramos» cambia el modo y la casilla lo apa
   expect(opt and opt.cat == "assistant", "falta la opción del aviso en Asistente de ruta")
 end, { state = "scan" })
 
+-- Lo ya convertido cuenta en la lista de la ruta (spec route-shopping-mode). Discord:
+-- convirtió las Greater Magic Essence en Lesser como pedía la ruta y la Lista de compra
+-- volvió a pedir todas las Greater; Materiales y el asistente sí las contaban. Con los
+-- precios de las pruebas, Encantamiento 110-130 (Greater Magic Wand) compra Greater
+-- Magic Essence y las convierte en Lesser (1 -> 3)
+local LESSER_MAGIC, GREATER_MAGIC = 10938, 10939
+
+-- Empieza Encantamiento 110-130 y pone `lesser` Lesser Magic Essence en las bolsas.
+-- Devuelve la ruta fijada
+local function ConvertedRoute(lesser, byPhase)
+  if byPhase == false then
+    ES.db.prof.Enchanting = ES.db.prof.Enchanting or {}
+    ES.db.prof.Enchanting.byPhase = false
+  end
+  local _, plan = StartRoute("Enchanting", 110, 130)
+  local made = false
+  for _, c in ipairs(plan.crafted or {}) do
+    if c.itemID == LESSER_MAGIC and c.recipe and c.recipe.conversion then made = true end
+  end
+  expect(made, "la ruta de Encantamiento 110-130 ya no convierte Greater Magic Essence en Lesser")
+  BAGS[GREATER_MAGIC], BAGS[LESSER_MAGIC] = 0, lesser
+  ES.Earn:Clear()
+  return plan
+end
+
+-- La fila de un material en la lista de la ruta empezada
+local function PhaseRow(itemID)
+  return expect(ItemsOf(ES.Shopping.Status(), "phase")[itemID], "la lista de la ruta no pide el objeto %d", itemID)
+end
+
+test("ruta empezada: las esencias ya convertidas cuentan como las que se compran", function()
+  local plan = ConvertedRoute(36)
+  local e = PhaseRow(GREATER_MAGIC)
+  note("pide %d Greater Magic Essence; con 36 Lesser: tienes %d, faltan %d", e.it.need, e.bought, e.left)
+  expect(e.it.need > 12, "el tramo pide solo %d Greater Magic Essence", e.it.need)
+  expect_eq(e.bought, 12, "Greater Magic Essence que tienes (36 Lesser convertidas)")
+  expect_eq(e.converted, 12, "las que vienen de lo convertido")
+  expect_eq(e.left, e.it.need - 12, "Greater Magic Essence que faltan")
+  -- (lo mismo que cuentan Materiales y el asistente)
+  expect_eq(e.left, e.it.need - ES.RouteHave(plan, 110)(GREATER_MAGIC), "la lista no pide lo mismo que Materiales")
+end)
+
+test("ruta entera: las esencias ya convertidas también cuentan", function()
+  ConvertedRoute(36, false)
+  local e = PhaseRow(GREATER_MAGIC)
+  expect(ES.Shopping.PhaseLists()[1].whole, "la lista no es de la ruta entera")
+  expect_eq(e.bought, 12, "Greater Magic Essence que tienes (36 Lesser convertidas)")
+  expect_eq(e.left, e.it.need - 12, "Greater Magic Essence que faltan")
+end)
+
+test("ruta empezada: las esencias convertidas de más no cuentan", function()
+  local plan = ConvertedRoute(600)
+  local cap = math.ceil(ES.Planner.CraftedNeedFrom(plan, LESSER_MAGIC, 110) - 0.001)
+  local e = PhaseRow(GREATER_MAGIC)
+  note("la ruta aún gasta %d Lesser; con 600 tienes %d Greater de %d", cap, e.bought, e.it.need)
+  expect(cap < 600, "la ruta gasta %d Lesser Magic Essence", cap)
+  expect_eq(e.bought, math.min(e.it.need, math.floor(cap / 3)), "Greater Magic Essence que tienes")
+end)
+
+test("lo convertido cuenta una vez: otra lista que pide las Lesser no las cuenta", function()
+  ConvertedRoute(36)
+  ES.Shopping.Add("money", "Lesser", { { itemID = LESSER_MAGIC, quantity = 10, unit = 100, source = "ah" } })
+  local route = PhaseRow(GREATER_MAGIC)
+  local other = expect(ItemsOf(ES.Shopping.Status(), "money")[LESSER_MAGIC], "falta la lista guardada")
+  expect_eq(route.bought, 12, "Greater Magic Essence que tienes")
+  expect_eq(other.bought, 0, "Lesser Magic Essence de la lista guardada (ya cuentan para la ruta)")
+  expect_eq(other.left, 10, "Lesser Magic Essence que faltan en la lista guardada")
+end)
+
+test("una lista guardada no cuenta las Lesser como Greater", function()
+  BAGS[GREATER_MAGIC], BAGS[LESSER_MAGIC] = 0, 36
+  ES.Shopping.Add("money", "Greater", { { itemID = GREATER_MAGIC, quantity = 10, unit = 300, source = "ah" } })
+  local e = expect(ItemsOf(ES.Shopping.Status(), "money")[GREATER_MAGIC], "falta la lista guardada")
+  expect_eq(e.bought, 0, "Greater Magic Essence que tienes")
+  expect_eq(e.left, 10, "Greater Magic Essence que faltan")
+end)
+
+test("con lo convertido, el botón de la AH compra solo lo que falta", function()
+  ConvertedRoute(36)
+  local e = PhaseRow(GREATER_MAGIC)
+  local id, n = ES.Shopping.NextToBuy(ES.Shopping.Status(), GREATER_MAGIC)
+  expect_eq(id, GREATER_MAGIC, "lo siguiente que comprar")
+  expect_eq(n, e.it.need - 12, "cuántas Greater Magic Essence compra")
+  expect(ES.Shopping.PendingAH() > 0, "no queda nada de la AH")
+  -- La fila dice cuántas vienen de lo convertido
+  OpenPage("shopping")
+  local text = AllText()
+  expect(text:find(string.format("tienes 12 de %d (12 de lo ya convertido)", e.it.need), 1, true),
+    "la fila no dice lo convertido")
+end)
+
 test("ruta acabada: su lista guardada se quita sola", function()
   local list = ES.Shopping.Add("route", "vieja", { { itemID = 2589, quantity = 5, unit = 15 } }, { key = "Tailoring" })
   expect(list, "no se añadió")

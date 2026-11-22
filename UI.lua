@@ -754,6 +754,11 @@ function ES:ReleaseIdleCaches()
   if self.Earn then self.Earn:Clear() end
   if self.Favor then self.Favor.Clear() end
   if self.PriceHistory then self.PriceHistory.Clear() end
+  -- (y lo que sus listas pintaron: cada fila guarda sus datos, ver ES.UI.ClearLines)
+  if self.UI and self.UI.ClearLines then
+    self.UI.ClearLines(self.earnPage)
+    self.UI.ClearLines(self.favorPage)
+  end
 end
 
 -- Esconde la ventana si está abierta (sin crearla si aún no existe)
@@ -965,11 +970,32 @@ function ES:OnAuctionHouseShow()
     end)
     ahButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
   end
-  ahButton:Show() -- (escondido si la última AH fue la neutral)
+  -- (escondidos si la última AH fue la neutral; el de Crafter's Journal, también si se
+  -- quitó en las opciones)
   if self.ahListButton then self.ahListButton:Show() end
+  self:PlaceAHButtons()
   self.Scanner.statusText = nil
   self:RefreshScanButtons()
   if self.SetupAuctionPanel then self:SetupAuctionPanel(ahFrame) end
+end
+
+function ES:AHButtonOn() return not (self.db and self.db.noAHButton) end
+
+-- Los botones de encima de la AH: el de Crafter's Journal, salvo que se quite en las
+-- opciones (CurseForge: con el botón Escanear de Auctionator les sobraba; el addon lee
+-- igual su escaneo), y a su izquierda el de la lista de compra. Sin el primero, el de
+-- la lista va a la esquina, donde estaba él
+function ES:PlaceAHButtons()
+  local on = self:AHButtonOn()
+  if ahButton then ahButton:SetShown(on) end
+  local list = self.ahListButton
+  if not list then return end
+  list:ClearAllPoints()
+  if on and ahButton then
+    list:SetPoint("RIGHT", ahButton, "LEFT", -4, 0)
+  else
+    list:SetPoint("BOTTOMRIGHT", list:GetParent(), "TOPRIGHT", 0, 2)
+  end
 end
 
 -- AH neutral (sin soporte, ver Core.lua): fuera los botones y ventanas del addon que
@@ -994,7 +1020,8 @@ end
 --            "AUCTION_HOUSE_CLOSED" (opcional: se cierra con esa ventana),
 --            onCancel (opcional: se cierra sin Sí, con No, Escape o closeOn),
 --            noCheck (sin la casilla ni `key`: una pregunta que no se puede apagar,
---            como la confirmación que pide la AH, GitHub #10) }
+--            como la confirmación que pide la AH, GitHub #10),
+--            single (un solo botón, centrado: un aviso, como el de la AH neutral) }
 -- La acción sale del clic en Sí: vender, comprar y anunciar piden un clic del jugador
 ---------------------------------------------------------------------------
 local confirm
@@ -1116,5 +1143,12 @@ function ES:Confirm(opts)
     ES.OptionLabel and ES.OptionLabel(opts.key) or opts.key) or "")
   d.ok:SetText(opts.yes or YES or L["Sí"])
   d.cancel:SetText(opts.no or NO or L["No"])
+  d.cancel:SetShown(not opts.single)
+  d.ok:ClearAllPoints()
+  if opts.single then
+    d.ok:SetPoint("BOTTOM", d, "BOTTOM", 0, 18)
+  else
+    d.ok:SetPoint("BOTTOMRIGHT", d, "BOTTOM", -4, 18)
+  end
   d:Show()
 end

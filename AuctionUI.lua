@@ -270,11 +270,7 @@ function ES:SetupAuctionPanel(ahFrame)
     listButton = CreateFrame("Button", nil, ahFrame, "UIPanelButtonTemplate")
     ES.ahListButton = listButton -- (se esconde en la AH neutral: UI.lua, HideAuctionHouseUI)
     listButton:SetSize(150, 24)
-    if CraftersJournalAHButton then
-      listButton:SetPoint("RIGHT", CraftersJournalAHButton, "LEFT", -4, 0)
-    else
-      listButton:SetPoint("BOTTOMRIGHT", ahFrame, "TOPRIGHT", -184, 2)
-    end
+    ES:PlaceAHButtons() -- (a la izquierda del de Crafter's Journal, si no se quitó: UI.lua)
     listButton:SetScript("OnClick", function() ES:ToggleShoppingMini(ahFrame) end)
     listButton:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_TOP")

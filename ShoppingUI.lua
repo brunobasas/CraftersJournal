@@ -158,14 +158,17 @@ local function BuildLines(st, ahOpen)
         line.skipTitle, line.skipTip = L["Quitar de la lista"], L["Quita este material de la lista: ya no se compra."]
       end
       -- Tramo: lo que cuenta es lo que llevas; en las guardadas, lo comprado desde que la añadiste
-      local progress = L["tienes %d de %d"] -- (todas las listas cuentan lo que llevas)
+      -- (todas las listas cuentan lo que llevas; las de ruta, también lo ya convertido:
+      -- 108 Lesser Magic Essence valen como 36 Greater)
+      local progress = string.format(L["tienes %d de %d"], e.bought, it.need)
+        .. (e.converted and (" " .. string.format(L["(%d de lo ya convertido)"], e.converted)) or "")
       if e.left == 0 then
         line.title = GREY .. (name or "") .. "|r"
-        line.sub = GREEN .. string.format(progress, e.bought, it.need) .. "|r"
+        line.sub = GREEN .. progress .. "|r"
         line.value = "|TInterface\\RaidFrame\\ReadyCheck-Ready:16|t"
       else
         line.title = string.format("%d× %s", e.left, name or "")
-        line.sub = where .. (e.bought > 0 and (" · " .. string.format(progress, e.bought, it.need)) or "")
+        line.sub = where .. (e.bought > 0 and (" · " .. progress) or "")
         -- Abierta su compra: cuántas hay baratas ahora
         local t = it.source == "ah" and it.itemID == selected and ES.CommodityTiers and ES:CommodityTiers(it.itemID, it.unit)
         if t and t.next and t.cheap < e.left then

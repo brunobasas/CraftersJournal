@@ -257,6 +257,39 @@ test("soltadas las cachés, la ventana de fabricar calcula sus ideas", function(
   expect(before ~= "", "la ventana de fabricar no tiene ideas: la prueba no comprueba nada")
 end, { state = "full" })
 
+-- Las filas pintadas guardan sus funciones de clic, tooltip y − / +, y con ellas la idea
+-- (y todo su cálculo): soltada la caché, seguían en memoria mientras no se repintara
+test("soltadas las cachés, las filas de Ganar dinero no se quedan con las ideas", function()
+  local res = OpenMoney()
+  local idea
+  for _, i in ipairs(res.batch) do if i.sellWhere == "ah" and not i.cooldown then idea = i break end end
+  expect(idea, "sin ideas de AH en el lote (con botones - y +): la prueba no comprueba nada")
+  local weak = setmetatable({ idea = idea }, { __mode = "v" })
+  idea, res = nil, nil
+  ES:HideMainFrame()
+  RunTimers(ES.IDLE_RELEASE + 5)
+  collectgarbage("collect")
+  collectgarbage("collect")
+  expect(weak.idea == nil, "la idea sigue en memoria tras soltar las cachés (la guarda una fila)")
+  -- Al volver, la página se pinta entera otra vez
+  OpenMoney()
+  local shown = 0
+  for _, row in ipairs(ES.earnPage.rows or {}) do if row:IsShown() then shown = shown + 1 end end
+  expect(shown > 0, "al volver a abrir Ganar dinero no se pinta")
+end, { state = "full" })
+
+test("una fila que se repinta sin botones - y + suelta los de antes", function()
+  OpenMoney()
+  local page = ES.earnPage
+  local withStep
+  for _, row in ipairs(page.rows) do if row.onStep then withStep = row break end end
+  expect(withStep, "ninguna fila con botones - y +: la prueba no comprueba nada")
+  ES.UI.RenderLines(page, { { title = "a" }, { title = "b" } })
+  for i, row in ipairs(page.rows) do
+    expect(row.onStep == nil and row.onClick == nil and row.tooltip == nil, "la fila %d se queda con lo de antes", i)
+  end
+end, { state = "full" })
+
 test("dinero: negativos, NaN e infinito no dan error al pintarse", function()
   for _, v in ipairs({ -12345, 0, 1, 99999999, 0 / 0, math.huge, -math.huge }) do
     no_error(ES.Money, v)

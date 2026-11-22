@@ -38,6 +38,7 @@ History.MAX = HISTORY_MAX -- (Keys.lua, al juntar el historial de dos claves)
 -- Solo seguimos los objetos de profesiones (materiales, fabricados, pergaminos)
 -- para que los datos guardados no crezcan demasiado
 local tracked
+ES.MemPart("objetos de profesiones (los que sigue el historial)", function() return tracked end)
 
 function History:IsTracked(itemID)
   -- (también lo que tienes en la cartera de inversiones: su escalera de precios da el
