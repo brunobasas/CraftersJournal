@@ -257,6 +257,7 @@ local function CreateMainFrame()
   end)
 
   main = f
+  ES:PlaceScanButtons() -- (el de la cabecera, salvo que se quitara en las opciones)
   -- Profesiones con datos: su página lleva el nombre en su propia cabecera
   for _, prof in ipairs(ES.PROFESSIONS) do
     if ES.Data[prof.key] then
@@ -970,23 +971,36 @@ function ES:OnAuctionHouseShow()
     end)
     ahButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
   end
-  -- (escondidos si la última AH fue la neutral; el de Crafter's Journal, también si se
-  -- quitó en las opciones)
+  -- (escondidos si la última AH fue la neutral; el de Crafter's Journal, también si no
+  -- se quitó en las opciones)
   if self.ahListButton then self.ahListButton:Show() end
-  self:PlaceAHButtons()
+  self:PlaceScanButtons()
   self.Scanner.statusText = nil
   self:RefreshScanButtons()
   if self.SetupAuctionPanel then self:SetupAuctionPanel(ahFrame) end
 end
 
-function ES:AHButtonOn() return not (self.db and self.db.noAHButton) end
+-- Los botones de escanear (el de la cabecera y el de encima de la AH) salen por defecto;
+-- se pueden quitar en las opciones (CurseForge: con el botón Escanear de Auctionator
+-- les sobraban). Escondidos, el escaneo funciona igual: el addon lee los de
+-- Auctionator y /cj scan sigue pidiéndolo
+function ES:ScanButtonsOn() return not (self.db and self.db.noScanButtons) end
 
--- Los botones de encima de la AH: el de Crafter's Journal, salvo que se quite en las
--- opciones (CurseForge: con el botón Escanear de Auctionator les sobraba; el addon lee
--- igual su escaneo), y a su izquierda el de la lista de compra. Sin el primero, el de
--- la lista va a la esquina, donde estaba él
-function ES:PlaceAHButtons()
-  local on = self:AHButtonOn()
+-- Muestra u oculta los botones de escanear según la opción. En la cabecera, sin el
+-- botón, "Último escaneo: hace 3 min" pasa a su sitio. Encima de la AH, a la izquierda
+-- del de Crafter's Journal va el de la lista de compra; sin él, el de la lista va a la
+-- esquina, donde estaba él
+function ES:PlaceScanButtons()
+  local on = self:ScanButtonsOn()
+  if main and main.scanButton then
+    main.scanButton:SetShown(on)
+    main.lastScan:ClearAllPoints()
+    if on then
+      main.lastScan:SetPoint("RIGHT", main.scanButton, "LEFT", -10, 0)
+    else
+      main.lastScan:SetPoint("RIGHT", main.scanButton, "RIGHT", 0, 0)
+    end
+  end
   if ahButton then ahButton:SetShown(on) end
   local list = self.ahListButton
   if not list then return end

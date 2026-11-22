@@ -245,7 +245,8 @@ function ES:CreateHeader(f)
   -- Escanear la AH: desde cualquier pestaña; en gris si la AH está cerrada. Debajo
   -- de la cabecera, a la derecha (bajo el idioma), en la franja del título de la
   -- página, que en todas las pantallas tiene libre ese lado.
-  -- Mientras escanea, el botón muestra el % de progreso (ver RefreshScanButtons)
+  -- Mientras escanea, el botón muestra el % de progreso (ver RefreshScanButtons).
+  -- Solo sale si se activa en las opciones (UI.lua, PlaceScanButtons)
   local scan = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
   scan:SetSize(SCAN_W, 22)
   scan:SetPoint("TOPRIGHT", f, "TOPRIGHT", -49, -59)

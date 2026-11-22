@@ -364,6 +364,36 @@ local function Remember(profKey, plan)
   if plan and plan.choice then ES.lastRoutes[profKey] = { choice = plan.choice, via = plan.ctx and plan.ctx.via } end
 end
 
+-- Coste (neto) de la última ruta calculada de cada profesión con y sin recetas en verde,
+-- con su clave estable: { on = { key, net }, off = { key, net } }. Para que el tooltip
+-- del icono diga cuánto cuesta de más quitarlas sin calcular otra ruta: al pulsarlo, la
+-- de antes queda aquí. Discord: sin verdes, Sastrería 1-300 pasaba de 250 a 953 g (Robe
+-- of the Archmage para los 5 últimos puntos) y solo se veía mirando el total
+ES.routeTotals = {}
+local function NoteTotal(profKey, stable, plan)
+  if not (plan and plan.net and stable) then return end
+  local opts = plan.ctx and plan.ctx.opts
+  local t = ES.routeTotals[profKey] or {}
+  ES.routeTotals[profKey] = t
+  t[opts and opts.noGreen and "off" or "on"] = { key = stable, net = plan.net }
+end
+
+-- Lo que cuesta de más (o de menos, negativo) la ruta sin verdes que con ellos, si las
+-- dos están calculadas con todo lo demás igual (misma clave salvo el icono); si no, nil
+function ES:GreenCostDelta(profKey, from, to, cap)
+  local settings = self.db.prof and self.db.prof[profKey]
+  local t = self.routeTotals[profKey]
+  if not (settings and t and t.on and t.off) then return nil end
+  local saved = settings.noGreen
+  settings.noGreen = nil
+  local onKey = self:StableRouteKey(profKey, from, to, cap)
+  settings.noGreen = true
+  local offKey = self:StableRouteKey(profKey, from, to, cap)
+  settings.noGreen = saved
+  if t.on.key ~= onKey or t.off.key ~= offKey then return nil end
+  return t.off.net - t.on.net
+end
+
 function ES:RouteLock(profKey)
   local settings = self.db.prof and self.db.prof[profKey]
   return settings and settings.lock
@@ -619,6 +649,7 @@ function ES:StorePlan(profKey, key, stable, plan)
   local bags = BagItems(plan)
   self.homePlanCache[profKey] = { key = key, plan = plan, bags = bags }
   Remember(profKey, plan)
+  NoteTotal(profKey, stable, plan)
   if not (plan and type(plan.choice) == "table" and next(plan.choice)) then return end
   if plan.pendingItems and next(plan.pendingItems) then return end
   self.db.prof = self.db.prof or {}
@@ -675,6 +706,7 @@ local function FromSaved(profKey, from, to, cap, key, stable)
   end
   ES.homePlanCache[profKey] = { key = key, plan = plan, bags = saved.bags }
   Remember(profKey, plan)
+  NoteTotal(profKey, stable, plan)
   return plan
 end
 
@@ -2017,8 +2049,33 @@ function ES:CreateProfessionPage(page, profKey)
     function() return not settings.noGreen end,
     function() settings.noGreen = not settings.noGreen or nil end,
     function()
-      return { not settings.noGreen and L["La ruta usa recetas en verde cuando salen más baratas, contando algo de mala suerte: en verde no todas las fabricaciones suben punto."]
+      local lines = { not settings.noGreen and L["La ruta usa recetas en verde cuando salen más baratas, contando algo de mala suerte: en verde no todas las fabricaciones suben punto."]
         or L["La ruta usa una receta naranja o amarilla siempre que haya una, aunque cueste algo más: así los últimos puntos no dependen de la suerte. En verde, solo en los niveles donde no hay otra."] }
+      -- Cuántos puntos de la ruta que se ve son en verde (Discord: en Peletería 1-150 había
+      -- uno y quitarlas no parecía cambiar nada). Mientras se calcula, nada: sería la anterior
+      if page.plan and not page.calculating then
+        local n = ES.Planner.GreenPoints(page.plan)
+        if n == 0 then
+          lines[#lines + 1] = settings.noGreen and L["Esta ruta no tiene puntos en verde."]
+            or L["Esta ruta no tiene puntos en verde: desactivarlas no la cambia."]
+        elseif n == 1 then
+          lines[#lines + 1] = settings.noGreen and L["Esta ruta tiene 1 punto en verde: en ese nivel no hay otra receta."]
+            or L["Esta ruta tiene 1 punto en verde."]
+        else
+          lines[#lines + 1] = string.format(settings.noGreen and L["Esta ruta tiene %d puntos en verde: en esos niveles no hay otra receta."]
+            or L["Esta ruta tiene %d puntos en verde."], n)
+        end
+        -- Y cuánto cuesta de más sin verdes, si las dos están calculadas (al pulsar el
+        -- icono, la de antes): la ruta sin verdes no tiene tope de precio y puede salir
+        -- mucho más cara (Sastrería 1-300: +700 g por Robe of the Archmage)
+        local delta = page.lastTarget and ES:GreenCostDelta(profKey, page.from or 1, page.lastTarget, page.detected and page.detected.cap)
+        if delta then
+          local abs = math.floor(math.abs(delta) + 0.5)
+          lines[#lines + 1] = abs < 1 and L["Sin verdes, esta ruta cuesta lo mismo."]
+            or string.format(delta > 0 and L["Sin verdes, esta ruta cuesta %s más."] or L["Sin verdes, esta ruta cuesta %s menos."], ES.Money(abs))
+        end
+      end
+      return lines
     end)
 
   -- Franja de resumen: materiales, ventas al vendedor, instructor y herramientas, total.

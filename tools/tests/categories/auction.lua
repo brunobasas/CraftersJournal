@@ -169,37 +169,75 @@ test("con Auctionator, Escanear en gris si Auctionator aún no deja otro escaneo
   expect(not ES.Scanner:IsBusy(), "se quedó escaneando")
 end, { state = "empty" })
 
--- CurseForge: con el botón Escanear de Auctionator, el de Crafter's Journal sobraba
-test("opción: quitar el botón de Crafter's Journal de encima de la AH", function()
+-- CurseForge: con el botón Escanear de Auctionator, los de Crafter's Journal sobraban.
+-- Los dos (cabecera y encima de la AH) van con una opción, activada por defecto: el
+-- usuario ve siempre el botón de escanear salvo que lo quite
+local function ScanButtonsOption()
+  for _, opt in ipairs(ES.OPTIONS) do
+    if opt.key == "noScanButtons" then return opt end
+  end
+end
+
+test("opción: los botones de escanear, a la vista por defecto en la cabecera y encima de la AH", function()
   InstallAuctionator()
+  ES.db.scanButtons = nil -- (de la prueba en que venían desactivados: ya no cuenta)
+  ES:MigrateWindowOptions()
+  expect_eq(ES.db.noScanButtons, nil, "sin haber quitado nada, salen quitados")
   AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  OpenMain()
   OpenAH()
+  local header = ES:GetMainFrame().scanButton
   local button = expect(CraftersJournalAHButton, "no hay botón encima de la AH")
   local list = expect(ES.ahListButton, "no hay botón de la lista de compra")
-  expect(button:IsShown(), "el botón no sale por defecto")
+  expect(ScanButtonsOption(), "no está la opción en la ventana de opciones")
+  expect(header:IsShown(), "el botón de la cabecera no sale por defecto")
+  expect(button:IsShown(), "el botón de encima de la AH no sale por defecto")
   expect(list._anchorTo == button, "la lista de compra no va junto al botón")
-  -- Se quita al momento, con la AH abierta: la lista de compra pasa a la esquina
-  ES:SetOption("noAHButton", false)
-  expect_eq(ES.db.noAHButton, true, "opción guardada")
-  expect(not button:IsShown(), "el botón sigue con la opción quitada")
+  -- Se quitan al momento, con la AH abierta: los dos
+  ES:SetOption("noScanButtons", false)
+  expect_eq(ES.db.noScanButtons, true, "opción guardada")
+  expect(not header:IsShown(), "el botón de la cabecera sigue con la opción quitada")
+  expect(not button:IsShown(), "el botón de encima de la AH sigue con la opción quitada")
   expect(list:IsShown(), "se fue también la lista de compra")
-  expect(list._anchorTo == list:GetParent(), "la lista de compra sigue pegada al botón escondido")
-  -- Al volver a abrir la AH tampoco sale
+  expect(list._anchorTo == list:GetParent(), "la lista de compra no va a la esquina")
+  -- "Último escaneo" sigue a la vista, en el sitio del botón
+  local lastScan = ES:GetMainFrame().lastScan
+  expect_eq(lastScan:GetNumPoints(), 1, "anclajes del último escaneo (no se movió al sitio del botón)")
+  -- Sin los botones, el escaneo de Auctionator (su botón) se sigue leyendo
+  QueryAuctionItems("", nil, nil, 0, nil, nil, true, false, nil)
+  ES.Scanner:OnForeignScan("legacy")
+  RunTimers()
+  local scan = expect(ES.db.scans[ES:RealmKey()], "sin los botones no se leyó el escaneo de Auctionator")
+  expect_eq(scan.items[2318].minUnit, 25, "Light Leather")
+  -- Al volver a abrir la AH siguen quitados
   AuctionFrame:Hide()
   FireEvent("AUCTION_HOUSE_CLOSED")
   RunTimers()
   OpenAH()
-  expect(not button:IsShown(), "el botón vuelve al abrir la AH")
-  -- El escaneo de Auctionator (su botón) se sigue leyendo
-  QueryAuctionItems("", nil, nil, 0, nil, nil, true, false, nil)
-  ES.Scanner:OnForeignScan("legacy")
-  RunTimers()
-  local scan = expect(ES.db.scans[ES:RealmKey()], "sin el botón no se leyó el escaneo de Auctionator")
-  expect_eq(scan.items[2318].minUnit, 25, "Light Leather")
-  -- Y vuelve al activarla
-  ES:SetOption("noAHButton", true)
-  expect(button:IsShown(), "el botón no vuelve al activar la opción")
+  expect(not button:IsShown(), "el botón vuelve al abrir otra vez la AH")
+  -- Y vuelven al activarla
+  ES:SetOption("noScanButtons", true)
+  expect_eq(ES.db.noScanButtons, nil, "opción guardada")
+  expect(header:IsShown(), "el botón de la cabecera no vuelve al activar la opción")
+  expect(button:IsShown(), "el botón de encima de la AH no vuelve al activar la opción")
   expect(list._anchorTo == button, "la lista de compra no vuelve junto al botón")
+end, { state = "empty" })
+
+test("opción: quien quitó el botón de encima de la AH sigue sin los botones de escanear", function()
+  local savedDB = ES.db
+  -- Lo quitó antes (noAHButton): sigue sin ellos, cabecera incluida
+  local m = { noAHButton = true }
+  ES.db = m
+  ES:MigrateWindowOptions()
+  expect_eq(m.noScanButtons, true, "volvieron los botones que había quitado")
+  expect_eq(m.noAHButton, nil, "queda la opción de antes")
+  -- No lo quitó: siguen a la vista, aunque los apagara la prueba de desactivados por defecto
+  m = { scanButtons = nil, noAHButton = false, sellWindowSplit = true }
+  ES.db = m
+  ES:MigrateWindowOptions()
+  expect_eq(m.noScanButtons, nil, "se quitaron los botones sin pedirlo")
+  expect(ES:ScanButtonsOn(), "los botones no salen")
+  ES.db = savedDB
 end, { state = "empty" })
 
 test("historial: tres escaneos y lo que se vendió entre ellos", function()

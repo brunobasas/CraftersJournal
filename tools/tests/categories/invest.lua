@@ -622,6 +622,9 @@ test("vista de lista: una fila por objeto, se recuerda y abre el detalle", funct
   row = expect(row, "sin fila de Wool Cloth")
   expect_eq(row.units:GetText(), "40", "unidades")
   expect_eq(row.avg:GetText(), ES.Money(128), "tu media")
+  expect_eq(row.cost:GetText(), ES.Money(40 * 128), "invertido (antes solo en el tooltip)")
+  expect(Page().listHeader.columns.cost, "sin la columna Invertido")
+  expect_eq(Page().listHeader.columns.cost.text:GetText(), L["Invertido"], "título de la columna Invertido")
   expect_eq(row.price:GetText(), ES.Money(163), "precio")
   expect_eq(row.change:GetText(), "|cff40ff40+27%|r", "cambio")
   expect(row.arrow.path and row.arrow.path:match("\\Up$"), "sin triángulo verde")
@@ -642,6 +645,22 @@ test("vista de lista: una fila por objeto, se recuerda y abre el detalle", funct
   Page().views.grid:GetScript("OnClick")()
   expect(ES.db.investView == nil and Page().shownRows == 0 and CardOf(WOOL), "no vuelve a las fichas")
   expect(not Page().listHeader:IsShown(), "los nombres de las columnas se quedan en las fichas")
+end)
+
+test("vista de lista: las columnas (con Invertido) no se pisan y el nombre tiene sitio", function()
+  local cols, nameX, nameRight = ES.InvestColumns()
+  local keys = {}
+  for i, c in ipairs(cols) do
+    keys[i] = c[1]
+    local nextCol = cols[i + 1]
+    -- (de izquierda a derecha: la siguiente empieza al menos 10 px después de esta)
+    if nextCol then
+      expect(nextCol[2] - nextCol[3] >= c[2] + 10, "%s y %s se pisan", c[1], nextCol[1])
+    end
+  end
+  expect_eq(table.concat(keys, ","), "units,avg,cost,price,change,latent", "columnas")
+  expect(nameRight <= cols[1][2] - cols[1][3] - 10, "el nombre pisa la columna Tienes")
+  expect(ES.UI.LIST_WIDTH + nameRight - nameX >= 130, "el nombre se queda sin sitio: %d px", ES.UI.LIST_WIDTH + nameRight - nameX)
 end)
 
 test("vista de lista: ordenar pulsando el nombre de una columna", function()
@@ -667,6 +686,11 @@ test("vista de lista: ordenar pulsando el nombre de una columna", function()
   Click("units")
   expect_eq(Order(), PYRITE .. "," .. SILK .. "," .. WOOL, "unidades, al revés")
   expect(ES.db.investSort and ES.db.investSort.key == "units" and ES.db.investSort.asc, "el orden no se guarda")
+  -- Invertido: Wool 51s 20c, Silk 20s, Pyrite 15s
+  Click("cost")
+  expect_eq(Order(), WOOL .. "," .. SILK .. "," .. PYRITE, "invertido, de más a menos")
+  Click("cost")
+  expect_eq(Order(), PYRITE .. "," .. SILK .. "," .. WOOL, "invertido, al revés")
   Click("price")
   expect_eq(Order(), WOOL .. "," .. SILK .. "," .. PYRITE, "precio, de más caro a más barato (sin precio, al final)")
   Click("price")
@@ -682,6 +706,76 @@ test("vista de lista: ordenar pulsando el nombre de una columna", function()
   ES:SelectPage("home")
   OpenPage("invest")
   expect_eq(ES.db.investSort.key, "name", "orden guardado")
+end)
+
+test("vista de lista: ocultar columnas en las opciones (como las pestañas)", function()
+  InstallAuctionator()
+  Days(WOOL, { [0] = 163 })
+  Buy(WOOL, 40, 128)
+  Buy(SILK, 10, 2 * S)
+  ES.db.investView = "list"
+  ES.db.investSort = { key = "cost", asc = false }
+  OpenPage("invest")
+  local C = ES.InvestListColumns
+  local cols, _, nameRight = ES.InvestColumns()
+  -- Sin nada oculto, cada columna donde siempre
+  local at, right = C.Layout()
+  for _, c in ipairs(cols) do
+    expect(at[c[1]] and at[c[1]].right == c[2] and at[c[1]].width == c[3], "%s no está donde siempre", c[1])
+  end
+  expect_eq(right, nameRight, "borde del nombre sin ocultas")
+  -- En las opciones, Inversiones: la lista de columnas, en su orden, todas visibles
+  ES:OpenOptions("invest")
+  RunTimers()
+  local list
+  for _, cb in ipairs(ES:OptionsWindow().checks) do
+    if cb.option.key == "investHiddenColumns" then list = cb end
+  end
+  list = expect(list, "sin la lista de columnas en las opciones")
+  local keys = {}
+  for i, b in ipairs(list.items) do
+    keys[i] = b.key
+    expect(b:IsShown() and not b.hidden and not b.hiddenText:IsShown(), "%s sale oculta sin ocultarla", b.key)
+  end
+  expect_eq(table.concat(keys, ","), "units,avg,cost,price,change,latent", "columnas en las opciones")
+  local function Click(key)
+    for _, b in ipairs(list.items) do if b.key == key then b:GetScript("OnClick")(b) return b end end
+    error("sin la columna " .. key)
+  end
+  -- Ocultar Invertido y Desde tu media: se guarda, se marca y la lista cambia al momento
+  local cost = Click("cost")
+  Click("change")
+  expect(ES.db.investHiddenColumns and ES.db.investHiddenColumns.cost and ES.db.investHiddenColumns.change,
+    "no se guardan las ocultas")
+  expect(cost.hidden and cost.hiddenText:IsShown() and cost.shade:IsShown(), "Invertido no sale como oculta")
+  local header = Page().listHeader
+  expect(not header.columns.cost:IsShown() and not header.columns.change:IsShown(), "las ocultas siguen en la cabecera")
+  expect(header.columns.units:IsShown() and header.columns.latent:IsShown(), "falta una columna visible en la cabecera")
+  local row
+  for i = 1, Page().shownRows do if Page().rows[i].itemID == WOOL then row = Page().rows[i] end end
+  row = expect(row, "sin fila de Wool Cloth")
+  expect(not row.cost:IsShown() and not row.change:IsShown() and not row.arrow:IsShown(), "la fila enseña las ocultas")
+  expect(row.price:IsShown() and row.latent:IsShown() and row.units:IsShown(), "la fila esconde una visible")
+  -- Las que quedan, juntas a la derecha; el nombre gana el sitio de las dos
+  at, right = C.Layout()
+  expect_eq(at.latent.right, -10, "Si vendes")
+  expect_eq(at.price.right, -120, "Precio, donde iba Desde tu media")
+  expect_eq(at.avg.right, -226, "Tu media")
+  expect_eq(at.units.right, -332, "Tienes")
+  expect_eq(right, nameRight + 96 + 84 + 20, "el nombre no gana el sitio")
+  -- Ordenada por una columna oculta: por el nombre (marcado), sin olvidar la elegida
+  expect(header.columns.name.arrow:IsShown(), "ordenada por una columna oculta")
+  expect_eq(ES.db.investSort.key, "cost", "se pierde el orden elegido")
+  -- Volver a mostrarlas: nada guardado y todo como siempre
+  Click("cost")
+  Click("change")
+  expect_eq(ES.db.investHiddenColumns, nil, "quedan ocultas guardadas")
+  expect(header.columns.cost:IsShown() and header.columns.cost.arrow:IsShown(), "Invertido no vuelve (con su orden)")
+  expect(row.cost:IsShown() and row.change:IsShown(), "la fila no vuelve a enseñarlas")
+  -- Lo guardado roto no rompe nada
+  ES.db.investHiddenColumns = "roto"
+  expect(not C.IsHidden("cost"), "guardado roto oculta columnas")
+  ES:RenderInvest()
 end)
 
 -- Pulsa el segmento `value` de un selector (ES.UI.Segmented)
@@ -1001,13 +1095,146 @@ test("detalle: cifras iguales a la gráfica y a la ficha, y borrar recalcula", f
   local rows = page.movesList.rows
   expect(rows[1]:IsShown() and rows[2]:IsShown(), "no salen las dos compras")
   expect(Plain(rows[1].sub:GetText()):find("2 ", 1, true), "la primera fila no es la última compra: %s", rows[1].sub:GetText())
-  -- Borrar la compra más reciente (su X) desde el detalle
+  -- Borrar la compra más reciente (su X) desde el detalle: pregunta antes
   rows[1].skip:GetScript("OnClick")(rows[1].skip)
+  local d = ES.ConfirmFrame()
+  expect(d:IsShown(), "borrar no pregunta")
+  d.ok:GetScript("OnClick")(d.ok)
   expect_eq(ES.Invest:Item(LOTUS).units, 3, "unidades tras borrar")
   expect_eq(Plain(page.boxes.avg.value:GetText()), Plain(ES.Money(8 * G)), "media tras borrar")
   ES:SelectPage("invest")
   RunTimers()
   expect_eq(Page().stats.cost:GetText(), ES.Money(24 * G), "cabecera tras borrar")
+end)
+
+test("detalle: clic en un movimiento lo edita (cantidad y precio) y recalcula", function()
+  Buy(LOTUS, 3, 8 * G)
+  Buy(LOTUS, 2, 21 * G, true) -- (escrito en total: 21g por las 2)
+  ES.Invest:Add(LOTUS, "sell", 5, 40 * G, true) -- (todo: cerrada)
+  local t2 = ES.Invest:Item(LOTUS).moves[2].t
+  OpenPage("invest")
+  ES:ShowInvestItem(LOTUS)
+  RunTimers()
+  local page = ItemPage()
+  local rows = page.movesList.rows
+  -- Fila 2: la segunda compra (la más reciente arriba: venta, compra 2, compra 1)
+  rows[2]:GetScript("OnClick")(rows[2], "LeftButton")
+  local f = expect(ES.InvestEntry(), "no se abre la ventana")
+  expect(f:IsShown(), "no se abre la ventana")
+  expect_eq(f.editIndex, 2, "movimiento que se edita")
+  expect_eq(f.kindLabel:GetText(), L["Editar compra"], "título")
+  expect_eq(f.ok:GetText(), L["Guardar"], "botón")
+  expect_eq(f.qty:GetText(), "2", "cantidad de la compra")
+  expect_eq(f.mode, "total", "escrita en total: se edita en total")
+  expect_eq(f.price:GetText(), ES.Calc.FormatMoney(21 * G), "precio de la compra")
+  -- Tu media sin esta compra (8g) y con la nueva
+  f.qty:SetText("5")
+  f.price:SetText("50g")
+  f.qty:GetScript("OnTextChanged")(f.qty)
+  expect_eq(f.values.avgBefore, ES.Money(8 * G), "tu media sin el movimiento")
+  f.ok:GetScript("OnClick")(f.ok)
+  expect(not f:IsShown(), "la ventana sigue abierta tras guardar")
+  local e = ES.Invest:Item(LOTUS)
+  expect_eq(#e.moves, 3, "editar no añade un movimiento")
+  expect(e.moves[2].kind == "buy" and e.moves[2].n == 5 and e.moves[2].total == 50 * G, "la compra no cambia")
+  expect_eq(e.moves[2].t, t2, "la fecha se mantiene")
+  expect_eq(e.units, 3, "unidades tras editar")
+  expect_eq(Plain(page.boxes.avg.value:GetText()), Plain(ES.Money(74 * G / 8)), "media tras editar")
+  -- Bajar la compra a 1 deja la venta de 5 sin unidades (3 + 1): no se guarda
+  rows[2]:GetScript("OnClick")(rows[2], "LeftButton")
+  f.qty:SetText("1")
+  f.ok:GetScript("OnClick")(f.ok)
+  expect(f:IsShown(), "guardó un cambio que deja una venta de más")
+  expect(f.err:GetText():find(L["Con este cambio, una venta de después sería de más unidades de las que tenías."], 1, true), "sin aviso: %s", f.err:GetText())
+  expect_eq(ES.Invest:Item(LOTUS).moves[2].n, 5, "la compra cambió")
+  f:Hide()
+  -- La venta: unidades que había para ella (8) y por unidad
+  rows[1]:GetScript("OnClick")(rows[1], "LeftButton")
+  expect_eq(f.kindLabel:GetText(), L["Editar venta"], "título de la venta")
+  expect_eq(f.qty:GetText(), "5", "cantidad de la venta")
+  f.qty:SetText("9")
+  f.ok:GetScript("OnClick")(f.ok)
+  expect(f.err:GetText():find(string.format(L["Solo tienes %d para vender."], 8), 1, true), "vender de más al editar: %s", f.err:GetText())
+  PickSegment(f.modeSelect, "unit")
+  f.qty:SetText("8")
+  f.price:SetText("11g")
+  f.ok:GetScript("OnClick")(f.ok)
+  e = ES.Invest:Item(LOTUS)
+  expect(e.moves[3].n == 8 and e.moves[3].unit == 11 * G and not e.moves[3].total, "la venta no cambia")
+  expect(e.closed, "vender las 8 no la cierra")
+  -- Una cantidad que no vale, como al apuntar
+  expect_eq(select(2, ES.Invest:Update(LOTUS, 1, "0", 100)), "qty", "cantidad 0")
+  expect_eq(select(2, ES.Invest:Update(LOTUS, 9, "1", 100)), "item", "movimiento que no existe")
+end)
+
+-- ¿Se escribió en el chat, desde `from`, algo con `text`?
+local function SaidSince(from, text)
+  for i = from + 1, #PRINTS do if PRINTS[i]:find(text, 1, true) then return PRINTS[i] end end
+end
+
+test("borrar un movimiento: pregunta siempre (se quita con la casilla o en las opciones) y lo dice en el chat", function()
+  Buy(LOTUS, 3, 8 * G)
+  Buy(LOTUS, 2, 21 * G, true)
+  OpenPage("invest")
+  ES:ShowInvestItem(LOTUS)
+  RunTimers()
+  local rows = ItemPage().movesList.rows
+  -- La X pregunta; No no borra nada
+  rows[1].skip:GetScript("OnClick")(rows[1].skip)
+  local d = expect(ES.ConfirmFrame(), "borrar no pregunta")
+  expect(d:IsShown(), "borrar no pregunta")
+  expect(d.text:GetText():find(string.format(L["¿Borrar la compra de %d x %s por %s?"], 2, ES.UI.ItemLabel(LOTUS, ""), ES.Money(21 * G)), 1, true),
+    "la pregunta no dice qué se borra: %s", d.text:GetText())
+  d.cancel:GetScript("OnClick")(d.cancel)
+  expect_eq(#ES.Invest:Item(LOTUS).moves, 2, "No borró el movimiento")
+  -- Sí: lo borra y lo dice en el chat
+  local from = #PRINTS
+  rows[1].skip:GetScript("OnClick")(rows[1].skip)
+  d.ok:GetScript("OnClick")(d.ok)
+  expect_eq(#ES.Invest:Item(LOTUS).moves, 1, "Sí no borró el movimiento")
+  expect(SaidSince(from, string.format(L["Compra borrada: %d x %s por %s."], 2, ES.UI.ItemLabel(LOTUS, ""), ES.Money(21 * G))),
+    "el chat no dice que se borró")
+  -- La casilla «No volver a mostrar» la apaga: la opción de Inversiones
+  expect_eq(ES:OptionCategory("noInvestDeleteConfirm"), "invest", "la opción no está en Inversiones")
+  Buy(LOTUS, 1, 9 * G)
+  ES:RenderInvestItem()
+  rows[1].skip:GetScript("OnClick")(rows[1].skip)
+  d.check:SetChecked(true)
+  d.ok:GetScript("OnClick")(d.ok)
+  expect_eq(ES.db.noInvestDeleteConfirm, true, "la casilla no apaga la pregunta")
+  rows[1].skip:GetScript("OnClick")(rows[1].skip) -- (la compra de 3: la última que queda)
+  expect(not d:IsShown(), "pregunta con la opción apagada")
+  expect_eq(ES.Invest:Item(LOTUS).moves[1], nil, "con la opción apagada no se borró")
+end)
+
+test("chat: comprar, vender y corregir un movimiento lo dicen en el chat", function()
+  OpenPage("invest")
+  local from = #PRINTS
+  ES.OpenInvestEntry(SILK, "buy")
+  local f = ES.InvestEntry()
+  PickSegment(f.modeSelect, "total")
+  f.qty:SetText("20")
+  f.price:SetText("80s")
+  f.ok:GetScript("OnClick")(f.ok)
+  local name = ES.UI.ItemLabel(SILK, "")
+  expect(SaidSince(from, string.format(L["Compra apuntada: %d x %s por %s."], 20, name, ES.Money(80 * S))), "la compra no sale en el chat")
+  ES.OpenInvestEntry(SILK, "sell")
+  PickSegment(f.modeSelect, "unit")
+  f.qty:SetText("5")
+  f.price:SetText("5s")
+  f.ok:GetScript("OnClick")(f.ok)
+  expect(SaidSince(from, string.format(L["Venta apuntada: %d x %s por %s."], 5, name, ES.Money(25 * S))), "la venta no sale en el chat")
+  ES.OpenInvestEntry(SILK, "buy", 1)
+  f.qty:SetText("10")
+  f.ok:GetScript("OnClick")(f.ok)
+  expect(SaidSince(from, string.format(L["Compra corregida: %d x %s por %s."], 10, name, ES.Money(80 * S))), "corregir no sale en el chat")
+  -- Lo que no se guarda (vender de más) no se dice
+  local before = #PRINTS
+  ES.OpenInvestEntry(SILK, "sell")
+  f.qty:SetText("99")
+  f.ok:GetScript("OnClick")(f.ok)
+  expect_eq(#PRINTS, before, "dijo en el chat una venta que no se guardó")
+  f:Hide()
 end)
 
 test("pestaña: precios al día al volver a abrirla", function()

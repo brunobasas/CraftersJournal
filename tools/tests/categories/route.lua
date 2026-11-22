@@ -305,6 +305,61 @@ test("icono recetas en verde: activado por defecto, el clic lo cambia y recalcul
   expect(ES.Planner.GreenRisk({ 1, 2, 3, 13 }, 8, 0.5, { noGreen = true }) > 10 * ES.Planner.GreenRisk({ 1, 2, 3, 13 }, 8, 0.5), "con la opción, el recargo no sube")
 end)
 
+-- Discord: «no veo que cambie nada la ruta de 1 a 150 de Peletería» sin verdes. Tenía un
+-- solo punto en verde: el tooltip del icono dice cuántos tiene la ruta que se ve
+test("icono recetas en verde: el tooltip dice cuántos puntos en verde tiene la ruta", function()
+  local P = ES.Planner
+  local function Step(from, to, t) return { from = from, to = to, recipe = { t = t } } end
+  expect_eq(P.GreenPoints({ steps = {} }), 0, "ruta vacía")
+  expect_eq(P.GreenPoints({ steps = { Step(75, 98, { 1, 90, 97, 105 }) } }), 1, "Cured Medium Hide 75-98 (verde desde 97)")
+  expect_eq(P.GreenPoints({ steps = { Step(1, 30, { 1, 20, 30, 40 }), Step(30, 60, { 1, 50, 60, 70 }) } }), 0, "acaban justo al ponerse verdes")
+  expect_eq(P.GreenPoints({ steps = { Step(225, 232, { 1, 225, 230, 235 }), Step(240, 250, { 1, 200, 210, 260 }) } }), 12, "2 + 10")
+  -- La de la página, como la cuenta la prueba de las rutas sin verdes
+  OpenPage("Enchanting")
+  local page = expect(ProfessionPage("Enchanting"), "falta la página de Enchanting")
+  RunTimers()
+  local plan = expect(page.plan, "la página de Enchanting no tiene ruta")
+  local n = #GreenPoints("Enchanting", plan)
+  expect_eq(P.GreenPoints(plan), n, "puntos verdes de la ruta de la página")
+  expect(n > 1, "la ruta de Enchanting no tiene varios puntos verdes: la prueba no prueba nada")
+  local b = page.greenButton
+  ResetTooltip()
+  b:GetScript("OnEnter")(b)
+  local want = string.format(ES.L["Esta ruta tiene %d puntos en verde."], n)
+  expect(table.concat(TOOLTIP, "\n"):find(want, 1, true), "el tooltip no dice «%s»:\n    %s", want, table.concat(TOOLTIP, "\n    "))
+  -- Discord: sin verdes, Sastrería 1-300 pasaba de 250 a 953 g y solo se veía en el
+  -- total. Con las dos rutas calculadas (al pulsar el icono), el tooltip dice la diferencia
+  local SAYS_COST = "Sin verdes, esta ruta cuesta"
+  local function Tip()
+    ResetTooltip()
+    b:GetScript("OnEnter")(b)
+    return table.concat(TOOLTIP, "\n")
+  end
+  expect(not Tip():find(SAYS_COST, 1, true), "dice cuánto cuesta sin verdes sin haber calculado esa ruta")
+  local withGreens = plan.net
+  b:GetScript("OnClick")(b)
+  RunTimers()
+  local without = expect(page.plan, "sin verdes, la página no tiene ruta")
+  expect(without ~= plan, "al pulsar el icono no se recalcula la ruta")
+  local delta = without.net - withGreens
+  local abs = math.floor(math.abs(delta) + 0.5)
+  want = abs < 1 and ES.L["Sin verdes, esta ruta cuesta lo mismo."]
+    or string.format(delta > 0 and ES.L["Sin verdes, esta ruta cuesta %s más."] or ES.L["Sin verdes, esta ruta cuesta %s menos."], ES.Money(abs))
+  local tip = Tip()
+  expect(tip:find(want, 1, true), "sin verdes, el tooltip no dice «%s»:\n    %s", want, tip:gsub("\n", "\n    "))
+  note("Enchanting 1-300: sin verdes %+.0f c", delta)
+  -- Otra vez con verdes: la misma diferencia (las dos siguen calculadas)
+  b:GetScript("OnClick")(b)
+  RunTimers()
+  tip = Tip()
+  expect(tip:find(want, 1, true), "de vuelta con verdes, el tooltip no dice «%s»:\n    %s", want, tip:gsub("\n", "\n    "))
+  -- Con otro objetivo ya no es la misma ruta: sin la cifra hasta calcular las dos
+  page.toBox._text = "250"
+  page.toBox._scripts.OnEnterPressed(page.toBox)
+  RunTimers()
+  expect(not Tip():find(SAYS_COST, 1, true), "con otro objetivo sigue diciendo la diferencia de la ruta anterior")
+end)
+
 test("sin recetas en verde: las rutas 1-300 solo las usan donde no hay otra", function()
   -- Medido con los precios de las pruebas: sin la opción, Enchanting 45 puntos verdes,
   -- Cooking 52, Tailoring 31 y First Aid 65. Sin verdes solo quedan los forzados:

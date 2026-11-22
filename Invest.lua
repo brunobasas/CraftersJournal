@@ -96,31 +96,64 @@ function Invest.Compute(moves, price)
   return r
 end
 
--- Apunta una compra o venta. price: cobre (por unidad, o el total si isTotal).
--- Devuelve true, o false y por qué: "qty", "price", "units" (venta de más; y cuántas hay)
-function Invest:Add(itemID, kind, n, price, isTotal)
-  if type(itemID) ~= "number" then return false, "item" end
+-- Un movimiento nuevo con lo escrito, o nil y por qué ("qty", "price")
+local function MakeMove(kind, n, price, isTotal, t)
   n = Invest.ParseQty(n)
-  if not n then return false, "qty" end
+  if not n then return nil, "qty" end
   price = tonumber(price)
-  if not price or price < 0 or price ~= price or price == math.huge then return false, "price" end
-  local book = Invest.Book()
-  local entry = book[itemID]
-  if kind == "sell" then
-    local have = entry and Invest.Compute(entry.moves).units or 0
-    if n > have then return false, "units", have end
-  end
-  entry = entry or { moves = {} }
-  book[itemID] = entry
-  if type(entry.moves) ~= "table" then entry.moves = {} end
-  local move = { t = time(), kind = kind == "sell" and "sell" or "buy", n = n }
+  if not price or price < 0 or price ~= price or price == math.huge then return nil, "price" end
+  local move = { t = t or time(), kind = kind == "sell" and "sell" or "buy", n = n }
   if isTotal then
     move.total = math.floor(price + 0.5)
     move.unit = math.floor(price / n + 0.5)
   else
     move.unit = math.floor(price + 0.5)
   end
+  return move
+end
+
+-- Apunta una compra o venta. price: cobre (por unidad, o el total si isTotal).
+-- Devuelve true, o false y por qué: "qty", "price", "units" (venta de más; y cuántas hay)
+function Invest:Add(itemID, kind, n, price, isTotal)
+  if type(itemID) ~= "number" then return false, "item" end
+  local move, why = MakeMove(kind, n, price, isTotal)
+  if not move then return false, why end
+  local book = Invest.Book()
+  local entry = book[itemID]
+  if move.kind == "sell" then
+    local have = entry and Invest.Compute(entry.moves).units or 0
+    if move.n > have then return false, "units", have end
+  end
+  entry = entry or { moves = {} }
+  book[itemID] = entry
+  if type(entry.moves) ~= "table" then entry.moves = {} end
   entry.moves[#entry.moves + 1] = move
+  Invest.Dirty()
+  return true
+end
+
+-- Cambia la cantidad y el precio del movimiento i de un objeto (sigue siendo compra o
+-- venta, con su fecha). Mismos motivos que Add; además, si el cambio deja una venta de
+-- más unidades de las que había (y antes cuadraba): "units" y cuántas había para esa
+-- venta (si es esta venta la que no cuadra) o "breaks" (una venta de después no cuadra)
+function Invest:Update(itemID, i, n, price, isTotal)
+  local entry = Invest.Book()[itemID]
+  local old = entry and type(entry.moves) == "table" and entry.moves[i]
+  if not old then return false, "item" end
+  local move, why = MakeMove(old.kind, n, price, isTotal, old.t)
+  if not move then return false, why end
+  local moves = {}
+  for k, m in ipairs(entry.moves) do moves[k] = k == i and move or m end
+  if Invest.Compute(moves).broken and not Invest.Compute(entry.moves).broken then
+    if move.kind == "sell" then
+      local before = {}
+      for k = 1, i - 1 do before[k] = entry.moves[k] end
+      local have = Invest.Compute(before).units
+      if move.n > have then return false, "units", have end
+    end
+    return false, "breaks"
+  end
+  entry.moves[i] = move
   Invest.Dirty()
   return true
 end

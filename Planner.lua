@@ -920,6 +920,20 @@ function Planner.GreenRisk(t, skill, chance, opts)
   return k * math.sqrt(1 - chance) / chance
 end
 
+-- Puntos de una ruta que se suben con la receta en verde (nivel >= su umbral verde,
+-- t[3]). Para el tooltip del icono "Recetas en verde": en Peletería 1-150 la ruta tenía
+-- uno solo y quitarlas apenas la cambiaba, y el jugador creía que la opción no hacía nada
+function Planner.GreenPoints(plan)
+  local n = 0
+  for _, st in ipairs(plan and plan.steps or {}) do
+    local t = st.recipe and st.recipe.t
+    if t and t[3] then
+      n = n + math.max(0, st.to - math.max(st.from, t[3]))
+    end
+  end
+  return n
+end
+
 -- Recetas con enfriamiento (Transmute: Iron to Gold, una al día; Mooncloth, cada
 -- 4 días). CurseForge: la ruta pedía 186 transmutaciones de 225 a 280 porque era lo
 -- más barato. En la ruta valen como mucho para un punto, y solo en naranja (una sola

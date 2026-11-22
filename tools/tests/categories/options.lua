@@ -16,7 +16,7 @@ test("cada opción de casilla: cambia lo guardado y se aplica", function()
   OpenPage("inventory")
   local n = 0
   for _, opt in ipairs(ES.OPTIONS) do
-    if opt.kind ~= "slider" and opt.kind ~= "segmented" then
+    if opt.kind ~= "slider" and opt.kind ~= "segmented" and opt.kind ~= "hide" then -- (las de ocultar: invest)
       for _, on in ipairs({ false, true }) do
         if opt.set then opt.set(on) else ES:SetOption(opt.key, on) end
         RunTimers()

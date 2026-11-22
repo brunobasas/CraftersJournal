@@ -214,6 +214,24 @@ local function EntryValues(f)
   return n, price, total / n, total, isTotal
 end
 
+-- Lo que tenías sin el movimiento de la ventana: al apuntar uno nuevo, todo; al editar
+-- una compra, las otras compras (vender no cambia la media: con ellas sale la media de
+-- antes y la de después); al editar una venta, lo de antes de ella (las unidades que
+-- había para venderlas y su media)
+local function EntryBase(f)
+  local item = Invest:Item(f.itemID)
+  if not f.editIndex then return item end
+  local moves = {}
+  for k, m in ipairs(item.moves) do
+    if k == f.editIndex then
+      if f.kind == "sell" then break end
+    elseif f.kind == "sell" or m.kind ~= "sell" then
+      moves[#moves + 1] = m
+    end
+  end
+  return Invest.Compute(moves)
+end
+
 -- Filas del recuadro: { { key, label, value } }
 local function SetSummary(f, rows)
   f.values = {} -- [key] = texto del valor (pruebas)
@@ -234,7 +252,7 @@ local function UpdatePreview(f)
     return
   end
   f.hint:SetText("")
-  local cur = Invest:Item(f.itemID)
+  local cur = EntryBase(f)
   local rows = {
     { "total", f.kind == "sell" and L["Total de la venta"] or L["Total"], Money(total) },
     { "unit", L["Por unidad"], Money(unit) },
@@ -262,16 +280,38 @@ local function UpdatePreview(f)
   SetSummary(f, rows)
 end
 
+-- En el chat, lo que se apunta, corrige o borra: "Compra apuntada: 20 x Silk Cloth por 4s"
+-- (what = "add", "edit" o "remove"; total: lo que pagaste o el total de la venta)
+local function SayMove(what, itemID, kind, n, total)
+  local sell = kind == "sell"
+  local text
+  if what == "edit" then
+    text = sell and L["Venta corregida: %d x %s por %s."] or L["Compra corregida: %d x %s por %s."]
+  elseif what == "remove" then
+    text = sell and L["Venta borrada: %d x %s por %s."] or L["Compra borrada: %d x %s por %s."]
+  else
+    text = sell and L["Venta apuntada: %d x %s por %s."] or L["Compra apuntada: %d x %s por %s."]
+  end
+  ES:Print(string.format(text, n, ItemLabel(itemID), Money(total)))
+end
+
 local function SaveEntry(f)
-  local _, price, _, _, isTotal = EntryValues(f)
-  local ok, why, have = Invest:Add(f.itemID, f.kind, f.qty:GetText(), price, isTotal)
+  local n, price, _, total, isTotal = EntryValues(f)
+  local ok, why, have
+  if f.editIndex then
+    ok, why, have = Invest:Update(f.itemID, f.editIndex, f.qty:GetText(), price, isTotal)
+  else
+    ok, why, have = Invest:Add(f.itemID, f.kind, f.qty:GetText(), price, isTotal)
+  end
   if not ok then
     local text = why == "qty" and L["Escribe la cantidad: un número entero mayor que 0."]
       or why == "units" and string.format(L["Solo tienes %d para vender."], have or 0)
+      or why == "breaks" and L["Con este cambio, una venta de después sería de más unidades de las que tenías."]
       or L["Escribe el precio: por ejemplo 2.5 (2s 50c) o 1g 20s."]
     f.err:SetText(ORANGE .. text .. "|r")
     return false
   end
+  SayMove(f.editIndex and "edit" or "add", f.itemID, f.kind, n, total)
   f:Hide()
   ES:RenderInvest()
   ES:RenderInvestItem()
@@ -386,14 +426,29 @@ local function EntryFrame()
 end
 ES.InvestEntry = function() return entry end -- (pruebas)
 
--- Abre la ventana para apuntar una compra (kind = "buy") o venta ("sell") de itemID
-function OpenEntry(itemID, kind)
+-- Abre la ventana para apuntar una compra (kind = "buy") o venta ("sell") de itemID.
+-- Con editIndex, para corregir ese movimiento: con su cantidad y su precio, escrito
+-- como se escribió (total o por unidad)
+function OpenEntry(itemID, kind, editIndex)
   if type(itemID) ~= "number" then return end
   local f = EntryFrame()
+  local edit = editIndex and Invest:Item(itemID).moves[editIndex]
+  if edit then kind = edit.kind end
   f.itemID, f.kind = itemID, kind == "sell" and "sell" or "buy"
+  f.editIndex = edit and editIndex or nil
   f.icon:SetTexture(ItemIcon(itemID))
-  f.kindLabel:SetText(f.kind == "sell" and L["Nueva venta"] or L["Nueva compra"])
   f.title:SetText(ItemLabel(itemID))
+  if edit then
+    f.kindLabel:SetText(f.kind == "sell" and L["Editar venta"] or L["Editar compra"])
+    f.ok:SetText(L["Guardar"])
+    f.qty:SetText(tostring(edit.n))
+    f.price:SetText(ES.Calc.FormatMoney(edit.total or edit.unit))
+    f:SetMode(edit.total and "total" or "unit")
+    f:Show()
+    f.qty:SetFocus()
+    return
+  end
+  f.kindLabel:SetText(f.kind == "sell" and L["Nueva venta"] or L["Nueva compra"])
   f.ok:SetText(f.kind == "sell" and L["Vender"] or L["Añadir"])
   f.qty:SetText("")
   f.price:SetText("")
@@ -742,16 +797,87 @@ end
 -- Vista de lista: una fila fina por objeto, con columnas (los nombres arriba). Mismo
 -- tooltip y mismo clic que las fichas
 ---------------------------------------------------------------------------
-local LIST_ROW_H, LIST_ROW_GAP, LIST_HEAD_H = 30, 3, 22 -- (cada fila en su recuadro, como las de las rutas)
--- Columnas, desde el borde derecho de la fila: { campo, borde derecho, ancho }
+local LIST_ROW_H, LIST_ROW_GAP, LIST_HEAD_H = 30, 3, 26 -- (cada fila en su recuadro, como las de las rutas)
+-- Columnas, desde el borde derecho de la fila: { campo, borde derecho, ancho }, con 10 px
+-- entre una y otra. Lo invertido (cost) entre tu media y el precio: antes solo salía en
+-- el tooltip. Para que quepa, las columnas son más justas (el dinero de una inversión
+-- normal, "1234g 56s 78c", cabe en 96) y un título que no cabe va en dos líneas
+-- (ListHeader: "Seit deinem Durchschnitt")
 local COLUMNS = {
-  { "units",  -486, 60 },
-  { "avg",    -372, 104 },
-  { "price",  -258, 104 },
-  { "change", -126, 120 },
-  { "latent", -10,  104 },
+  { "units",  -532, 44 },
+  { "avg",    -426, 96 },
+  { "cost",   -320, 96 },
+  { "price",  -214, 96 },
+  { "change", -120, 84 },
+  { "latent", -10,  100 },
 }
-local NAME_X, NAME_RIGHT = 36, -556
+local NAME_X, NAME_RIGHT = 36, -586
+local COLUMN_GAP = 10
+ES.InvestColumns = function() return COLUMNS, NAME_X, NAME_RIGHT end -- (pruebas)
+
+-- Título de cada columna (el idioma puede cambiar: se pide cada vez)
+local function ColumnTitle(key)
+  local titles = { units = L["Tienes"], avg = L["Tu media"], cost = L["Invertido"], price = L["Precio"],
+    change = L["Desde tu media"], latent = L["Si vendes"] }
+  return titles[key]
+end
+
+---------------------------------------------------------------------------
+-- Columnas que no se ven en la vista de lista: se eligen en las opciones, categoría
+-- Inversiones (Options.lua), como las pestañas ocultas. Se guarda para la cuenta:
+--   ES.db.investHiddenColumns = { [campo] = true } (nada si no hay ninguna)
+-- El nombre del objeto se ve siempre. Las que quedan se juntan a la derecha (con su
+-- ancho y los mismos 10 px entre una y otra) y el nombre gana el sitio
+---------------------------------------------------------------------------
+local ListColumns = {}
+ES.InvestListColumns = ListColumns
+
+-- Las columnas que se pueden ocultar, en su orden: { { key, label } }
+function ListColumns.Items()
+  local out = {}
+  for i, c in ipairs(COLUMNS) do out[i] = { key = c[1], label = ColumnTitle(c[1]) } end
+  return out
+end
+
+function ListColumns.IsHidden(key)
+  local hidden = ES.db and ES.db.investHiddenColumns
+  return type(hidden) == "table" and hidden[key] == true
+end
+
+-- Oculta (on) o vuelve a mostrar una columna y repinta la lista si se ve
+function ListColumns.SetHidden(key, on)
+  if not ColumnTitle(key) then return false end
+  local db = ES.db
+  if on then
+    if type(db.investHiddenColumns) ~= "table" then db.investHiddenColumns = {} end
+    db.investHiddenColumns[key] = true
+  elseif type(db.investHiddenColumns) == "table" then
+    db.investHiddenColumns[key] = nil
+    if next(db.investHiddenColumns) == nil then db.investHiddenColumns = nil end
+  end
+  if ES.RenderInvest then ES:RenderInvest() end
+  return true
+end
+
+-- Todas visibles
+function ListColumns.Reset()
+  ES.db.investHiddenColumns = nil
+  if ES.RenderInvest then ES:RenderInvest() end
+end
+
+-- Dónde va cada columna visible: { [campo] = { right, width } } y el borde derecho del
+-- nombre. Sin ocultas, lo mismo que COLUMNS
+function ListColumns.Layout()
+  local at, right = {}, -COLUMN_GAP
+  for i = #COLUMNS, 1, -1 do
+    local key, width = COLUMNS[i][1], COLUMNS[i][3]
+    if not ListColumns.IsHidden(key) then
+      at[key] = { right = right, width = width }
+      right = right - width - COLUMN_GAP
+    end
+  end
+  return at, right
+end
 
 -- Orden de la lista: pulsando el nombre de una columna (ES.db.investSort = { key, asc };
 -- se recuerda). Primer clic: el nombre de la A a la Z y los números de mayor a menor;
@@ -760,14 +886,19 @@ local SORT_VALUE = {
   name = function(e) return (ES:ItemName(e.itemID) or ""):lower() end,
   units = function(e) return e.units end,
   avg = function(e) return e.avg end,
+  cost = function(e) return not e.closed and not e.broken and e.cost or nil end,
   price = function(e) return e.price end,
   change = function(e) return e.changePct end,
   latent = function(e) return e.latent or (e.closed and e.realized) or nil end, -- (las cerradas: su realizado)
 }
+-- (por una columna oculta no se ordena: sin ella no se sabría por qué va así la lista.
+-- Se ordena por el nombre, sin olvidar la elegida: vuelve al mostrar la columna)
 local function Sorting()
   local s = ES.db.investSort
-  if type(s) == "table" and SORT_VALUE[s.key] then return s.key, s.asc == true end
-  return "latent", false
+  local key, asc = "latent", false
+  if type(s) == "table" and SORT_VALUE[s.key] then key, asc = s.key, s.asc == true end
+  if key ~= "name" and ListColumns.IsHidden(key) then return "name", true end
+  return key, asc
 end
 local function SortEntries(list, key, asc)
   local f = SORT_VALUE[key]
@@ -803,6 +934,14 @@ local function ListHeader(parent)
     else
       b:SetPoint("RIGHT", h, "RIGHT", right, 0)
       b.text:SetPoint("RIGHT", 0, 0)
+      b.text:SetJustifyH("RIGHT")
+      -- Si el título no cabe en la columna, en dos líneas (con el ancho de la columna);
+      -- si cabe, con su ancho, para que el triángulo del orden quede junto a él
+      local w = tonumber(b.text:GetStringWidth()) or 0
+      if w > width then
+        b.text:SetWidth(width)
+        b.text:SetWordWrap(true)
+      end
       b.arrow:SetPoint("RIGHT", b.text, "LEFT", -4, 0)
     end
     local hl = b:CreateTexture(nil, "HIGHLIGHT")
@@ -827,9 +966,21 @@ local function ListHeader(parent)
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
     h.columns[key] = b
   end
-  Column("name", L["Objeto"], nil, 200, NAME_X)
-  local titles = { units = L["Tienes"], avg = L["Tu media"], price = L["Precio"], change = L["Desde tu media"], latent = L["Si vendes"] }
-  for _, c in ipairs(COLUMNS) do Column(c[1], titles[c[1]], c[2], c[3]) end
+  Column("name", L["Objeto"], nil, ES.UI.LIST_WIDTH + NAME_RIGHT - NAME_X, NAME_X) -- (hasta la columna de Tienes)
+  for _, c in ipairs(COLUMNS) do Column(c[1], ColumnTitle(c[1]), c[2], c[3]) end
+  -- Las columnas ocultas en las opciones fuera; las demás, juntas a la derecha
+  -- (ListColumns.Layout) y el nombre hasta la primera
+  function h:Layout(at, nameRight)
+    for _, c in ipairs(COLUMNS) do
+      local b, pos = self.columns[c[1]], at[c[1]]
+      b:SetShown(pos ~= nil)
+      if pos then
+        b:ClearAllPoints()
+        b:SetPoint("RIGHT", self, "RIGHT", pos.right, 0)
+      end
+    end
+    self.columns.name:SetWidth(ES.UI.LIST_WIDTH + nameRight - NAME_X)
+  end
   -- La columna del orden, en dorado y con un triángulo que dice el sentido
   function h:Mark(key, asc)
     for k, b in pairs(self.columns) do
@@ -874,6 +1025,21 @@ local function CreateListRow(parent)
   row.arrow:SetSize(13, 13)
   row.arrow:SetPoint("RIGHT", row.change, "LEFT", -4, 1)
   row.arrow:Hide()
+  -- Como la cabecera (ListHeader, h:Layout): sin las columnas ocultas
+  function row:Layout(at, nameRight)
+    for _, c in ipairs(COLUMNS) do
+      local fs, pos = self[c[1]], at[c[1]]
+      fs:SetShown(pos ~= nil)
+      if pos then
+        fs:ClearAllPoints()
+        fs:SetPoint("RIGHT", self, "RIGHT", pos.right, 0)
+      end
+    end
+    if not at.change then self.arrow:Hide() end -- (el triángulo va con su columna; tras FillListRow)
+    self.name:ClearAllPoints()
+    self.name:SetPoint("LEFT", NAME_X, 0)
+    self.name:SetPoint("RIGHT", self, "RIGHT", nameRight, 0)
+  end
   row:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(unpack(ROW_BORDER_HOVER))
     if self.tooltip then self.tooltip(self) end
@@ -896,18 +1062,21 @@ local function FillListRow(row, e)
   if e.broken then
     row.units:SetText("")
     row.avg:SetText("")
+    row.cost:SetText("")
     row.price:SetText(ORANGE .. L["Revisa los movimientos"] .. "|r")
     row.change:SetText("")
     row.latent:SetText("")
   elseif e.closed then
     row.units:SetText("0")
     row.avg:SetText("")
+    row.cost:SetText("")
     row.price:SetText(GREY .. L["Realizado"] .. "|r")
     row.change:SetText("")
     row.latent:SetText(SignedMoney(e.realized))
   else
     row.units:SetText(ES.Num(e.units))
     row.avg:SetText(Money(e.avg))
+    row.cost:SetText(Money(e.cost))
     if e.price then
       row.price:SetText((e.stale and GREY or "") .. Money(e.price) .. (e.stale and "|r" or ""))
       SetChange(row.arrow, row.change, e.changePct, e.stale, e.farmed)
@@ -1109,6 +1278,7 @@ function ES:RenderInvest()
   local function Pending(e)
     if e.itemID and not ES:GetItemData(e.itemID) then page.pendingItems, waiting[e.itemID] = true, true end
   end
+  local columnsAt, nameRight = ListColumns.Layout()
   local function PlaceRows(list)
     for _, e in ipairs(list) do
       Pending(e)
@@ -1116,6 +1286,7 @@ function ES:RenderInvest()
       local row = page.rows[nr] or CreateListRow(page.content)
       page.rows[nr] = row
       FillListRow(row, e)
+      row:Layout(columnsAt, nameRight)
       row:SetWidth(width)
       row:ClearAllPoints()
       row:SetPoint("TOPLEFT", 0, -y)
@@ -1165,6 +1336,7 @@ function ES:RenderInvest()
     SortEntries(sum.open, key, asc)
     SortEntries(sum.closed, key, asc)
     header:Mark(key, asc)
+    header:Layout(columnsAt, nameRight)
     header:SetWidth(width)
     header:ClearAllPoints()
     header:SetPoint("TOPLEFT", 0, 0)
@@ -1502,6 +1674,8 @@ local function MoveTooltip(m)
       GameTooltip:AddDoubleLine(L["Comisión de la AH (5%)"], "-" .. Money(amount * Invest.AH_CUT), 0.8, 0.8, 0.8, 1, 0.5, 0.5)
       GameTooltip:AddDoubleLine(L["Cobras (neto)"], Money(amount * (1 - Invest.AH_CUT)), 1, 0.82, 0, 1, 1, 1)
     end
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(L["Clic: editar la cantidad o el precio"], 0.5, 0.8, 1)
     GameTooltip:Show()
   end
 end
@@ -1756,10 +1930,28 @@ function ES:RenderInvestItem()
       -- (lo que pagas en rojo, lo que cobras neto en verde)
       value = ES.UI.Signed(sell and -(amount * (1 - Invest.AH_CUT)) or amount),
       tooltip = MoveTooltip(m),
+      onClick = function()
+        GameTooltip:Hide()
+        OpenEntry(itemID, m.kind, i)
+      end,
+      -- Borrar: pregunta antes (ES:Confirm, UI.lua; se quita con su casilla o en
+      -- /cj opciones, Inversiones) y lo dice en el chat
       onSkip = function()
         GameTooltip:Hide()
-        Invest:Remove(itemID, i)
-        ES:RenderInvestItem()
+        ES:Confirm({ key = "noInvestDeleteConfirm", title = L["Borrar este movimiento"],
+          text = string.format(sell and L["¿Borrar la venta de %d x %s por %s?"] or L["¿Borrar la compra de %d x %s por %s?"],
+            m.n, ItemLabel(itemID), Money(amount)),
+          onYes = function()
+            -- (el movimiento puede haber cambiado de sitio mientras se preguntaba)
+            local at
+            for k, x in ipairs(Invest:Item(itemID).moves) do if x == m then at = k end end
+            if not at then return end
+            if entry and entry:IsShown() and entry.editIndex then entry:Hide() end -- (los números de fila cambian)
+            Invest:Remove(itemID, at)
+            SayMove("remove", itemID, m.kind, m.n, amount)
+            ES:RenderInvest()
+            ES:RenderInvestItem()
+          end })
       end,
       skipTitle = L["Borrar este movimiento"],
       skipTip = L["Los números del objeto y de la cartera se recalculan sin él."],

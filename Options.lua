@@ -24,13 +24,14 @@ local L = ES.L
 --                            quien la tenía desactivada sigue sin las dos (ver Migrate)
 --   ES.db.noPostConfirm    = true: anunciar en la AH sin preguntar antes (AuctionSellUI.lua,
 --                            Sell.Post). Se apaga también con "No volver a preguntar"
---   ES.db.noAHButton       = true: sin el botón "Crafter's Journal: Escanear" encima de
---                            la AH (UI.lua, PlaceAHButtons). Los escaneos de Auctionator se
---                            siguen leyendo igual. CurseForge: ya tenían su botón Escanear
+--   ES.db.noScanButtons    = true: sin los botones de escanear, el de la cabecera y el
+--                            "Crafter's Journal: Escanear" de encima de la AH (UI.lua,
+--                            PlaceScanButtons). Los escaneos de Auctionator se leen igual.
+--                            CurseForge: ya tenían su botón Escanear. Antes era noAHButton,
+--                            solo el de la AH (ver Migrate)
 --   ES.db.noNeutralAHNotice = true: sin la ventana que avisa de que el addon aún no
 --                            funciona en la Casa de Subastas neutral (Core.lua)
--- Todas salen por defecto (es lo normal del addon); la primera vez que sale cada una
--- se dice en el chat que se puede quitar aquí (ES:WindowTip)
+-- Todas salen por defecto (es lo normal del addon), salvo protectGear; la primera vez que sale cada ventana se dice en el chat que se puede quitar aquí (ES:WindowTip)
 ---------------------------------------------------------------------------
 
 function ES:VendorWindowOn() return not (self.db and self.db.noVendorWindow) end
@@ -41,7 +42,13 @@ function ES:AuctionSellWindowOn() return not (self.db and self.db.noAuctionSellW
 -- ve la de vender ahora que va aparte
 function ES:MigrateWindowOptions()
   local db = self.db
-  if not db or db.sellWindowSplit then return end
+  if not db then return end
+  -- Quien quitó el botón de encima de la AH (noAHButton) no quería los de escanear:
+  -- tampoco ve ahora el de la cabecera, que va con él en una sola opción
+  if db.noAHButton and db.noScanButtons == nil then db.noScanButtons = true end
+  db.noAHButton = nil
+  db.scanButtons = nil -- (de una prueba en la que venían desactivados por defecto)
+  if db.sellWindowSplit then return end
   db.sellWindowSplit = true
   if db.noAuctionWindows and db.noAuctionSellWindow == nil then db.noAuctionSellWindow = true end
   db.auctionSellWindow = nil -- (de una prueba en la que venía desactivada por defecto)
@@ -207,8 +214,8 @@ function ES:ApplyOptions(key, on)
   -- abras la AH, o ya con el botón de encima de la AH)
   local mini = self.ShoppingMini and self.ShoppingMini()
   if key == "noAuctionWindows" and not on and mini then mini:Hide() end
-  -- (el botón de encima de la AH: al momento si está abierta; si no, al abrirla)
-  if key == "noAHButton" and self.ahOpen and self.PlaceAHButtons then self:PlaceAHButtons() end
+  -- (los botones de escanear: al momento; el de la AH, si no está abierta, al abrirla)
+  if key == "noScanButtons" and self.PlaceScanButtons then self:PlaceScanButtons() end
 end
 
 local OPTIONS = {
@@ -233,8 +240,8 @@ local OPTIONS = {
     enabled = function() return true end,
     apply = function() if ES.RefreshAllViews then ES:RefreshAllViews() end ES:ApplyOptions() end },
   -- Casa de Subastas
-  { key = "noAHButton", cat = "auction", label = "Botón de Crafter's Journal encima de la AH",
-    desc = "Abre el addon y pide el escaneo completo de Auctionator. Desactivado, el addon sigue leyendo los escaneos de Auctionator (su botón Escanear o el automático al abrir la AH); ábrelo con /cj o el botón del minimapa." },
+  { key = "noScanButtons", cat = "auction", label = "Botones de escanear de Crafter's Journal",
+    desc = "El botón Escanear de la cabecera del addon y el de encima de la AH, que además abre el addon. Piden el escaneo completo de Auctionator. Desactivados, el addon sigue leyendo los escaneos de Auctionator (su botón Escanear o el automático al abrir la AH); ábrelo con /cj o el botón del minimapa." },
   -- (Core.lua, NeutralAHNotice: también se apaga con la casilla de su ventana)
   { key = "noNeutralAHNotice", cat = "auction", label = "Aviso en la Casa de Subastas neutral",
     desc = "Al abrir la Casa de Subastas neutral (Bahía del Botín, Gadgetzan, Vista Eterna), una ventana avisa de que Crafter's Journal aún no funciona en ella." },
@@ -267,6 +274,15 @@ local OPTIONS = {
   { key = "investPriceMode", cat = "invest", kind = "segmented", label = "Precio al apuntar una compra o venta",
     desc = "Lo que escribes en el precio: el total (lo que pagaste por todo) o el precio por unidad. En la ventana de compra o venta lo puedes cambiar cada vez.",
     choices = { { value = "total", text = "Total" }, { value = "unit", text = "Por unidad" } }, default = "total" },
+  -- Borrar un movimiento (su X en el detalle) pregunta antes (InvestUI.lua, ES:Confirm)
+  { key = "noInvestDeleteConfirm", cat = "invest", label = "Confirmar antes de borrar un movimiento",
+    desc = "Al pulsar la X de una compra o venta en el detalle de un objeto, pregunta antes de borrarla." },
+  -- Columnas de la vista de lista que no se ven (InvestUI.lua, ES.InvestListColumns)
+  { key = "investHiddenColumns", cat = "invest", kind = "hide", label = "Columnas de la lista",
+    desc = "Clic en una columna para ocultarla de la vista de lista (o volver a mostrarla). El nombre del objeto gana el sitio.",
+    items = function() return ES.InvestListColumns.Items() end,
+    isHidden = function(key) return ES.InvestListColumns.IsHidden(key) end,
+    setHidden = function(key, on) ES.InvestListColumns.SetHidden(key, on) end },
   -- Ganar dinero (la ventana junto a la profesión enseña lo que propone esa pestaña)
   { key = "noCraftWindow", cat = "earn", label = "Ventana junto a la profesión",
     desc = "Al abrir una profesión: lo que la pestaña Ganar dinero propone fabricar de esa profesión. Clic en una fila para fabricarlo." },
@@ -501,6 +517,92 @@ local function CreateSegmented(page, o)
   return row
 end
 
+-- Cosas que se ocultan (o.kind == "hide"): nombre, qué hace y, debajo, una ficha por
+-- cosa en dos columnas, con la paleta de las filas de la categoría Pestañas. Un clic la
+-- oculta (gris, con OCULTA encima) o la vuelve a mostrar, al momento.
+-- o = { items() -> { { key, label } }, isHidden(key), setHidden(key, on) }
+local HIDE_ROW_H, HIDE_GAP = 28, 4
+local function CreateHideList(page, o)
+  local row = CreateFrame("Frame", nil, page)
+  row:SetSize(CONTENT_W, 60)
+  row.option, row.isRow = o, true
+  row.label = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  row.label:SetPoint("TOPLEFT", 32, -5)
+  row.label:SetWidth(DESC_W)
+  row.label:SetJustifyH("LEFT")
+  row.desc = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  row.desc:SetPoint("TOPLEFT", row.label, "BOTTOMLEFT", 0, -5)
+  row.desc:SetWidth(DESC_W)
+  row.desc:SetJustifyH("LEFT")
+  row.desc:SetTextColor(0.78, 0.74, 0.66)
+  row.items = {}
+  local itemW = math.floor((DESC_W - HIDE_GAP) / 2)
+
+  local function Item(i)
+    local b = row.items[i]
+    if b then return b end
+    b = CreateFrame("Button", nil, row, "BackdropTemplate")
+    b:SetSize(itemW, HIDE_ROW_H)
+    ES.UI.RowStyle(b)
+    b.name = ES.UI.Label(b, "", "GameFontNormal")
+    b.name:SetPoint("LEFT", 10, 0)
+    b.name:SetPoint("RIGHT", -10, 0)
+    b.name:SetJustifyH("LEFT")
+    b.name:SetWordWrap(false)
+    b.shade = b:CreateTexture(nil, "ARTWORK", nil, 7)
+    b.shade:SetPoint("TOPLEFT", 2, -2)
+    b.shade:SetPoint("BOTTOMRIGHT", -2, 2)
+    b.shade:SetColorTexture(0, 0, 0, 0.5)
+    b.hiddenText = b:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    b.hiddenText:SetPoint("RIGHT", -10, 0)
+    b.hiddenText:SetTextColor(1, 1, 1)
+    local function Tip(self)
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:AddLine(self.label)
+      GameTooltip:AddLine(self.hidden and L["Clic: volver a mostrarla."] or L["Clic: ocultarla."], 0.5, 0.8, 1, true)
+      GameTooltip:Show()
+    end
+    b:SetScript("OnClick", function(self)
+      o.setHidden(self.key, not o.isHidden(self.key))
+      row.Refresh()
+      if self:IsMouseOver() then Tip(self) end -- (el tooltip dice lo que hará el próximo clic)
+    end)
+    b:SetScript("OnEnter", function(self)
+      self:SetBackdropBorderColor(unpack(ES.UI.ROW_BORDER_HOVER))
+      Tip(self)
+    end)
+    b:SetScript("OnLeave", function(self)
+      self:SetBackdropBorderColor(unpack(ES.UI.ROW_BORDER))
+      GameTooltip:Hide()
+    end)
+    row.items[i] = b
+    return b
+  end
+
+  function row.Refresh()
+    row.label:SetText(L[o.label])
+    row.desc:SetText(L[o.desc])
+    local top = 5 + 14 + 5 + (tonumber(row.desc:GetStringHeight()) or 0) + 8
+    local list = o.items()
+    for i, it in ipairs(list) do
+      local b = Item(i)
+      local hidden = o.isHidden(it.key) and true or false
+      b.key, b.label, b.hidden = it.key, it.label, hidden
+      b.name:SetText(it.label)
+      b.name:SetAlpha(hidden and 0.45 or 1)
+      b.shade:SetShown(hidden)
+      b.hiddenText:SetText(L["OCULTA"])
+      b.hiddenText:SetShown(hidden)
+      b:ClearAllPoints()
+      b:SetPoint("TOPLEFT", 32 + ((i - 1) % 2) * (itemW + HIDE_GAP), -(top + math.floor((i - 1) / 2) * (HIDE_ROW_H + HIDE_GAP)))
+      b:Show()
+    end
+    for i = #list + 1, #row.items do row.items[i]:Hide() end
+    return top + math.ceil(#list / 2) * (HIDE_ROW_H + HIDE_GAP) + 2
+  end
+  return row
+end
+
 -- Textos y marcas de una categoría (el idioma o las opciones pueden haber cambiado) y
 -- las filas una debajo de otra: cada una mide lo que ocupe su descripción
 local function RefreshPage(page)
@@ -678,7 +780,8 @@ local function CreateWindow()
   for _, o in ipairs(OPTIONS) do
     local page = f.pages[o.cat] or f.pages.general
     local cb = o.kind == "slider" and CreateSlider(page, o)
-      or o.kind == "segmented" and CreateSegmented(page, o) or CreateCheck(page, o)
+      or o.kind == "segmented" and CreateSegmented(page, o)
+      or o.kind == "hide" and CreateHideList(page, o) or CreateCheck(page, o)
     page.checks[#page.checks + 1] = cb
     f.checks[#f.checks + 1] = cb
   end
