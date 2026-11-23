@@ -61,6 +61,21 @@ test("lo que pide tu ruta empezada se guarda", function()
   expect(e.keep >= math.ceil(n.need - 0.001), "guarda %d y la ruta pide %s", e.keep, tostring(n.need))
 end)
 
+test("el pergamino de un paso futuro de tu ruta se guarda", function()
+  -- (spec route-shopping-mode: Sastrería 100-175 compra en la AH el pergamino de la Capa
+  -- de seda azur, de 148. Comprado y en las bolsas, no se propone venderlo)
+  local AZURE_CLOAK_SCROLL = 7089
+  ES.db.scans[ES:RealmKey()].items[AZURE_CLOAK_SCROLL] = { listings = 1, quantity = 1, minUnit = 1, avgUnit = 1, median = 1, ladder = { 1, 1 } }
+  local _, plan = StartRoute("Tailoring", 100, 175)
+  local uses = false
+  for _, st in ipairs(plan.steps) do if st.recipe.scroll == AZURE_CLOAK_SCROLL then uses = true end end
+  expect(uses, "la ruta ya no usa la Capa de seda azur: la prueba no prueba nada")
+  BAGS[AZURE_CLOAK_SCROLL] = 1
+  local e = expect(Entry(ES.Inventory:List(), AZURE_CLOAK_SCROLL), "el pergamino no sale en el Inventario")
+  expect_eq(e.keep, 1, "pergaminos que se guardan")
+  expect_eq((e.vendorN or 0) + (e.ahN or 0) + (e.ahLater or 0), 0, "pergaminos que se proponen vender")
+end)
+
 ---------------------------------------------------------------------------
 -- Bolsa de componentes (la 5 en Forever): cuenta como las demás bolsas
 ---------------------------------------------------------------------------

@@ -142,6 +142,57 @@ function Scanner.AuctionatorProblem()
   end
 end
 
+-- ¿El botón Escanear de Auctionator (y su autoscan) hará un escaneo en modo resumen?
+-- Con la AH moderna (la de Forever) y su opción REPLICATE_SCAN desactivada, la de por
+-- defecto, hace un resumen (C_AuctionHouse.SendBrowseQuery: solo el mínimo y las
+-- unidades de cada objeto) y no el completo (ReplicateItems), y el addon solo usa
+-- escaneos completos. Con la AH clásica siempre hace el completo. Si falta algo de su
+-- configuración o da error: falso, como antes de mirarlo
+function Scanner.AuctionatorSummaryMode()
+  if type(Auctionator) ~= "table" then return false end
+  local inc, cfg = Auctionator.IncrementalScan, Auctionator.Config
+  -- (Events solo lo define Auctionator con la AH moderna)
+  if type(inc) ~= "table" or type(inc.Events) ~= "table" then return false end
+  if type(cfg) ~= "table" or type(cfg.Get) ~= "function" or type(cfg.Options) ~= "table" then return false end
+  local option = cfg.Options.REPLICATE_SCAN
+  if option == nil then return false end
+  local ok, replicate = pcall(cfg.Get, option)
+  return ok and not replicate
+end
+
+-- Nombre de la opción de Auctionator que hace que su botón haga el escaneo completo, en
+-- el idioma del juego (Auctionator exporta sus textos como globales AUCTIONATOR_L_*)
+local ALTERNATE_SCAN = "Use alternate slower scan mode by default"
+function Scanner.AuctionatorScanOptionName()
+  local name = AUCTIONATOR_L_CONFIG_ALTERNATE_SCAN
+  return type(name) == "string" and name ~= "" and name or ALTERNATE_SCAN
+end
+
+-- Auctionator empieza un escaneo en modo resumen (su botón Escanear o su autoscan): el
+-- addon no lo usa (solo trae el mínimo de cada objeto, ver AuctionatorSummaryMode).
+-- Se dice en el chat una vez por sesión, con cómo tener uno completo
+function Scanner:OnAuctionatorSummaryScan()
+  ES:ScanLog("Auctionator empezó un escaneo en modo resumen (no se usa)")
+  if self.summaryWarned then return end
+  self.summaryWarned = true
+  -- (con los botones escondidos, en gris: lo que falta, sin "pulsa Escanear")
+  local lock = ES.ScanButtonsLock and ES:ScanButtonsLock()
+  ES:Print(lock or string.format(L["Auctionator ha hecho un escaneo en modo resumen, que Crafter's Journal no usa (solo trae el precio mínimo de cada objeto). Para actualizar el addon, pulsa Escanear en Crafter's Journal, o activa en las opciones de Auctionator «%s»."],
+    Scanner.AuctionatorScanOptionName()))
+end
+
+-- Gancho en el inicio del escaneo resumido de Auctionator (su marco lo crea al abrirse la
+-- AH, como el del completo: se intenta al refrescar los botones con la AH abierta, antes
+-- de su autoscan, que sale 2 s después). Una vez por marco
+function Scanner:HookAuctionatorSummary()
+  if not hooksecurefunc then return end
+  local st = Auctionator and Auctionator.State
+  local f = type(st) == "table" and st.IncrementalScanFrameRef
+  if type(f) ~= "table" or type(f.InitiateScan) ~= "function" or f == self.hookedSummaryFrame then return end
+  self.hookedSummaryFrame = f
+  hooksecurefunc(f, "InitiateScan", function() Scanner:OnAuctionatorSummaryScan() end)
+end
+
 function Scanner:StartWithAuctionator(f)
   ES:ScanLog("escaneo con Auctionator")
   -- (el gancho sigue su escaneo en cuanto lo pide; launchingAuctionator: es tu escaneo,
@@ -173,6 +224,7 @@ function Scanner:Begin(api, before)
   self.requestTime = time()
   self.waited = 0
   self.gotEvent = false
+  self.arrived = nil
   ES.SafeRegister(frame, self.event) -- si no existe, el sondeo de cada segundo detecta los datos igual
   ES:RefreshScanButtons()
   SetProgress(WAIT_PROGRESS)
@@ -195,11 +247,12 @@ function Scanner:Begin(api, before)
     -- escaneo puede acabar con las mismas subastas que el anterior)
     changed = changed or count ~= before
     local arriving = count > 0 and (changed or self.gotEvent)
+    -- (ya llegan: el otro addon las tiene, y cerrar la AH ahora las pierde, ver Abort)
+    if arriving then self.arrived = true end
     if elapsed >= TIMEOUT and not arriving then
       -- Sin respuesta (p. ej. otro addon escaneó hace poco): se abandona y la
       -- cuenta atrás de 15 min ya corre desde esta petición
-      self:Abort(string.format(L["El servidor no respondió: solo permite un escaneo completo cada 15 min. Podrás volver a escanear en %s."],
-        ES.Countdown(self:SecondsUntilNextScan())))
+      self:Abort(L["El servidor no respondió: solo permite un escaneo completo cada 15 min."])
       return
     end
     self.waited = elapsed
@@ -235,14 +288,27 @@ function Scanner:CountResults()
   return C_AuctionHouse.GetNumReplicateItems() or 0
 end
 
-function Scanner:Abort(reason)
+-- `reason`: por qué se cancela, sin la cuenta atrás (la pone el chat al decirlo).
+-- `closedAH`: se cancela porque cerraste la AH (Core.lua, AUCTION_HOUSE_CLOSED)
+function Scanner:Abort(reason, closedAH)
   -- (guardando lo ya leído, ver Finish: no hace falta la AH y se termina)
   if not self:IsBusy() or self.state == "saving" then return end
+  -- (las subastas del otro addon ya llegaban o se estaban leyendo)
+  local arrived = self.arrived or self.state == "processing"
   frame:UnregisterAllEvents()
   self.state = "idle"
+  self.arrived = nil
   self.scanID = (self.scanID or 0) + 1 -- invalida lotes pendientes
-  if self.follow and not self.viaAuctionator then
-    -- Leyendo el escaneo de otro addon: no lo pediste tú, así que ni aviso en el chat
+  if self.follow and not self.viaAuctionator and closedAH and arrived then
+    -- El escaneo de otro addon (el botón Escanear de Auctionator, su escaneo automático)
+    -- ya había llegado y el addon aún lo leía al cerrar la AH. Ese addon ya lo tiene y
+    -- parece terminado: sin decirlo, "Último escaneo: hace 2 h" parecía un fallo al
+    -- guardar (GitHub). Se dice en el chat y con "Cancelado" junto al último escaneo
+    reason = L["Has cerrado la Casa de Subastas antes de que Crafter's Journal terminara de leer el escaneo: sus precios no se han guardado. Déjala abierta hasta que termine (el botón Escanear muestra el progreso)."]
+    ES:ScanLog("AH cerrada a medio leer el escaneo de otro addon")
+  elseif self.follow and not self.viaAuctionator then
+    -- Leyendo el escaneo de otro addon, que aún no había llegado (el servidor no
+    -- respondió, o cerraste la AH antes): no lo pediste tú, así que ni aviso en el chat
     -- ni "Cancelado" junto al último escaneo; solo el estado y el registro
     self.follow = nil
     ES:ScanLog("no se pudo leer el escaneo de otro addon: " .. tostring(reason))
@@ -251,12 +317,16 @@ function Scanner:Abort(reason)
     return
   end
   -- Para avisar junto a "Último escaneo" de que el último intento no acabó
-  -- (si no, "hace 2 días" parece un fallo al guardar)
+  -- (si no, "hace 2 días" parece un fallo al guardar). Sin la cuenta atrás: el tooltip
+  -- de Escanear lo enseña más tarde ("Último intento (13:01): …") junto a la suya, la de
+  -- ahora, y la de entonces se quedaba parada ("en 14:53")
   if type(ES.db.lastScanFail) ~= "table" then ES.db.lastScanFail = {} end
   ES.db.lastScanFail[self.key or ES:RealmKey()] = { time = time(), reason = reason }
   self.follow, self.viaAuctionator = nil, nil
   if reason then
-    ES:Print(reason)
+    -- En el chat, sí: es de ese momento y no cambia
+    local wait = self:SecondsUntilNextScan()
+    ES:Print(wait > 0 and (reason .. " " .. string.format(L["Podrás volver a escanear en %s."], ES.Countdown(wait))) or reason)
     SetStatus(reason)
   end
   ES:RefreshScanButtons()

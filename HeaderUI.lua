@@ -257,7 +257,11 @@ function ES:CreateHeader(f)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
     GameTooltip:AddLine(L["Escanear la Casa de Subastas"])
     local wait = ES.Scanner:SecondsUntilNextScan()
-    if ES.Scanner:IsBusy() then
+    -- En gris porque lo escondiste y falta algo (ES:ScanButtonsLock): lo primero
+    local lock = ES:ScanButtonsLock()
+    if lock then
+      GameTooltip:AddLine(lock, 1, 0.6, 0.2, true)
+    elseif ES.Scanner:IsBusy() then
       GameTooltip:AddLine(L["Escaneo en curso."], 0.8, 0.8, 0.8, true)
     elseif type(Auctionator) ~= "table" then
       -- (sin Auctionator no se escanea: lo primero, aunque la AH esté cerrada)
@@ -276,6 +280,12 @@ function ES:CreateHeader(f)
     -- El escaneo lo hace Auctionator (y el addon lee esos datos)
     if type(Auctionator) == "table" then
       GameTooltip:AddLine(L["Con Auctionator: el escaneo lo hace Auctionator (así guarda su historial de precios) y el addon lee esos mismos datos para todas las pestañas."], 0.5, 0.8, 1, true)
+    end
+    -- Su botón Escanear hace un resumen que el addon no usa (Scanner.AuctionatorSummaryMode)
+    -- (en gris ya lo dice arriba, sin el "usa este botón")
+    if ES.Scanner.AuctionatorSummaryMode() and not lock then
+      GameTooltip:AddLine(string.format(L["Auctionator está en modo resumen: su botón Escanear no actualiza Crafter's Journal. Usa este botón, o activa en las opciones de Auctionator «%s»."],
+        ES.Scanner.AuctionatorScanOptionName()), 1, 0.6, 0.2, true)
     end
     local fail = ES:LastScanFail()
     if fail and fail.reason then

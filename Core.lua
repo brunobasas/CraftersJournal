@@ -258,6 +258,33 @@ function ES:DataItemName(itemID)
   return ES.Data.ItemNames and ES.Data.ItemNames[itemID] -- si no cambia, es igual que en inglés
 end
 
+-- ¿Sale el objeto al buscar `query` (en minúsculas)? Por su nombre en el idioma del addon
+-- o en inglés, de los datos propios: no depende de lo que el cliente tenga en caché
+local function ItemMatches(itemID, query)
+  if not itemID then return false end
+  local here = ES:DataItemName(itemID)
+  if here and here:lower():find(query, 1, true) then return true end
+  local en = ES.Data.ItemNames and ES.Data.ItemNames[itemID]
+  return en ~= nil and en ~= here and en:lower():find(query, 1, true) ~= nil
+end
+
+-- ¿Sale la receta al buscar `query` (en minúsculas)? Por su nombre, el del objeto que
+-- fabrica o el de su pergamino; con `withMaterials`, también por los materiales. En
+-- español la receta y su objeto a menudo se llaman distinto (Mochila negra de seda
+-- fabrica la Talega de seda negra), y el jugador busca lo que ve en la bolsa
+function ES:RecipeMatches(recipe, query, withMaterials)
+  if (recipe.name or ""):lower():find(query, 1, true) or (recipe.nameEN or ""):lower():find(query, 1, true) then
+    return true
+  end
+  if ItemMatches(recipe.out and recipe.out[1], query) or ItemMatches(recipe.scroll, query) then return true end
+  if withMaterials then
+    for _, rq in ipairs(recipe.r or {}) do
+      if ItemMatches(rq[1], query) then return true end
+    end
+  end
+  return false
+end
+
 -- Datos de un objeto. El nombre que da el juego va en el idioma del cliente: si el
 -- addon está en otro idioma, se usa el de los datos propios (si lo tenemos)
 function ES:GetItemData(itemID)
@@ -946,7 +973,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
     end
     ES.repStamp = stamp
   elseif event == "AUCTION_HOUSE_SHOW" then
-    ES:ScanLog("AUCTION_HOUSE_SHOW")
+    -- (con el modo de Auctionator: en resumen, su botón no actualiza el addon)
+    ES:ScanLog("AUCTION_HOUSE_SHOW" .. (ES.Scanner.AuctionatorSummaryMode() and ", Auctionator en modo resumen" or ""))
     ES.ahSession = (ES.ahSession or 0) + 1
     -- La neutral: como si no hubiera AH abierta (sin botones ni ventanas del addon)
     if DetectAuctionHouse() then
@@ -971,8 +999,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
       ES.ahOpen = false
       ES.neutralAH = nil
       -- El servidor ya contó la petición: hay que esperar sus 15 min igualmente
-      ES.Scanner:Abort(string.format(L["Has cerrado la Casa de Subastas; escaneo cancelado. Déjala abierta hasta que termine. Podrás volver a escanear en %s."],
-        ES.Countdown(ES.Scanner:SecondsUntilNextScan())))
+      ES.Scanner:Abort(L["Has cerrado la Casa de Subastas; escaneo cancelado. Déjala abierta hasta que termine."], true)
       ES:RefreshScanButtons()
     end)
   end

@@ -454,7 +454,24 @@ function InstallAuctionator()
         QueryAuctionItems("", nil, nil, 0, nil, nil, true, false, nil)
       end,
       CanInitiate = function() return not AUCTIONATOR_WAITING end,
+    },
+    -- Su escaneo en modo resumen (AH moderna, su botón con REPLICATE_SCAN desactivado):
+    -- AUCTIONATOR_SUMMARY_SCANS cuenta las veces; no trae subastas al addon
+    IncrementalScanFrameRef = {
+      InitiateScan = function()
+        AUCTIONATOR_SUMMARY_SCANS = (AUCTIONATOR_SUMMARY_SCANS or 0) + 1
+      end,
     } },
+    -- Su configuración: AUCTIONATOR_REPLICATE = false es su modo resumen (el de por
+    -- defecto en el juego). Aquí, por defecto, el completo: las pruebas de antes no cambian
+    Config = {
+      Options = { REPLICATE_SCAN = "replicate_scan_3" },
+      Get = function(name)
+        if name == "replicate_scan_3" then return AUCTIONATOR_REPLICATE ~= false end
+      end,
+    },
+    -- (Events solo existe con la AH moderna, la de Forever)
+    IncrementalScan = { Events = {} },
   }
 end
 -- Auctionator acaba un escaneo: avisa a quien se registró

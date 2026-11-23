@@ -46,6 +46,26 @@ test("vendedor abierto: ofrece justo lo que falta y lo compra", function()
   note("material %d: pedía %d", itemID, e.need)
 end, { state = "scan" })
 
+test("vendedor que también vende un pergamino que la ruta compra en la AH: no lo propone", function()
+  -- (spec route-shopping-mode: el pergamino de la Bolsa roja de lana, a 1c en la AH, va
+  -- a la Lista de compra con la AH; el vendedor de recetas no lo ofrece)
+  local RED_BAG_SCROLL = 5772
+  ES.db.scans[ES:RealmKey()].items[RED_BAG_SCROLL] = { listings = 1, quantity = 1, minUnit = 1, avgUnit = 1, median = 1, ladder = { 1, 1 } }
+  ES.db.prof.Tailoring = ES.db.prof.Tailoring or {}
+  ES.db.prof.Tailoring.byPhase = false
+  StartRoute("Tailoring", 100, 175)
+  local scroll
+  for _, s in ipairs(ES.Shopping.Status().lists) do
+    for _, e in ipairs(s.items) do if e.it.itemID == RED_BAG_SCROLL then scroll = e end end
+  end
+  expect(scroll, "la lista no pide el pergamino de la Bolsa roja de lana: la prueba no prueba nada")
+  OpenMerchant({ { item = RED_BAG_SCROLL, price = 500 } })
+  for _, e in ipairs(ES.VendorShop:List()) do
+    expect(e.itemID ~= RED_BAG_SCROLL, "la ventana del vendedor propone el pergamino que la ruta compra en la AH")
+  end
+  CloseMerchant()
+end, { state = "scan" })
+
 test("vendedor que vende por lotes: compra lotes enteros", function()
   TailoringRoute()
   local itemID = VendorMaterial()

@@ -1616,3 +1616,23 @@ test("lo que fabricó un paso anterior y falta: se compran sus materiales y se f
     if k then expect(k <= extra, "con todos los Cured la fila dice «%s» (la ruta fabricaba %d de más)", Plain(l.title), extra) end
   end
 end, { state = "scan" })
+
+-- Pergaminos de la AH en la Lista de compra (spec route-shopping-mode) ---------------
+-- Con «ruta entera» la lista no llevaba los pergaminos: tras comprarlo todo, el asistente
+-- volvía a mandarte a la AH a por cada uno. Para saber cuáles se compran en la AH hace
+-- falta la fuente sin contar el que ya llevas (con él en la bolsa, best es "owned")
+local RED_WOOL_BAG = 6688 -- Bolsa roja de lana: su pergamino lo vende un vendedor
+
+test("con el pergamino en las bolsas, la receta sigue diciendo de dónde se compra", function()
+  local r = expect(ES.Data.Tailoring.recipes[RED_WOOL_BAG], "falta la Bolsa roja de lana")
+  expect(r.scroll, "la Bolsa roja de lana ya no es de pergamino: la prueba no prueba nada")
+  local prices = ES.db.scans[ES:RealmKey()].items
+  SetPrice(r.scroll, 1, 1) -- (más barato que en el vendedor: la mejor fuente es la AH)
+  local src = expect(ES.Waypoints.RecipeSource(r, prices), "sin fuentes")
+  expect_eq(src.best and src.best.kind, "ah", "mejor fuente sin el pergamino en las bolsas")
+  expect_eq(src.buy and src.buy.kind, "ah", "de dónde se compra sin el pergamino en las bolsas")
+  BAGS[r.scroll] = 1
+  src = ES.Waypoints.RecipeSource(r, prices)
+  expect_eq(src.best and src.best.kind, "owned", "mejor fuente con el pergamino en las bolsas")
+  expect_eq(src.buy and src.buy.kind, "ah", "de dónde se compra con el pergamino en las bolsas")
+end, { state = "scan" })

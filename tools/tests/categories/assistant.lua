@@ -30,6 +30,72 @@ test("sacar del banco: con las bolsas normales llenas, va a la de componentes", 
   expect_eq(table.concat(moves, " "), "-1:1 5:1", "movimientos (del banco a la bolsa de componentes)")
 end)
 
+-- En combate o en mazmorras el juego da algunos números como "secretos" (issecretvalue):
+-- convertirlos (tonumber, math.max...), compararlos u operar con ellos es un error de
+-- taint. El asistente los convertía: "attempt to perform numeric conversion on a secret
+-- number value (execution tainted by 'CraftersJournal')". Un secreto de mentira: una
+-- tabla, que da error al convertirla igual que el de verdad
+local SECRET = setmetatable({}, { __tostring = function() return "secreto" end })
+local function SecretNav()
+  issecretvalue = function(v) return rawequal(v, SECRET) end
+  local function V(x, y) return { x = x, y = y, GetXY = function(self) return self.x, self.y end } end
+  CreateVector2D = V
+  local maps = { [1414] = { mapID = 1414, mapType = 2, name = "Kalimdor" },
+    [1453] = { mapID = 1453, mapType = 3, parentMapID = 1414, name = "Stormwind" } }
+  local nav = { player = V(0.5, 0.5), facing = 0, speed = 7 }
+  C_Map = {
+    GetMapInfo = function(m) return maps[m] end,
+    GetBestMapForUnit = function() return 1453 end,
+    GetPlayerMapPosition = function(m) return m == 1414 and nav.player or nil end,
+    GetWorldPosFromMapPos = function(m, v) return 0, V(v.x * 1000, v.y * 2000) end,
+    GetMapPosFromWorldPos = function(_, w, m) return m, V(w.x / 1000, w.y / 2000) end,
+  }
+  GetPlayerFacing = function() return nav.facing end
+  GetUnitSpeed = function() return 0, nav.speed end
+  local npc = { name = "Georgio Bolero", map = 1414, x = 0.6, y = 0.5, side = "" }
+  ES.Waypoints.NPC = function(id) return id == 777 and npc or nil end
+  ES.db.prof = { Tailoring = {} }
+  local lock = { from = 100, to = 120, started = 4242 }
+  ES.RouteLock = function(_, k) return k == "Tailoring" and lock or nil end
+  ES.RouteLines = function() return {
+    { level = "110", title = "Entrenar Oficial", current = true, icon = 134400, go = function() return 777 end },
+  } end
+  ES.GetProfessionSkill = function() return 110, 150 end
+  return nav, V
+end
+
+test("números secretos del juego (combate, mazmorras): el asistente no da error", function()
+  A = ES.Assistant
+  local nav, V = SecretNav()
+  local ok, err = pcall(A.Update)
+  expect(ok, "sin secretos ya falla: %s", tostring(err))
+  local f = A.Frame()
+  expect(tostring(f.nav.big._text):find("^100 yd"), "sin secretos, la flecha no marca 100 yd: %s", tostring(f.nav.big._text))
+  local cases = {
+    { "la velocidad", function() nav.speed = SECRET end, function() nav.speed = 7 end },
+    { "hacia dónde miras", function() nav.facing = SECRET end, function() nav.facing = 0 end },
+    { "tu posición", function() nav.player = V(SECRET, SECRET) end, function() nav.player = V(0.5, 0.5) end },
+    { "el ratón", function() GetCursorPosition = function() return SECRET, SECRET end end,
+      function() GetCursorPosition = function() return 0, 0 end end },
+    { "el ancho del minimapa", function() Minimap.GetWidth = function() return SECRET end end,
+      function() Minimap.GetWidth = nil end },
+  }
+  for _, c in ipairs(cases) do
+    c[2]()
+    local okU, errU = pcall(A.Update)
+    local okT, errT = pcall(A.NavTick)
+    local okS, errS = pcall(A.SlideTab, 0.1)
+    expect(okU, "%s secreta: el asistente da error al actualizarse: %s", c[1], tostring(errU))
+    expect(okT, "%s secreta: la flecha da error: %s", c[1], tostring(errT))
+    expect(okS, "%s secreta: las pestañas dan error: %s", c[1], tostring(errS))
+    c[3]()
+  end
+  -- Sin posición (secreta), como en una mazmorra: lo dice, sin flecha
+  nav.player = V(SECRET, SECRET)
+  A.NavTick()
+  expect(f.nav.arrow._shown == false, "con la posición secreta se ve la flecha")
+end)
+
 test("sin ruta empezada no sale", function()
   A = ES.Assistant
   A.Update()

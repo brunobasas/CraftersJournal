@@ -158,3 +158,38 @@ test("quitar un cálculo", function()
   expect(ES.Calc:Find(a.id), "se fue el otro")
   OpenPage("calc")
 end, { state = "full" })
+
+-- Spec recipe-search: en español la receta 6695 se llama «Mochila negra de seda» y
+-- fabrica la «Talega de seda negra» (5765), que se aprende con el 5775 (Patrón: talega...)
+local function CalcSearch(text)
+  ES:SetLanguage("es")
+  OpenPage("calc")
+  RunTimers()
+  local page = ES:GetMainFrame().pages.calc
+  page.search:SetText(text)
+  page.searchRefresh()
+  local ids = {}
+  for _, row in ipairs(page.results.rows) do
+    if row:IsShown() and row.result then ids[#ids + 1] = row.result.id end
+  end
+  return ids, page
+end
+
+local function Has(ids, id)
+  for _, x in ipairs(ids) do if x == id then return true end end
+  return false
+end
+
+test("buscar en la Calculadora por el objeto fabricado o su pergamino", function()
+  for _, text in ipairs({ "talega de seda", "Patrón: talega" }) do
+    local ids = CalcSearch(text)
+    expect(Has(ids, 6695), "«%s» no da la receta 6695 (%d resultados)", text, #ids)
+  end
+  expect(AllText():find("Mochila negra de seda", 1, true), "el resultado no dice «Mochila negra de seda»")
+end)
+
+test("la Calculadora no busca por materiales", function()
+  local ids, page = CalcSearch("tinte negro") -- material de la 6695 y de otras, sin receta propia
+  expect_eq(#ids, 0, "resultados con «tinte negro»")
+  expect_eq(page.results.rows[1].text:GetText(), ES.L["Sin resultados"], "primera fila")
+end)

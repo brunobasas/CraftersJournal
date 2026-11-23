@@ -83,6 +83,36 @@ test("una receta de especialización que no tienes no sale como «puedes aprende
   expect(Entry().learnableNow, "con Goblin Engineering, Goblin Rocket Helmet no sale como «puedes aprenderla ya»")
 end)
 
+-- Spec recipe-search: en español la receta 6695 se llama «Mochila negra de seda» (como en
+-- la ventana de profesión), pero lo que fabrica es la «Talega de seda negra» (5765)
+local function SearchTailoring(text)
+  ES:SetLanguage("es")
+  OpenPage("patterns")
+  ES:SelectPage("pattern:Tailoring")
+  RunTimers()
+  local frame = ES:GetMainFrame().pages["pattern:Tailoring"].collectionFrame
+  expect(frame, "la colección de Sastrería no se ha pintado")
+  frame.search:SetText(text)
+  ES:RenderCollection(frame)
+  for _, e in ipairs(frame.list or {}) do
+    if e.id == 6695 then return e, frame end
+  end
+  return nil, frame
+end
+
+test("buscar «talega» en Recetas encuentra la Mochila negra de seda", function()
+  local e, frame = SearchTailoring("talega")
+  expect(e, "«talega» no encuentra la receta 6695 (%d recetas en la lista)", #(frame.list or {}))
+  expect_eq(e.recipe.name, "Mochila negra de seda", "nombre que se muestra")
+  expect(AllText():find("Mochila negra de seda", 1, true), "la fila no dice «Mochila negra de seda»")
+end)
+
+test("buscar en Recetas no depende de que el juego tenga el objeto cargado", function()
+  UNCACHED[5765], UNCACHED[2325] = true, true -- Talega de seda negra y Tinte negro
+  expect(SearchTailoring("tinte negro"), "sin caché, «tinte negro» (material) no encuentra la receta 6695")
+  expect(SearchTailoring("talega"), "sin caché, «talega» no encuentra la receta 6695")
+end)
+
 -- Mooncloth Bag pide 1 Mooncloth, que se fabrica con 2 Felcloth pero tiene enfriamiento
 -- (una cada pocos días). Salía a 93s (2 Felcloth) en vez de los 60g de la AH
 local function SetPrice(itemID, price)

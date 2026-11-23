@@ -264,6 +264,28 @@ test("cambiar de idioma: la ventana vieja deja de atender eventos y suelta sus r
   expect(new and new ~= page, "no hay página nueva de Sastrería")
 end, { state = "scan" })
 
+-- Spec recipe-search: en español la receta 6695 (Mochila negra de seda) fabrica la
+-- Talega de seda negra (5765); se busca por cualquiera de los nombres
+test("buscar una receta por su nombre, su objeto, su pergamino o sus materiales", function()
+  ES:SetLanguage("es")
+  local r = ES.Data.Tailoring.recipes[6695]
+  expect_eq(r.name, "Mochila negra de seda", "nombre de la receta en español")
+  expect_eq(r.out[1], 5765, "objeto fabricado")
+  -- (el texto llega en minúsculas, como desde los buscadores: lower() también toca los
+  -- bytes de las letras con tilde según el idioma del sistema, igual a los dos lados)
+  for _, q in ipairs({ "Mochila negra", "black silk pack", "talega", "Talega de seda", "Patrón: talega" }) do
+    expect(ES:RecipeMatches(r, q:lower(), false), "«%s» no encuentra la receta 6695", q)
+  end
+  expect(not ES:RecipeMatches(r, "tinte negro", false), "«tinte negro» la encuentra sin buscar por materiales")
+  expect(ES:RecipeMatches(r, "tinte negro", true), "«tinte negro» no la encuentra buscando por materiales")
+  expect(ES:RecipeMatches(r, "black dye", true), "«black dye» no la encuentra buscando por materiales")
+  expect(not ES:RecipeMatches(r, "cobre", true), "«cobre» encuentra una receta sin cobre")
+  -- De los datos, no de la caché del cliente
+  UNCACHED[5765], UNCACHED[5775], UNCACHED[2325] = true, true, true
+  expect(ES:RecipeMatches(r, "talega", false), "sin caché, «talega» no la encuentra")
+  expect(ES:RecipeMatches(r, "tinte negro", true), "sin caché, «tinte negro» no la encuentra")
+end)
+
 -- Cambiar de idioma con cada pestaña abierta (la ventana se vuelve a crear)
 for _, page in ipairs({ "home", "shopping", "money", "inventory", "invest", "favor", "calc", "patterns", "Leatherworking", "pattern:Tailoring" }) do
   test("cambiar de idioma con la página «" .. page .. "» abierta", function()

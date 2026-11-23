@@ -743,6 +743,8 @@ function Planner.RouteNeed(profKey, plan, level, opts)
     end
     -- La herramienta que piden los pasos del tramo y no llevas (ver AddMissingTools)
     if Planner.AddMissingTools(profKey, plan, level, phase.batchTo or phase.to, out) then all = false end
+    -- Y los pergaminos del tramo que se compran en la AH (fuera de `all` y de `hold`)
+    Planner.AddRouteScrolls(plan, level, phase.batchTo or phase.to, out)
     -- Lo tienes todo: se apunta hasta dónde llega (y desde ahí, a fabricar)
     if all and not hold and not preview and next(need) then
       Planner.SetStocked(profKey, plan, level, phase.batchTo or phase.to)
@@ -776,6 +778,8 @@ function Planner.RouteNeed(profKey, plan, level, opts)
     end
   end
   if Planner.AddMissingTools(profKey, plan, level, plan.reached or plan.to or level + 1, out) then any, all = true, false end
+  -- Y los pergaminos de lo que queda de ruta que se compran en la AH (fuera de `all` y de `hold`)
+  Planner.AddRouteScrolls(plan, level, plan.reached or plan.to or level + 1, out)
   if route and any and all and not hold then
     Planner.SetStocked(profKey, plan, level, plan.reached or plan.to or level + 1)
   end
@@ -1018,6 +1022,45 @@ end
 -- ¿Ya la sabe el personaje? (necesita recipe.id; ver Annotate)
 local function Known(recipe)
   return recipe.id and ES.IsRecipeKnown and ES:IsRecipeKnown(recipe.id)
+end
+
+-- Añade a `out` (el de RouteNeed) los pergaminos de receta que piden los pasos entre
+-- `from` y `to` y se compran en la AH: uno por receta que aún no sabes (spec
+-- route-shopping-mode). Con "ruta entera", tras comprarlo todo, el asistente volvía a
+-- mandarte a la AH a por cada pergamino. Los de misión, vendedor o Merchant's Favor no:
+-- su fila "Conseguir receta" te lleva. La fuente es la de comprarlo sin contar el que
+-- llevas (WP.RecipeSource, buy): el comprado sigue en la lista, como comprado.
+-- Entrada: { need = 1, expected = 1, source = "ah", unit, recipe }. No cuentan para "lo
+-- tienes todo" (SetStocked) ni los recorta "hold": si no, tras comprar los materiales
+-- dejaría de pedir el que no había, y uno en el correo impediría dar la compra por hecha
+function Planner.AddRouteScrolls(plan, from, to, out)
+  local ctx = plan and plan.ctx
+  if not ctx then return false end
+  local prices, opts = ctx.prices or ScanPrices(), ctx.opts or {}
+  local seen, added = {}, false
+  for _, st in ipairs(plan.steps or {}) do
+    local r = st.recipe
+    if r and r.scroll and st.to > from and st.from < to and not seen[r.scroll] then
+      seen[r.scroll] = true
+      -- (las de instructor, básicas, de fichas o intermedias no se compran: ver LearnCost)
+      local learnable = not (Fee(r) or r.trainer or r.basic or r.favor)
+        and not (Known(r) or (st.id and ES.IsRecipeKnown and ES:IsRecipeKnown(st.id)))
+      local unit
+      if learnable and Sourced(r, opts) then
+        local src = ES.Waypoints.RecipeSource(r, prices, opts.noQuests, opts.noLimited)
+        local buy = src and src.buy
+        if buy and buy.kind == "ah" then unit = buy.cost end
+      elseif learnable and not r.intermediate then
+        local ah = prices[r.scroll]
+        unit = ah and ah.minUnit
+      end
+      if unit then
+        out[r.scroll] = { need = 1, expected = 1, source = "ah", unit = unit, recipe = st.id or r.id }
+        added = true
+      end
+    end
+  end
+  return added
 end
 
 -- Tope del rango que enseña un instructor (máscara de Data/<Prof>.lua trainers): el más

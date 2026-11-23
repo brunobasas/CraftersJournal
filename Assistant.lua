@@ -58,6 +58,17 @@ end
 
 local function InCombat() return InCombatLockdown and InCombatLockdown() end
 
+-- Un número del juego que se puede usar, o nil. En combate o en mazmorras el juego da
+-- algunos como "secretos" (issecretvalue): la velocidad, hacia dónde miras, tu posición,
+-- medidas de marcos... Convertirlos (tonumber, math.max), compararlos u operar con ellos
+-- es un error de taint ("attempt to perform numeric conversion on a secret number
+-- value"): secreto es lo mismo que no saberlo. Todo número del juego pasa por aquí
+local function Num(v)
+  if v == nil or (issecretvalue and issecretvalue(v)) then return nil end
+  return tonumber(v)
+end
+A.Num = Num -- (pruebas)
+
 -- La profesión que sigue: la de la última ruta empezada o abierta con el botón del
 -- asistente en la ventana (settings.assistantPicked); las rutas son de cada personaje
 function A.Profession()
@@ -199,7 +210,10 @@ function A.Relative(npc)
   end
   local w, h = MapYards(mine)
   if not w then return nil, "unknown" end
+  -- (secreta, como en una mazmorra: no hay posición)
   local px, py = me:GetXY()
+  px, py = Num(px), Num(py)
+  if not (px and py and Num(tx) and Num(ty)) then return nil, "here" end
   return (tx - px) * w, (ty - py) * h
 end
 
@@ -314,9 +328,9 @@ function A.UpdateMinimap(east, south, facing)
     mini.pin = PinTexture(Minimap, "Pin", 14)
     mini.edge = PinTexture(Minimap, "Edge", 14)
   end
-  local zoom = (Minimap.GetZoom and tonumber(Minimap:GetZoom()) or 0) + 1
+  local zoom = (Minimap.GetZoom and Num(Minimap:GetZoom()) or 0) + 1
   local sizes = (IsIndoors and IsIndoors()) and MINIMAP_YARDS.indoor or MINIMAP_YARDS.outdoor
-  local radius = (tonumber(Minimap:GetWidth()) or 140) / 2
+  local radius = (Num(Minimap:GetWidth()) or 140) / 2
   local perYard = radius / ((sizes[zoom] or sizes[1]) / 2)
   local x, y = east * perYard, -south * perYard -- (y hacia arriba: el norte)
   -- Minimapa que gira contigo: lo de delante, arriba
@@ -359,7 +373,7 @@ local function NavTick()
   -- destino propio solo si nadie más lo pinta: Shortest Path (su camino) y TomTom (su
   -- icono) ya lo hacen, y los dos a la vez se solapaban (Discord)
   local east, south = A.Relative(npc)
-  local facing = GetPlayerFacing and GetPlayerFacing()
+  local facing = GetPlayerFacing and Num(GetPlayerFacing())
   -- (con el punto de ruta del juego sí: en Forever ese punto no se dibuja)
   local drawn = state.pathHow == "shortestpath" or state.pathHow == "tomtom"
   if east and facing and not drawn then A.UpdateMinimap(east, south, facing) else HideMini() end
@@ -403,7 +417,8 @@ local function NavTick()
   nav.arrow:SetTexCoord(l, r, t, b)
   nav.arrow:SetVertexColor(A.TurnColor(turn))
   -- Tiempo: a tu velocidad de correr (o la de la montura que llevas)
-  local speed = GetUnitSpeed and select(2, GetUnitSpeed("player")) or 7
+  -- (secreta, en combate: la de correr)
+  local speed = GetUnitSpeed and Num((select(2, GetUnitSpeed("player")))) or 7
   -- (arriba las yardas y el tiempo; debajo, a quién: si el nombre es largo, baja de línea)
   local yd, secs = math.floor(dist + 0.5), dist / math.max(7, speed or 7)
   local roundSecs = math.floor(secs + 0.5) -- (Duration redondea igual)
@@ -419,9 +434,9 @@ end
 -- (cuelga del asistente por su borde de abajo); si cabe, el alto de siempre
 local function FitNav()
   if not (nav and nav:IsShown()) then return end
-  local text = 12 + (tonumber(nav.big:GetStringHeight()) or 0) + 3 + (tonumber(nav.small:GetStringHeight()) or 0)
+  local text = 12 + (Num(nav.big:GetStringHeight()) or 0) + 3 + (Num(nav.small:GetStringHeight()) or 0)
   local h = math.max(NAV_ARROW, math.ceil(text) - 2) + TAB_TUCK + 10
-  if math.abs((tonumber(nav:GetHeight()) or 0) - h) >= 0.5 then nav:SetHeight(h) end
+  if math.abs((Num(nav:GetHeight()) or 0) - h) >= 0.5 then nav:SetHeight(h) end
 end
 local NavText = NavTick
 NavTick = function(...)
@@ -461,12 +476,14 @@ local SLIDE_PX = 12 -- lo que se desliza al desplegarse
 -- seguro de la estrella (Waypoints.lua) o la flecha
 function A.MouseOver(region, below)
   if not (region and region.IsVisible and region:IsVisible() and GetCursorPosition) then return false end
-  local left, right = tonumber(region:GetLeft()), tonumber(region:GetRight())
-  local top, bottom = tonumber(region:GetTop()), tonumber(region:GetBottom())
+  local left, right = Num(region:GetLeft()), Num(region:GetRight())
+  local top, bottom = Num(region:GetTop()), Num(region:GetBottom())
   if not (left and right and top and bottom) then return false end
-  local scale = tonumber(region:GetEffectiveScale()) or 1
+  local scale = Num(region:GetEffectiveScale()) or 1
   local x, y = GetCursorPosition()
-  x, y = (tonumber(x) or 0) / scale, (tonumber(y) or 0) / scale
+  x, y = Num(x), Num(y)
+  if not (x and y) then return false end
+  x, y = x / scale, y / scale
   return x >= left and x <= right and y <= top and y >= bottom - (below or 0)
 end
 
@@ -561,7 +578,7 @@ local function Paint()
     if frame.skip:GetText() ~= text then
       frame.skip:SetText(text)
       local fs = frame.skip.GetFontString and frame.skip:GetFontString()
-      local w = math.max(70, (fs and tonumber(fs:GetStringWidth()) or 50) + 24)
+      local w = math.max(70, (fs and Num(fs:GetStringWidth()) or 50) + 24)
       frame.skip:SetWidth(w)
       frame.skipTab:SetWidth(TAB_INSET * 2 + w)
     end
@@ -586,10 +603,10 @@ local function Paint()
   end
   -- El texto se centra en vertical dentro del banner. Alto de siempre (no "baila" al
   -- cambiar de paso) salvo que el texto no quepa: entonces crece lo justo, nunca "..."
-  local th = (tonumber(banner.title:GetStringHeight()) or 0) + 4 + (tonumber(banner.sub:GetStringHeight()) or 0)
+  local th = (Num(banner.title:GetStringHeight()) or 0) + 4 + (Num(banner.sub:GetStringHeight()) or 0)
   banner.text:SetHeight(math.max(1, th))
   local bh = math.max(BANNER_H, math.ceil(th) + 16)
-  if math.abs((tonumber(banner:GetHeight()) or 0) - bh) >= 0.5 then
+  if math.abs((Num(banner:GetHeight()) or 0) - bh) >= 0.5 then
     banner:SetHeight(bh)
     frame:SetHeight(PAD + bh + PAD)
   end
@@ -625,7 +642,7 @@ end
 ---------------------------------------------------------------------------
 -- Por su esquina de arriba: si el texto hace crecer el marco, crece hacia abajo
 local function SavePosition()
-  local left, top = tonumber(frame:GetLeft()), tonumber(frame:GetTop())
+  local left, top = Num(frame:GetLeft()), Num(frame:GetTop())
   if not (left and top) then return end
   local db = DB()
   db.left, db.top = left, top
@@ -720,7 +737,7 @@ local function HelpTopics()
 end
 
 local function HelpHeight(fs, cap)
-  return math.min(tonumber(fs:GetStringHeight()) or 12, cap or 200)
+  return math.min(Num(fs:GetStringHeight()) or 12, cap or 200)
 end
 
 local function CreateHelp()
@@ -1018,7 +1035,7 @@ local function CreateUI()
     beta.text:SetText(L["BETA"])
     beta.text:SetTextColor(0.85, 0.7, 0.35, 0.85)
     beta.text:SetPoint("CENTER")
-    beta:SetSize((tonumber(beta.text:GetStringWidth()) or 30) + 10, 14)
+    beta:SetSize((Num(beta.text:GetStringWidth()) or 30) + 10, 14)
     local bg = beta:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
     bg:SetColorTexture(0.06, 0.05, 0.04, 0.95)
@@ -1244,7 +1261,7 @@ local function CreateUI()
   local skip = CreateFrame("Button", nil, skipTab, "UIPanelButtonTemplate")
   frame.skip = skip
   skip:SetText(L["Saltar"])
-  local textW = skip.GetFontString and skip:GetFontString() and tonumber(skip:GetFontString():GetStringWidth())
+  local textW = skip.GetFontString and skip:GetFontString() and Num(skip:GetFontString():GetStringWidth())
   skip:SetSize(math.max(70, (textW or 50) + 24), CLOSE_SIZE)
   skip:SetPoint("BOTTOMLEFT", skipTab, "BOTTOMLEFT", TAB_INSET, TAB_INSET)
   skipTab:SetSize(TAB_INSET * 2 + skip:GetWidth(), TAB_H)
@@ -1545,8 +1562,13 @@ function A.Refresh()
   pending = true
   C_Timer.After(0.2, function()
     pending = false
-    local ok, err = pcall(A.Update)
-    if not ok and ES.RecordError then ES:RecordError("asistente", err) end
+    -- (con la pila: el error del número secreto se apuntó sin ella y no se sabía dónde fue)
+    local stack
+    local ok, err = xpcall(A.Update, function(e)
+      stack = debugstack and debugstack(2)
+      return e
+    end)
+    if not ok and ES.RecordError then ES:RecordError("asistente", err, stack) end
   end)
 end
 

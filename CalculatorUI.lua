@@ -101,7 +101,9 @@ local function PriceField(parent, commit)
 end
 
 ---------------------------------------------------------------------------
--- Buscador: recetas de todas las profesiones; primero las que sabes
+-- Buscador: recetas de todas las profesiones; primero las que sabes. Por la receta, lo
+-- que fabrica o su pergamino, no por materiales: con todas las profesiones, «seda»
+-- taparía la receta que se busca (spec recipe-search)
 ---------------------------------------------------------------------------
 local function SearchRecipes(query)
   query = query:lower()
@@ -110,7 +112,7 @@ local function SearchRecipes(query)
     local data = ES.Data[prof.key]
     if data and data.recipes then
       for id, r in pairs(data.recipes) do
-        if not r.conversion and ((r.name or ""):lower():find(query, 1, true) or (r.nameEN or ""):lower():find(query, 1, true)) then
+        if not r.conversion and ES:RecipeMatches(r, query, false) then
           out[#out + 1] = { prof = prof.key, id = id, recipe = r, known = ES:IsRecipeKnown(id) }
         end
       end

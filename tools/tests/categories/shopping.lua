@@ -300,6 +300,61 @@ test("con lo convertido, el botón de la AH compra solo lo que falta", function(
     "la fila no dice lo convertido")
 end)
 
+---------------------------------------------------------------------------
+-- Pergaminos de la AH en la lista de la ruta (spec route-shopping-mode). Con «ruta
+-- entera» la lista solo llevaba materiales: tras comprarlo todo, el asistente volvía a
+-- mandarte a la AH a por cada pergamino. Sastrería 100-175 con los pergaminos de la
+-- Bolsa roja de lana (106-132) y de la Capa de seda azur (148-170) a 1c en la AH (más
+-- barato que el vendedor: la mejor fuente es la AH). El de la Bolsa de componentes de
+-- lana (100-106) sigue en el vendedor
+---------------------------------------------------------------------------
+local RED_BAG_SCROLL, AZURE_CLOAK_SCROLL, WOOL_POUCH_SCROLL = 5772, 7089, 253668
+local RED_BAG, AZURE_CLOAK = 6688, 8786
+
+local function ScrollsInAH()
+  for _, scroll in ipairs({ RED_BAG_SCROLL, AZURE_CLOAK_SCROLL }) do
+    ES.db.scans[ES:RealmKey()].items[scroll] = { listings = 1, quantity = 1, minUnit = 1, avgUnit = 1, median = 1, ladder = { 1, 1 } }
+  end
+end
+
+-- Empieza Sastrería desde `from` hasta 175 con los pergaminos en la AH. byPhase = false:
+-- ruta entera. Devuelve la ruta fijada
+local function ScrollRoute(from, byPhase)
+  ScrollsInAH()
+  if byPhase == false then
+    ES.db.prof.Tailoring = ES.db.prof.Tailoring or {}
+    ES.db.prof.Tailoring.byPhase = false
+  end
+  local _, plan = StartRoute("Tailoring", from, 175)
+  local uses = {}
+  for _, st in ipairs(plan.steps) do uses[st.id] = true end
+  expect(uses[RED_BAG] and (from > 148 or uses[AZURE_CLOAK]), "la ruta de Sastrería ya no usa las recetas de pergamino de la prueba")
+  ES.Earn:Clear()
+  return plan
+end
+
+local function RouteItems() return ItemsOf(ES.Shopping.Status(), "phase") end
+
+test("ruta entera: la lista pide los pergaminos de la AH y no los de vendedor", function()
+  ScrollRoute(100, false)
+  expect(ES.Shopping.PhaseLists()[1].whole, "la lista no es de la ruta entera")
+  local items = RouteItems()
+  local red = expect(items[RED_BAG_SCROLL], "la lista no pide el pergamino de la Bolsa roja de lana")
+  local cloak = expect(items[AZURE_CLOAK_SCROLL], "la lista no pide el pergamino de la Capa de seda azur")
+  expect_eq(red.it.need, 1, "pergaminos de la Bolsa roja de lana")
+  expect_eq(cloak.it.need, 1, "pergaminos de la Capa de seda azur")
+  expect_eq(red.it.source, "ah", "de dónde se compra el pergamino")
+  expect_eq(items[WOOL_POUCH_SCROLL], nil, "pide el pergamino de vendedor de la Bolsa de componentes de lana")
+end)
+
+test("por tramos: la lista pide solo el pergamino del tramo", function()
+  ScrollRoute(110)
+  expect(not ES.Shopping.PhaseLists()[1].whole, "la lista no es por tramos")
+  local items = RouteItems()
+  expect_eq(items[RED_BAG_SCROLL] and items[RED_BAG_SCROLL].it.need, 1, "pergamino del tramo (Bolsa roja de lana)")
+  expect_eq(items[AZURE_CLOAK_SCROLL], nil, "pide el pergamino de un tramo posterior (Capa de seda azur)")
+end)
+
 test("ruta acabada: su lista guardada se quita sola", function()
   local list = ES.Shopping.Add("route", "vieja", { { itemID = 2589, quantity = 5, unit = 15 } }, { key = "Tailoring" })
   expect(list, "no se añadió")
@@ -372,4 +427,192 @@ test("la lista de compra dice lo que sigue en el correo", function()
   ES:RenderShopping()
   text = Subs(ES.shoppingPage.rows)
   expect(not text:find(string.format(L["(%d en el correo)"], 70), 1, true), "recogido y la fila sigue diciendo el correo:\n%s", text)
+end)
+
+-- Pergaminos de la AH (ver ScrollRoute): cuándo cuentan como comprados y cuándo dejan
+-- de pedirse
+
+test("pergamino comprado en la AH: en el correo cuenta como comprado", function()
+  ScrollRoute(100, false)
+  AuctionFrame:Show()
+  FireEvent("AUCTION_HOUSE_SHOW")
+  RunTimers()
+  ES.ahOpen = true
+  WinAuction(RED_BAG_SCROLL, 1)
+  local e = expect(RouteItems()[RED_BAG_SCROLL], "la lista no pide el pergamino de la Bolsa roja de lana")
+  expect_eq(e.bought, 1, "pergaminos que tienes")
+  expect_eq(e.mail, 1, "pergaminos en el correo")
+  expect_eq(e.left, 0, "pergaminos que faltan")
+  local id = ES.Shopping.NextToBuy(ES.Shopping.Status(), RED_BAG_SCROLL)
+  expect(id ~= RED_BAG_SCROLL, "el botón de la AH vuelve a comprar el pergamino que está en el correo")
+end)
+
+test("pergamino: al aprender la receta deja de pedirse", function()
+  ScrollRoute(100, false)
+  BAGS[RED_BAG_SCROLL] = 1
+  local e = expect(RouteItems()[RED_BAG_SCROLL], "con el pergamino en las bolsas la fila desaparece antes de aprenderla")
+  expect_eq(e.left, 0, "pergaminos que faltan con él en las bolsas")
+  -- Lo usas: se aprende y el pergamino se gasta
+  BAGS[RED_BAG_SCROLL] = 0
+  KNOWN_SPELLS[RED_BAG] = true
+  ES.CheckLearned()
+  ES.Earn:Clear()
+  expect_eq(RouteItems()[RED_BAG_SCROLL], nil, "la lista vuelve a pedir el pergamino de una receta aprendida")
+  expect(RouteItems()[AZURE_CLOAK_SCROLL], "la lista deja de pedir el pergamino de la Capa de seda azur")
+end)
+
+test("pergamino: el de una receta quitada de la ruta no se pide", function()
+  ES.db.prof.Tailoring = ES.db.prof.Tailoring or {}
+  ES.db.prof.Tailoring.excluded = { [AZURE_CLOAK] = true } -- (la ✕ de su fila)
+  ES.db.prof.Tailoring.byPhase = false
+  ScrollsInAH()
+  local _, plan = StartRoute("Tailoring", 100, 175)
+  for _, st in ipairs(plan.steps) do expect(st.id ~= AZURE_CLOAK, "la ruta usa la Capa de seda azur quitada") end
+  ES.Earn:Clear()
+  local items = RouteItems()
+  expect_eq(items[AZURE_CLOAK_SCROLL], nil, "pide el pergamino de la receta quitada")
+  expect(items[RED_BAG_SCROLL], "deja de pedir el pergamino de la Bolsa roja de lana")
+end)
+
+test("pergamino: sin él a la venta en la AH, la lista no lo pide", function()
+  -- (solo el de la Bolsa roja en la AH: el de la Capa de seda azur, al vendedor)
+  ES.db.scans[ES:RealmKey()].items[RED_BAG_SCROLL] = { listings = 1, quantity = 1, minUnit = 1, avgUnit = 1, median = 1, ladder = { 1, 1 } }
+  ES.db.scans[ES:RealmKey()].items[AZURE_CLOAK_SCROLL] = nil
+  ES.db.prof.Tailoring = ES.db.prof.Tailoring or {}
+  ES.db.prof.Tailoring.byPhase = false
+  StartRoute("Tailoring", 100, 175)
+  ES.Earn:Clear()
+  local items = RouteItems()
+  expect(items[RED_BAG_SCROLL], "no pide el pergamino que sí está en la AH")
+  expect_eq(items[AZURE_CLOAK_SCROLL], nil, "pide un pergamino que no está a la venta en la AH")
+end)
+
+test("pergamino que también vende un PNJ: se compra en la AH con el botón de la lista", function()
+  -- (con precio de vendedor, la lista lo mandaba al vendedor y el botón de la AH no lo compraba)
+  ES.Data.VendorPrices[RED_BAG_SCROLL] = 500
+  local plan = ScrollRoute(100, false)
+  local e = expect(RouteItems()[RED_BAG_SCROLL], "la lista no pide el pergamino de la Bolsa roja de lana")
+  expect_eq(e.it.source, "ah", "de dónde se compra el pergamino")
+  expect_eq(e.it.unit, 1, "precio del pergamino (el de la AH)")
+  local id, n = ES.Shopping.NextToBuy(ES.Shopping.Status(), RED_BAG_SCROLL)
+  expect_eq(id, RED_BAG_SCROLL, "lo siguiente que compra el botón de la AH")
+  expect_eq(n, 1, "cuántos pergaminos compra")
+  expect(ES.Shopping.PendingAH() > 0, "no queda nada de la AH")
+  -- Y las filas de compra de la ruta y del asistente lo compran en la AH
+  local inAH = false
+  for _, it in ipairs(ES.RouteBuy(plan, "Tailoring", 100).ah) do
+    if it.itemID == RED_BAG_SCROLL then inAH = it.unit == 1 end
+  end
+  expect(inAH, "la compra en la AH de la ruta no lleva el pergamino a su precio de la AH")
+end)
+
+-- Los pergaminos que enseña Materiales sin empezar la ruta (con el modo elegido) y los que
+-- pide la lista al empezarla
+local function PreviewScrolls(byPhase)
+  ScrollsInAH()
+  ES.db.prof.Tailoring = ES.db.prof.Tailoring or {}
+  if byPhase == false then ES.db.prof.Tailoring.byPhase = false else ES.db.prof.Tailoring.byPhase = nil end
+  SKILLS[ES.Data.Tailoring.skillLine] = { 100, 175 }
+  OpenPage("Tailoring")
+  local page = ProfessionPage("Tailoring")
+  page.toBox._text = "175"
+  if page.toBox._scripts.OnEnterPressed then page.toBox._scripts.OnEnterPressed(page.toBox) end
+  RunTimers()
+  ES:SelectProfessionView(page, "shop")
+  RunTimers()
+  expect(not ES:RouteLock("Tailoring"), "la ruta ya estaba empezada")
+  local seen = {}
+  for _, l in ipairs(page.lines) do
+    if l.item == RED_BAG_SCROLL or l.item == AZURE_CLOAK_SCROLL then seen[l.item] = true end
+  end
+  StartRoute("Tailoring", 100, 175)
+  ES.Earn:Clear()
+  local listed = {}
+  for itemID in pairs(RouteItems()) do
+    if itemID == RED_BAG_SCROLL or itemID == AZURE_CLOAK_SCROLL then listed[itemID] = true end
+  end
+  return seen, listed
+end
+
+test("sin empezar la ruta, Materiales enseña los pergaminos que pedirá la lista", function()
+  local seen, listed = PreviewScrolls(false)
+  expect(seen[RED_BAG_SCROLL] and seen[AZURE_CLOAK_SCROLL], "con ruta entera Materiales no enseña los dos pergaminos")
+  for _, scroll in ipairs({ RED_BAG_SCROLL, AZURE_CLOAK_SCROLL }) do
+    expect_eq(listed[scroll], seen[scroll], "la lista y Materiales no piden lo mismo del pergamino " .. scroll)
+  end
+  ES:StopRoute("Tailoring")
+  -- Por tramos: los del primer tramo, y la lista lo mismo
+  seen, listed = PreviewScrolls()
+  expect(not seen[AZURE_CLOAK_SCROLL], "por tramos Materiales enseña el pergamino de un tramo posterior")
+  for _, scroll in ipairs({ RED_BAG_SCROLL, AZURE_CLOAK_SCROLL }) do
+    expect_eq(listed[scroll], seen[scroll], "por tramos, la lista y Materiales no piden lo mismo del pergamino " .. scroll)
+  end
+end)
+
+test("comprar el pergamino en la AH: la fila de compra queda hecha y la receta, comprada", function()
+  local plan = ScrollRoute(110)
+  local function InAH()
+    for _, it in ipairs(ES.RouteBuy(plan, "Tailoring", 110, { phase = true }).ah) do
+      if it.itemID == RED_BAG_SCROLL then return it end
+    end
+  end
+  expect(InAH(), "la compra en la AH del tramo no lleva el pergamino de la Bolsa roja de lana")
+  local name = ES.Data.Tailoring.recipes[RED_BAG].name
+  local function LearnTitle()
+    for _, l in ipairs(ES:RouteLines("Tailoring")) do
+      local t = tostring(l.title or "")
+      if t:find(name, 1, true) and (t:find(ES.L["Conseguir receta: "], 1, true) or t:find(ES.L["Receta comprada: "], 1, true)) then return t end
+    end
+  end
+  expect(tostring(LearnTitle()):find(ES.L["Conseguir receta: "], 1, true), "sin comprar, la fila de la receta no dice «Conseguir receta»")
+  AuctionFrame:Show()
+  FireEvent("AUCTION_HOUSE_SHOW")
+  RunTimers()
+  ES.ahOpen = true
+  WinAuction(RED_BAG_SCROLL, 1)
+  ES.Earn:Clear()
+  expect_eq(InAH(), nil, "con el pergamino comprado, la compra en la AH lo sigue pidiendo")
+  expect(tostring(LearnTitle()):find(ES.L["Receta comprada: "], 1, true), "comprado, la fila dice «%s»", tostring(LearnTitle()))
+end)
+
+test("las listas guardadas no llevan los pergaminos de la ruta", function()
+  -- (una lista guardada es fija: al aprender la receta y gastarse el pergamino lo
+  -- volvería a pedir. Los pergaminos van solo en la lista viva de la ruta)
+  ScrollRoute(100, false)
+  ES.db.earnMinProfit = 1
+  ES.Earn:Clear()
+  local res = ES.Earn:Ideas()
+  local items = res.shopping and #res.shopping > 0 and res.shopping
+    or { { itemID = 2592, quantity = 3, unit = 40, source = "ah" } }
+  expect(ES.Shopping.Add("money", "lote", items), "no se añadió la lista guardada")
+  for _, s in ipairs(ES.Shopping.Status().lists) do
+    if s.list.kind ~= "phase" then
+      for _, e in ipairs(s.items) do
+        expect(e.it.itemID ~= RED_BAG_SCROLL and e.it.itemID ~= AZURE_CLOAK_SCROLL,
+          "la lista guardada «%s» lleva el pergamino %d", tostring(s.list.title), e.it.itemID)
+      end
+    end
+  end
+  expect(RouteItems()[RED_BAG_SCROLL], "el pergamino dejó de estar en la lista de la ruta")
+end)
+
+test("ruta entera con los materiales comprados: sigue pidiendo el pergamino que falta", function()
+  -- Con todo comprado, la ruta lo apunta (SetStocked) y, mientras puedas fabricar, no pide
+  -- nada más (hold). El pergamino no cuenta para eso: si no, la lista lo dejaría de pedir
+  -- o, sin él, nunca daría la compra por hecha
+  local plan = ScrollRoute(100, false)
+  for itemID, e in pairs(RouteItems()) do
+    if itemID ~= RED_BAG_SCROLL and itemID ~= AZURE_CLOAK_SCROLL then BAGS[itemID] = e.it.need end
+  end
+  ES.Earn:Clear()
+  ES.Shopping.Status()
+  expect(ES.Planner.Stocked("Tailoring", plan, 100), "con los materiales comprados y sin los pergaminos, la compra no se da por hecha")
+  -- (y lo que gasta el paso en el que estás, ya fabricado: puedes fabricarlo)
+  for _, rq in ipairs(plan.steps[1].recipe.r) do BAGS[rq[1]] = math.max(BAGS[rq[1]] or 0, rq[2]) end
+  ES.Earn:Clear()
+  expect(ES.Planner.PhaseHold("Tailoring", plan, 100), "con todo comprado y el paso aprendido no se sigue con lo que llevas")
+  local items = RouteItems()
+  local red = expect(items[RED_BAG_SCROLL], "con todo comprado deja de pedir el pergamino de la Bolsa roja de lana")
+  expect_eq(red.left, 1, "pergaminos de la Bolsa roja de lana que faltan")
+  expect(items[AZURE_CLOAK_SCROLL] and items[AZURE_CLOAK_SCROLL].left == 1, "con todo comprado deja de pedir el pergamino de la Capa de seda azur")
 end)

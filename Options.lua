@@ -26,7 +26,9 @@ local L = ES.L
 --                            Sell.Post). Se apaga también con "No volver a preguntar"
 --   ES.db.noScanButtons    = true: sin los botones de escanear, el de la cabecera y el
 --                            "Crafter's Journal: Escanear" de encima de la AH (UI.lua,
---                            PlaceScanButtons). Los escaneos de Auctionator se leen igual.
+--                            PlaceScanButtons). Los escaneos completos de Auctionator se
+--                            leen igual; con Auctionator en modo resumen, o sin él, se
+--                            ven en gris con lo que falta (UI.lua, ScanButtonsLock).
 --                            CurseForge: ya tenían su botón Escanear. Antes era noAHButton,
 --                            solo el de la AH (ver Migrate)
 --   ES.db.noNeutralAHNotice = true: sin la ventana que avisa de que el addon aún no
@@ -215,7 +217,11 @@ function ES:ApplyOptions(key, on)
   local mini = self.ShoppingMini and self.ShoppingMini()
   if key == "noAuctionWindows" and not on and mini then mini:Hide() end
   -- (los botones de escanear: al momento; el de la AH, si no está abierta, al abrirla)
-  if key == "noScanButtons" and self.PlaceScanButtons then self:PlaceScanButtons() end
+  -- (y en gris o no: escondidos con Auctionator en modo resumen, ES:ScanButtonsLock)
+  if key == "noScanButtons" and self.PlaceScanButtons then
+    self:PlaceScanButtons()
+    self:RefreshScanButtons()
+  end
 end
 
 local OPTIONS = {
@@ -241,7 +247,7 @@ local OPTIONS = {
     apply = function() if ES.RefreshAllViews then ES:RefreshAllViews() end ES:ApplyOptions() end },
   -- Casa de Subastas
   { key = "noScanButtons", cat = "auction", label = "Botones de escanear de Crafter's Journal",
-    desc = "El botón Escanear de la cabecera del addon y el de encima de la AH, que además abre el addon. Piden el escaneo completo de Auctionator. Desactivados, el addon sigue leyendo los escaneos de Auctionator (su botón Escanear o el automático al abrir la AH); ábrelo con /cj o el botón del minimapa." },
+    desc = "El botón Escanear de la cabecera del addon y el de encima de la AH, que además abre el addon. Piden el escaneo completo de Auctionator. Desactivados, se esconden si el botón Escanear de Auctionator hace el escaneo completo (su escaneo alternativo activado). Si no, porque Auctionator está en modo resumen (el de por defecto) o no está instalado, salen en gris con lo que falta: el addon solo se actualiza con escaneos completos. Ábrelo con /cj o el botón del minimapa." },
   -- (Core.lua, NeutralAHNotice: también se apaga con la casilla de su ventana)
   { key = "noNeutralAHNotice", cat = "auction", label = "Aviso en la Casa de Subastas neutral",
     desc = "Al abrir la Casa de Subastas neutral (Bahía del Botín, Gadgetzan, Vista Eterna), una ventana avisa de que Crafter's Journal aún no funciona en ella." },

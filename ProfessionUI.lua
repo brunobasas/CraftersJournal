@@ -2910,11 +2910,13 @@ local function RouteBuy(plan, profKey, level, opts)
       if missing > 0 then
         local planned = shopping[itemID]
         local vendorPrice = ES.Data.VendorPrices and ES.Data.VendorPrices[itemID]
-        local source = planned and planned.source or (vendorPrice and "vendor" or "ah")
+        -- (un pergamino trae su fuente y su precio: Planner.AddRouteScrolls)
+        local scroll = routeNeed[itemID].source and routeNeed[itemID]
+        local source = scroll and scroll.source or planned and planned.source or (vendorPrice and "vendor" or "ah")
         local ahEntry = plan.ctx and plan.ctx.prices and plan.ctx.prices[itemID]
-        local unit = planned and planned.unit or vendorPrice or (ahEntry and ahEntry.minUnit) or 0
+        local unit = scroll and scroll.unit or planned and planned.unit or vendorPrice or (ahEntry and ahEntry.minUnit) or 0
         local it = { itemID = itemID, quantity = missing, need = n, expected = res.expected[itemID], source = source, unit = unit, total = unit * missing,
-          supply = planned and planned.supply or (ahEntry and ahEntry.quantity) }
+          supply = planned and planned.supply or (ahEntry and ahEntry.quantity), recipe = scroll and scroll.recipe or nil }
         res.left = res.left + it.total
         table.insert(source == "ah" and res.ah or res.vendor, it)
       else
@@ -4680,6 +4682,18 @@ local function ShopLines(plan, page)
   -- (sin empezar la ruta, preview: lo que pedirá al empezarla con el modo elegido)
   local buy = RouteBuy(plan, page.profKey, page.from, { preview = true })
   local need, phase, Have = buy.need, buy.phase, buy.Have
+  -- Sin empezar y con la ruta entera, las filas salen de plan.shopping (los materiales):
+  -- los pergaminos de la AH que pedirá la Lista de compra van con ellos (AddRouteScrolls)
+  local scrolls = false
+  if not phase and not ES:RouteLock(page.profKey) then
+    for _, it in ipairs(buy.ah) do
+      if it.recipe then
+        ah[#ah + 1] = it
+        total = total + it.total
+        scrolls = true
+      end
+    end
+  end
   local function Progress(itemID)
     local have = Have(itemID)
     local n = math.ceil((need[itemID] or 0) - 0.001)
@@ -4847,8 +4861,9 @@ local function ShopLines(plan, page)
     return { level = "×" .. it.quantity, icon = texture or 134400, title = name, sub = sub,
       item = it.itemID, tooltip = SimpleTooltip(it.itemID, L["Ya lo tienes: el plan lo usa antes de comprar nada."]) }
   end)
-  if #plan.shopping > 0 then
-    lines[#lines + 1] = { total = true, title = L["Total de la compra"], sub = L["Materiales y herramientas a comprar"], value = Signed(total) }
+  if #plan.shopping > 0 or scrolls then
+    lines[#lines + 1] = { total = true, title = L["Total de la compra"],
+      sub = scrolls and L["Materiales, herramientas y recetas a comprar"] or L["Materiales y herramientas a comprar"], value = Signed(total) }
   end
   return lines
 end

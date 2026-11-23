@@ -798,15 +798,8 @@ function ES:RenderCollection(frame)
     local ok = query ~= "" or not s.hiddenState[State(e)]
     if ok and query == "" and s.hidden[e.main] then ok = false end
     if ok and query == "" and s.hideBound and e.recipe.bop then ok = false end
-    if ok and query ~= "" then
-      ok = (e.recipe.name or ""):lower():find(query, 1, true) or (e.recipe.nameEN or ""):lower():find(query, 1, true)
-      for _, rq in ipairs(e.recipe.r or {}) do
-        if not ok then
-          local name = ES:GetItemData(rq[1])
-          ok = name and name:lower():find(query, 1, true)
-        end
-      end
-    end
+    -- (por la receta, lo que fabrica, su pergamino o sus materiales: spec recipe-search)
+    if ok and query ~= "" then ok = ES:RecipeMatches(e.recipe, query, true) end
     if ok then list[#list + 1] = e end
   end
 

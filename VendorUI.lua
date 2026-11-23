@@ -46,7 +46,9 @@ local function Needs()
     local rank = ES:GetProfessionSkill(ES.Data[p.key].skillLine)
     -- (la misma regla que Materiales y la Lista de compra: Planner.RouteNeed)
     for itemID, n in pairs(ES.Planner.RouteNeed(p.key, p.plan, rank)) do
-      need[itemID] = (need[itemID] or 0) + n.need
+      -- (sin el pergamino que la ruta compra en la AH, aunque este PNJ lo venda:
+      -- Planner.AddRouteScrolls)
+      if n.source ~= "ah" then need[itemID] = (need[itemID] or 0) + n.need end
     end
   end
   -- Y lo de vendedor de las demás listas de la compra (Calculadora, Ganar dinero...):

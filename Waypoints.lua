@@ -509,6 +509,8 @@ ES.MemPart("dónde conseguir cada receta", function() return sourceCache end)
 --   vendor = la vende un PNJ de tu bando (su precio)
 --   ah     = la más barata anunciada ahora en la AH
 -- `prices` es la tabla de precios del escaneo (ctx.prices). Sin ninguna fuente, best = nil.
+-- `buy` es la mejor sin contar el pergamino que llevas (best la cambia por "owned", ver
+-- WithOwned): de dónde se compra. La Lista de compra pide los de la AH (Planner.AddRouteScrolls)
 -- Con `noQuests` (icono de misión desactivado) las misiones no cuentan: se listan
 -- en el tooltip como desactivadas y la receta solo se consigue comprándola.
 -- Con `noLimited` (opción: no contar con vendedores de stock limitado) el vendedor
@@ -554,6 +556,7 @@ function WP.RecipeSource(recipe, prices, noQuests, noLimited)
     src.repLocked = { faction = recipe.rep[1], need = recipe.rep[2], have = (ES:Standing(recipe.rep[1])) }
     src.best = nil
   end
+  src.buy = src.best
   sourceCache[recipe.scroll] = src
   return WP.WithOwned(src, recipe.scroll)
 end

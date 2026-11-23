@@ -141,7 +141,10 @@ function Shopping.PhaseList(profKey)
   end
   for itemID, w in pairs(wanted) do
     local source, unit = SourceOf(plan, itemID)
-    list.items[#list.items + 1] = { itemID = itemID, need = w.need, expected = w.expected, unit = unit, source = source }
+    -- (un pergamino trae su fuente y su precio: Planner.AddRouteScrolls)
+    if w.source then source, unit = w.source, w.unit or unit end
+    list.items[#list.items + 1] = { itemID = itemID, need = w.need, expected = w.expected, unit = unit, source = source,
+      recipe = w.recipe }
   end
   table.sort(list.items, function(a, b) return a.need * (a.unit or 0) > b.need * (b.unit or 0)
     or (a.need * (a.unit or 0) == b.need * (b.unit or 0) and a.itemID < b.itemID) end)
