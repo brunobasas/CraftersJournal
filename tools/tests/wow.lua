@@ -262,6 +262,11 @@ GetProfessionInfo = function(line)
   if s then return "prof" .. line, nil, s[1], s[2], 0, 0, line end
 end
 
+-- Misiones hechas: QUESTS_DONE[questID] = true (C_QuestLog.IsQuestFlaggedCompleted)
+QUESTS_DONE = {}
+C_QuestLog = { IsQuestFlaggedCompleted = function(id) return QUESTS_DONE[id] == true end }
+IsQuestFlaggedCompleted = function(id) return QUESTS_DONE[id] == true end
+
 BAGS = {}          -- [itemID] = cantidad (GetItemCount)
 REAGENT_BAG = {}   -- [itemID] = cantidad en la bolsa de componentes (la 5, como en Forever)
 KNOWN_SPELLS = {}  -- [spellID] = true (IsPlayerSpell)

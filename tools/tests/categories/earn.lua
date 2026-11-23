@@ -105,6 +105,32 @@ test("recetas para aprender: solo las de tu especialización", function()
   expect(Offered(), "con Tribal Leatherworking no propone aprender Frostsaber Boots (la prueba no prueba nada)")
 end, { state = "full" })
 
+-- Spec recipe-requirements: con el icono de misión de la profesión desactivado, no se
+-- propone aprender una receta que su instructor solo enseña tras una misión que no has
+-- hecho (Discolored Healing Potion: Odd Child / Apothecary Renferrel)
+test("recetas para aprender: sin la misión y con el icono desactivado, no salen las Discolored", function()
+  local LESSER = 1244645
+  local r = ES.Data.Alchemy.recipes[LESSER]
+  expect(r and r.unlock, "Lesser Discolored Healing Potion no pide misión: la prueba no prueba nada")
+  FACTION = "Alliance"
+  SKILLS[ES.Data.Alchemy.skillLine] = { 100, 150 }
+  for _, m in ipairs(r.r) do SetPrice(m[1], 1, 5000) end -- materiales baratos
+  SetPrice(r.out[1], 500000, 40)                          -- lo fabricado, caro
+  local function Offered()
+    for _, idea in ipairs(Ideas().learnable) do
+      if idea.e.id == LESSER then return true end
+    end
+    return false
+  end
+  expect(Offered(), "con el icono de misión activado no propone aprender Lesser Discolored (la prueba no prueba nada)")
+  ES.db.prof = ES.db.prof or {}
+  ES.db.prof.Alchemy = ES.db.prof.Alchemy or {}
+  ES.db.prof.Alchemy.useQuests = false
+  expect(not Offered(), "con el icono desactivado y sin la misión, propone aprender Lesser Discolored")
+  QUESTS_DONE[92110] = true
+  expect(Offered(), "con la misión hecha no propone aprender Lesser Discolored")
+end, { state = "full" })
+
 test("quitar una receta de Ganar dinero y recuperarla", function()
   local res = Ideas()
   local first = expect(res.batch[1], "sin ideas")

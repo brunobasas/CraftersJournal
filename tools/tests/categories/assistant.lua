@@ -120,6 +120,30 @@ test("con una ruta empezada sale con el paso que toca", function()
   note("paso: %s · %s", tostring(f.banner.level._text), title)
 end, { state = "scan" })
 
+-- Spec route-row-actions: el paso de aprender una receta dice cómo quitarla de la ruta
+-- (Discord: quien no quería ir a por las Discolored buscaba cómo en las opciones)
+test("el paso de aprender una receta dice cómo quitarla de la ruta", function()
+  A = ES.Assistant
+  FACTION = "Horde"
+  StartRoute("Alchemy", 85, 125)
+  A.Update()
+  RunTimers()
+  local f, st = A.Frame(), A.State()
+  local idx
+  for i, l in ipairs(st.steps) do
+    if l.learnRow and l.trainerLearn and l.learnID == 1244645 then idx = idx or i end
+  end
+  idx = expect(idx, "el asistente no tiene el paso de aprender Lesser Discolored Healing Potion")
+  if idx ~= st.index then A.Peek(idx) end
+  ResetTooltip()
+  f.banner._scripts.OnEnter(f.banner)
+  local tip = table.concat(TOOLTIP, "\n")
+  local want = ES.L["¿No quieres aprender esta receta? Abre la ruta en la ventana (el icono del addon, arriba en el asistente) y quítala con la X de su fila: la ruta busca otra."]
+  expect(tip:find(want, 1, true), "el tooltip del paso no dice cómo quitarla:\n    %s", tip:gsub("\n", "\n    "))
+  local quest = string.format(ES.L["Antes: una misión de %s"], "Apothecary Renferrel")
+  expect(tip:find(quest, 1, true), "el tooltip del paso no avisa de la misión de Apothecary Renferrel")
+end, { state = "scan" })
+
 test("flechas: ojear el paso siguiente y volver", function()
   A = ES.Assistant
   StartRoute("Tailoring", 1, 75)

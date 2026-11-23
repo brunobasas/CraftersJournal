@@ -1617,6 +1617,264 @@ test("lo que fabricó un paso anterior y falta: se compran sus materiales y se f
   end
 end, { state = "scan" })
 
+-- Spec recipe-trainers: la ruta no aprende Major Discolored Healing Potion antes de 270
+-- (Discord 2026-11-23: a 260 mandaba aprenderla y el instructor no la enseña hasta 270)
+test("Alquimia: Major Discolored Healing Potion no se aprende antes de 270", function()
+  local MAJOR = 1231583
+  local r = expect(ES.Data.Alchemy.recipes[MAJOR], "falta Major Discolored Healing Potion")
+  local opts = ES:PlanOptions("Alchemy", 250, 300)
+  local learn = ES.Planner.LearnSkill(r, opts)
+  expect(learn and learn >= 270, "se puede aprender a %s", tostring(learn))
+  for _, from in ipairs({ 250, 260 }) do
+    for _, st in ipairs(PlanRoute("Alchemy", from, 300).steps) do
+      if st.id == MAJOR then expect(st.from >= 270, "desde %d: paso de Major desde %d", from, st.from) end
+    end
+  end
+end, { state = "scan" })
+
+-- Recetas que el instructor solo enseña tras una misión (spec recipe-requirements) ----
+-- Discord 2026-11-23: Apothecary Renferrel (Horde, Silverpine) no enseña las Discolored
+-- Healing Potion hasta hacer su misión, y la ruta mandaba allí sin decirlo. El jugador
+-- desactivó el icono de misión y no cambió nada
+local LESSER, GREATER = 1244645, 1244647
+local DISCOLORED = { [4508] = true, [1244645] = true, [1244646] = true, [1244647] = true, [1244648] = true, [1231583] = true }
+local QUEST_A, ODD_CHILD, RENFERREL = 92110, 249713, 1937
+
+local function Alchemy(id)
+  ES.Planner.Annotate(ES.Data.Alchemy)
+  return expect(ES.Data.Alchemy.recipes[id], "falta la receta %d", id)
+end
+
+local function DiscoloredSteps(plan)
+  local list = {}
+  for _, st in ipairs(plan.steps) do if DISCOLORED[st.id] then list[#list + 1] = st end end
+  return list
+end
+
+-- Un instructor de Alquimia con estas recetas (por nombre, como en el juego)
+local function OpenAlchemyTrainer(ids, npc)
+  local services = {}
+  for i, id in ipairs(ids) do
+    local r = ES.Data.Alchemy.recipes[id]
+    services[i] = { name = r.nameEN or r.name, kind = "available", cost = 100 + i, skill = r.train or 1 }
+  end
+  GetNumTrainerServices = function() return #services end
+  GetTrainerServiceInfo = function(i) local s = services[i] return s.name, "", s.kind end
+  GetTrainerServiceCost = function(i) return services[i].cost end
+  GetTrainerServiceSkillReq = function(i) return "Alchemy", services[i].skill, true end
+  GetTrainerServiceSkillLine = function() return ES:ProfLabel("Alchemy") end
+  GetTrainerServiceItemLink = function() return nil end
+  GetTrainerServiceTypeFilter = function() return true end
+  SetTrainerServiceTypeFilter = function() end
+  local guid = UnitGUID
+  UnitGUID = function(u) if u == "npc" then return "Creature-0-0-0-0-" .. npc .. "-0000000000" end return guid(u) end
+  FireEvent("TRAINER_SHOW")
+  RunTimers()
+  FireEvent("TRAINER_CLOSED")
+  RunTimers()
+  UnitGUID = guid
+end
+
+test("misiones hechas simuladas: C_QuestLog.IsQuestFlaggedCompleted", function()
+  QUESTS_DONE[QUEST_A] = true
+  expect(C_QuestLog.IsQuestFlaggedCompleted(QUEST_A), "la misión hecha no sale como hecha")
+  expect(not C_QuestLog.IsQuestFlaggedCompleted(QUEST_A + 1), "una misión sin hacer sale como hecha")
+  expect(IsQuestFlaggedCompleted(QUEST_A), "IsQuestFlaggedCompleted no dice lo mismo")
+end)
+
+test("receta que pide una misión: cuándo está desbloqueada", function()
+  local P = ES.Planner
+  local lesser, greater = Alchemy(LESSER), Alchemy(GREATER)
+  -- Sin misión: cualquier receta normal está desbloqueada
+  local plain
+  for id, r in pairs(ES.Data.Alchemy.recipes) do if r.fee and not r.unlock then plain = plain or Alchemy(id) end end
+  expect(P.Unlocked(plain), "%s (sin misión) sale como bloqueada", plain.name)
+  -- Alliance: la misión 92110
+  FACTION = "Alliance"
+  expect(not P.Unlocked(lesser), "sin la misión, Lesser Discolored sale desbloqueada")
+  expect_eq(P.QuestFirst(lesser).npc, ODD_CHILD, "quien da la misión en el Alliance")
+  QUESTS_DONE[QUEST_A] = true
+  expect(P.Unlocked(lesser) and P.Unlocked(greater), "con la misión hecha sigue bloqueada")
+  expect(P.QuestFirst(lesser) == nil, "con la misión hecha sigue pidiéndola")
+  QUESTS_DONE[QUEST_A] = nil
+  -- Ya sabida
+  KNOWN_SPELLS[LESSER] = true
+  expect(P.Unlocked(lesser), "sabida, sigue bloqueada")
+  expect(not P.Unlocked(greater), "saber Lesser desbloquea Greater")
+  KNOWN_SPELLS[LESSER] = nil
+  -- Horde: sin número de misión; la del Alliance no le vale
+  FACTION = "Horde"
+  QUESTS_DONE[QUEST_A] = true
+  expect(not P.Unlocked(lesser), "la misión del Alliance desbloquea a la Horde")
+  local q = expect(P.QuestFirst(lesser), "a la Horde no le pide misión")
+  expect_eq(q.npc, RENFERREL, "quien da la misión en la Horde")
+  expect(q.q == nil, "la misión de la Horde tiene número: actualiza la prueba")
+  -- Vista en la lista del instructor por este personaje
+  ES.db.unlockSeen = { [ES:CharKey()] = { [LESSER] = true } }
+  expect(P.Unlocked(lesser), "vista en el instructor, sigue bloqueada")
+  expect(not P.Unlocked(greater), "ver Lesser desbloquea Greater")
+  ES.db.unlockSeen = nil
+  expect(not P.Unlocked(lesser), "sin unlockSeen guardado, desbloqueada")
+end)
+
+test("el instructor que te lista la receta la desbloquea solo para ese personaje", function()
+  FACTION = "Horde"
+  local lesser = Alchemy(LESSER)
+  SKILLS[ES.Data.Alchemy.skillLine] = { 90, 150 }
+  OpenAlchemyTrainer({ LESSER }, RENFERREL)
+  local me = ES:CharKey()
+  expect(ES.db.unlockSeen and ES.db.unlockSeen[me] and ES.db.unlockSeen[me][LESSER], "no se apunta que el instructor la lista")
+  expect(ES.Planner.Unlocked(lesser), "listada por el instructor, sigue bloqueada")
+  -- Otro personaje de la misma cuenta
+  local name, guid = UnitName, UnitGUID
+  UnitName = function() return "Otro" end
+  UnitGUID = function(u) if u == "player" then return "Player-1-00000002" end end
+  expect(ES:CharKey() ~= me, "la clave del otro personaje es la misma")
+  expect(not ES.Planner.Unlocked(lesser), "otro personaje de la cuenta la tiene desbloqueada")
+  UnitName, UnitGUID = name, guid
+end, { state = "scan" })
+
+test("abrir un instructor antes de la misión no da por quitadas sus recetas", function()
+  FACTION = "Horde"
+  SKILLS[ES.Data.Alchemy.skillLine] = { 90, 150 }
+  -- Un instructor de Alquimia con la lista entera de 80 a 180, sin ninguna Discolored
+  local ids, skipped = {}, nil
+  for id, r in pairs(ES.Data.Alchemy.recipes) do
+    if r.fee and not r.unlock and r.train and r.train >= 80 and r.train <= 180 then
+      if skipped then ids[#ids + 1] = id else skipped = id end -- (una se queda fuera: la prueba lee)
+    end
+  end
+  table.sort(ids)
+  -- Una lectura antigua que las dio por quitadas
+  ES.db.trainerMissing = { [LESSER] = "gone" }
+  OpenAlchemyTrainer(ids, 3184) -- (un instructor de Alquimia cualquiera)
+  local missing = ES.db.trainerMissing or {}
+  expect(missing[skipped], "la receta que no listó el instructor no se da por quitada: la prueba no lee la lista entera")
+  for id in pairs(DISCOLORED) do
+    expect(missing[id] == nil, "%s: el instructor la da por %s", ES.Data.Alchemy.recipes[id].name, tostring(missing[id]))
+  end
+  -- Hecha la misión (vista en Renferrel), se puede usar
+  ES.db.trainerMissing[LESSER] = "gone"
+  OpenAlchemyTrainer({ LESSER }, RENFERREL)
+  ES.db.trainerMissing[LESSER] = "gone" -- (aunque quede una lectura antigua)
+  expect(ES.Planner.LearnSkill(Alchemy(LESSER), ES:PlanOptions("Alchemy", 90, 150)), "desbloqueada, Lesser Discolored no se puede aprender")
+end, { state = "scan" })
+
+test("icono de misión desactivado: sin la misión, la ruta no usa las Discolored", function()
+  FACTION = "Alliance"
+  ES.db.prof = ES.db.prof or {}
+  ES.db.prof.Alchemy = ES.db.prof.Alchemy or {}
+  local with = DiscoloredSteps(PlanRoute("Alchemy", 1, 300))
+  expect(#with > 0, "con el icono activado la ruta 1-300 no usa ninguna Discolored: la prueba no prueba nada")
+  ES.db.prof.Alchemy.useQuests = false
+  local off = DiscoloredSteps(PlanRoute("Alchemy", 1, 300))
+  expect(#off == 0, "con el icono desactivado y sin la misión, la ruta usa %s", off[1] and ES.Data.Alchemy.recipes[off[1].id].name)
+  QUESTS_DONE[QUEST_A] = true
+  local done = DiscoloredSteps(PlanRoute("Alchemy", 1, 300))
+  expect(#done > 0, "con la misión hecha y el icono desactivado, la ruta no usa ninguna Discolored")
+  for _, st in ipairs(done) do expect(st.questFirst == nil, "con la misión hecha, el paso de %s la pide", st.recipe.name) end
+end, { state = "scan" })
+
+test("sin la misión, el paso de aprender una Discolored la pide", function()
+  FACTION = "Alliance"
+  local steps = DiscoloredSteps(PlanRoute("Alchemy", 1, 300))
+  local first
+  for _, st in ipairs(steps) do if st.learnSource == "trainer" then first = first or st end end
+  first = expect(first, "la ruta 1-300 no aprende ninguna Discolored del instructor: la prueba no prueba nada")
+  local q = expect(first.questFirst, "el paso de aprender %s no pide la misión", first.recipe.name)
+  expect_eq(q.q, QUEST_A, "misión del paso")
+  expect_eq(q.npc, ODD_CHILD, "quien la da")
+end, { state = "scan" })
+
+-- La fila «Entrenar» de una Discolored en la ventana, sin la misión
+local function DiscoloredTrainRow(faction)
+  FACTION = faction
+  local page = StartRoute("Alchemy", 85, 125)
+  ES:SelectProfessionView(page, "route")
+  RunTimers()
+  for _, l in ipairs(page.lines or {}) do
+    if l.trainerLearn and DISCOLORED[l.learnID] then return l, page end
+  end
+  local titles = {}
+  for _, l in ipairs(page.lines or {}) do titles[#titles + 1] = Plain(tostring(l.title)) end
+  error("la ruta de Alquimia 85-125 no tiene fila «Entrenar» de una Discolored: " .. table.concat(titles, " | "), 0)
+end
+
+local function RowTooltip(l)
+  ResetTooltip()
+  l.tooltip({ onSkip = l.onSkip })
+  return table.concat(TOOLTIP, "\n")
+end
+
+test("la fila «Entrenar» de la Horde nombra a Apothecary Renferrel y lleva a él", function()
+  local row = DiscoloredTrainRow("Horde")
+  local want = string.format(ES.L["Antes: una misión de %s"], "Apothecary Renferrel")
+  expect(Plain(tostring(row.sub)):find(want, 1, true), "la fila dice «%s», no «%s»", Plain(tostring(row.sub)), want)
+  expect_eq(row.go and row.go(), RENFERREL, "a quién lleva la fila")
+  expect(RowTooltip(row):find(want, 1, true), "el tooltip no dice «%s»", want)
+end, { state = "scan" })
+
+test("la fila «Entrenar» del Alliance nombra «My First Real Potion» y lleva a Odd Child", function()
+  local row = DiscoloredTrainRow("Alliance")
+  local want = string.format(ES.L["Antes: misión «%s»"], "My First Real Potion")
+  expect(Plain(tostring(row.sub)):find(want, 1, true), "la fila dice «%s», no «%s»", Plain(tostring(row.sub)), want)
+  expect_eq(row.go and row.go(), ODD_CHILD, "a quién lleva la fila")
+end, { state = "scan" })
+
+test("entregar la misión quita el aviso del paso", function()
+  local _, page = DiscoloredTrainRow("Alliance")
+  QUESTS_DONE[QUEST_A] = true
+  FireEvent("QUEST_TURNED_IN", QUEST_A, 0, 0)
+  RunTimers()
+  ES:SelectProfessionView(page, "route")
+  RunTimers()
+  local warn = string.format(ES.L["Antes: misión «%s»"], "My First Real Potion")
+  local seen = 0
+  for _, l in ipairs(page.lines or {}) do
+    if l.trainerLearn and DISCOLORED[l.learnID] then
+      seen = seen + 1
+      expect(not l.questFirst and not Plain(tostring(l.sub)):find(warn, 1, true), "tras entregar la misión, la fila sigue diciendo «%s»", Plain(tostring(l.sub)))
+    end
+  end
+  expect(seen > 0, "tras entregar la misión no queda ninguna fila «Entrenar» de una Discolored: la prueba no prueba nada")
+end, { state = "scan" })
+
+test("la clave estable de la ruta cambia al desbloquear una receta con misión", function()
+  FACTION = "Alliance"
+  SKILLS[ES.Data.Alchemy.skillLine] = { 85, 150 }
+  local before = ES:StableRouteKey("Alchemy", 85, 125, 150)
+  QUESTS_DONE[QUEST_A] = true
+  expect(ES:StableRouteKey("Alchemy", 85, 125, 150) ~= before, "la clave no cambia al hacer la misión")
+end)
+
+test("el icono de misión dice que también quita las recetas de instructor que piden una misión", function()
+  SKILLS[ES.Data.Alchemy.skillLine] = { 85, 150 }
+  OpenPage("Alchemy")
+  local page = ProfessionPage("Alchemy")
+  RunTimers()
+  local b = expect(page.questButton, "la página de Alquimia no tiene icono de misión")
+  local function Tip()
+    ResetTooltip()
+    b:GetScript("OnEnter")(b)
+    return table.concat(TOOLTIP, "\n")
+  end
+  local on = ES.L["Las recetas de instructor que piden antes una misión se usan: el paso dice qué misión hacer."]
+  expect(Tip():find(on, 1, true), "activado, el tooltip no dice «%s»", on)
+  b:GetScript("OnClick")(b)
+  RunTimers()
+  local off = ES.L["Tampoco se usan las recetas de instructor que piden antes una misión que no has hecho."]
+  expect(Tip():find(off, 1, true), "desactivado, el tooltip no dice «%s»", off)
+end, { state = "scan" })
+
+-- Spec route-row-actions: la fila de aprender dice que su X la quita (Discord: el
+-- jugador buscaba cómo quitar la receta en las opciones)
+test("la fila «Entrenar» dice en su tooltip que la X quita la receta", function()
+  local row = DiscoloredTrainRow("Alliance")
+  expect(row.onSkip, "la fila «Entrenar» no tiene X")
+  local want = ES.L["X de la fila: quitar esta receta y que la ruta busque otra (se recupera con la fila de recetas quitadas)."]
+  expect(RowTooltip(row):find(want, 1, true), "el tooltip de «%s» no dice «%s»", Plain(tostring(row.title)), want)
+end, { state = "scan" })
+
 -- Pergaminos de la AH en la Lista de compra (spec route-shopping-mode) ---------------
 -- Con «ruta entera» la lista no llevaba los pergaminos: tras comprarlo todo, el asistente
 -- volvía a mandarte a la AH a por cada uno. Para saber cuáles se compran en la AH hace

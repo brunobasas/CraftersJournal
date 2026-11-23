@@ -842,3 +842,19 @@ function WP.Go(pick)
   end
   WP.SetWaypoint(npcID)
 end
+
+-- Aviso de una receta que su instructor solo enseña tras una misión (Planner.QuestFirst;
+-- spec recipe-requirements): «Antes: misión «My First Real Potion»» o, sin saber qué
+-- misión es, «Antes: una misión de Apothecary Renferrel». El nombre, el del juego si lo
+-- tiene (en tu idioma); si no, el de los datos (en inglés)
+function WP.QuestFirstText(q)
+  local name
+  if q.q and C_QuestLog and C_QuestLog.GetTitleForQuestID then
+    local ok, title = pcall(C_QuestLog.GetTitleForQuestID, q.q)
+    if ok and type(title) == "string" and title ~= "" then name = title end
+  end
+  name = name or q.name
+  if name then return string.format(L["Antes: misión «%s»"], name) end
+  local npc = q.npc and WP.NPC(q.npc)
+  return string.format(L["Antes: una misión de %s"], npc and npc.name or "?")
+end

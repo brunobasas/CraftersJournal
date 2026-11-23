@@ -606,6 +606,8 @@ function ES:StableRouteKey(profKey, from, to, cap)
     tostring(settings.noLimited or false), self:KnownStamp(profKey), trainer,
     self.RepStamp and self:RepStamp() or "", tostring(self.AddonVersion and self.AddonVersion()), RecipeCount(profKey),
     self.SpecStamp and self:SpecStamp() or "",
+    -- (recetas que piden una misión ya desbloqueadas: al entregarla cambia la ruta)
+    "u" .. self.Planner.UnlockStamp(self.Data[profKey]),
     -- (recetas sabidas de otras profesiones que fabrican lo que usa: aprender Smelt Thorium)
     self:ForeignProducers(profKey).stamp,
     -- (recetas en enfriamiento: la ruta no las propone hasta que estén listas)
@@ -1506,13 +1508,20 @@ local function CreateRow(parent)
   return row
 end
 
--- Tooltip de una fila con camino: qué es, y el instructor o vendedor más cercano
-local function TravelTooltip(title, text, label, pick)
+-- Tooltip de una fila con camino: qué es, y el instructor o vendedor más cercano.
+-- opts.warn: aviso en naranja (la misión que pide antes la receta); opts.learn: fila de
+-- aprender una receta: si tiene X, dice que la quita (spec route-row-actions: Discord,
+-- quien buscaba cómo quitar una receta en las opciones no veía la X)
+local function TravelTooltip(title, text, label, pick, opts)
   return function(row)
     GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
     GameTooltip:AddLine(title)
     if text then GameTooltip:AddLine(text, 0.8, 0.8, 0.8, true) end
+    if opts and opts.warn then GameTooltip:AddLine(opts.warn, 1, 0.6, 0.2, true) end
     ES.Waypoints.AddToTooltip(label, pick)
+    if opts and opts.learn and row and row.onSkip then
+      GameTooltip:AddLine(L["X de la fila: quitar esta receta y que la ruta busque otra (se recupera con la fila de recetas quitadas)."], 0.6, 0.6, 0.6, true)
+    end
     GameTooltip:Show()
   end
 end
@@ -2002,8 +2011,12 @@ function ES:CreateProfessionPage(page, profKey)
       function() return settings.useQuests ~= false end,
       function() settings.useQuests = settings.useQuests == false end,
       function()
+        -- (y las de instructor que piden antes una misión, como las Discolored Healing
+        -- Potion: spec recipe-requirements)
         return { settings.useQuests ~= false and L["Si una misión de tu bando da la receta, no cuesta oro. Lo que pida entregar no tiene precio: se ve en el tooltip de la receta."]
-          or L["Las recetas solo se consiguen comprándolas (vendedor o Casa de Subastas)."] }
+          or L["Las recetas solo se consiguen comprándolas (vendedor o Casa de Subastas)."],
+          settings.useQuests ~= false and L["Las recetas de instructor que piden antes una misión se usan: el paso dice qué misión hacer."]
+          or L["Tampoco se usan las recetas de instructor que piden antes una misión que no has hecho."] }
       end)
   end
 
@@ -3948,11 +3961,12 @@ local function RouteLines(plan, page, opts)
       lines[#lines + 1] = {
         level = tostring(st.from), -- cuándo toca en la ruta (la columna va en orden)
         icon = "Interface\\Icons\\INV_Misc_Coin_17", title = title, sub = sub,
-        value = string.format("|cff66bbff%d|r", r.favor), go = pick, onSkip = Skip(st.id),
-        tooltip = TravelTooltip(title, sub, L["Vendedor más cercano"], pick),
+        value = string.format("|cff66bbff%d|r", r.favor), go = pick, onSkip = Skip(st.id), learnRow = true,
+        tooltip = TravelTooltip(title, sub, L["Vendedor más cercano"], pick, { learn = true }),
       }
     elseif sourcedLine then
       sourcedLine.onSkip = Skip(st.id)
+      sourcedLine.learnRow = true
       sourcedLine.level = tostring(st.from) -- cuándo toca en la ruta (la columna va en orden)
       lines[#lines + 1] = sourcedLine
     elseif learnSource then
@@ -3965,8 +3979,13 @@ local function RouteLines(plan, page, opts)
       local seenAt = ES.db.trainerFees and ES.db.trainerFees[st.id] and ES.db.trainerFees[st.id].npc
       -- El instructor de su rango no la tiene (ver Ledger:ReadTrainer): en Forever la
       -- enseña el del rango siguiente
-      local upRank = trainer and not seenAt and ES.db.trainerMissing and ES.db.trainerMissing[st.id] == "rank"
-      if trainer and seenAt then
+      -- Su instructor solo la enseña tras una misión que no has hecho (Discolored; spec
+      -- recipe-requirements): el paso lo dice y lleva a quien da la misión
+      local questFirst = trainer and ES.Planner.QuestFirst(r, st.id)
+      local upRank = trainer and not seenAt and not r.unlock and ES.db.trainerMissing and ES.db.trainerMissing[st.id] == "rank"
+      if questFirst then
+        pick, label = function() return questFirst.npc end, L["Da la misión"]
+      elseif trainer and seenAt then
         pick, label = function() return seenAt end, L["Instructor donde la viste"]
       elseif trainer and r.tr then
         -- Los datos dicen quién la enseña (no el del rango por nivel: Green Iron
@@ -3983,17 +4002,21 @@ local function RouteLines(plan, page, opts)
         pick, label = WP.Target("vendor", r.scroll), L["Vendedor más cercano"]
       end
       local title = string.format("%s %s", trainer and L["Entrenar"] or L["Comprar receta:"], r.name)
+      local questText = questFirst and WP.QuestFirstText(questFirst)
       lines[#lines + 1] = {
         level = tostring(st.from), -- cuándo toca en la ruta (se puede aprender desde learnAt)
         icon = trainer and TRAIN_ICON or RECIPE_ICON,
         title = title,
-        sub = upRank and L["Instructor del rango siguiente (el de su rango no la tiene)"] or LEARN_WHERE[st.learnSource] or "?",
+        sub = questText and (ORANGE .. questText .. "|r")
+          or upRank and L["Instructor del rango siguiente (el de su rango no la tiene)"] or LEARN_WHERE[st.learnSource] or "?",
+        questFirst = questFirst or nil, -- (para pruebas y el asistente)
         -- "?": fuente desconocida, o instructor de una receta nueva de Forever (precio sin datos)
         value = (st.learnSource == "unknown" or (r.trainer and not fee)) and (GREY .. "?|r") or Signed(st.fee),
-        go = pick, onSkip = Skip(st.id),
+        go = pick, onSkip = Skip(st.id), learnRow = true,
         trainerLearn = trainer or nil, learnName = r.name, learnAt = learnAt, learnID = st.id, -- (para "aprende X sin irte")
         tooltip = pick and TravelTooltip(title, string.format(L["%s · requiere %s (%d) · cuesta %s"], LEARN_WHERE[st.learnSource] or "?",
-          profName, learnAt, (r.trainer and not fee) and L["precio desconocido"] or ES.Money(st.fee)), label, pick) or nil,
+          profName, learnAt, (r.trainer and not fee) and L["precio desconocido"] or ES.Money(st.fee)), label, pick,
+          { learn = true, warn = questText and (questText .. " " .. L["El instructor no te la enseña hasta que la hagas."]) }) or nil,
       }
     end
     local learnPending = false

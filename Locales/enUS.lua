@@ -1440,4 +1440,10 @@ ES.Locales.en = {
   ["Cómo elige la ruta"] = "How the route is chosen",
   ["De media hacen falta %d y se piden %d (%d de margen), por si los puntos tardan en subir. Si te sobran, sirven para el tramo siguiente."] = "On average %d are needed and %d are asked for (%d extra), in case points come slower. If you have some left, they're used in the next stage.",
   ["La ruta busca la forma más barata de subir contando lo que recuperas: los materiales a precio de la AH (o del vendedor, si sale más barato) menos lo que sacas vendiendo al vendedor lo que fabricas, más el instructor. Por eso a veces elige una receta con materiales más caros: se vende mejor o hacen falta menos fabricaciones. Las guías suelen mirar solo los materiales, así que la ruta puede no coincidir con ellas."] = "The route looks for the cheapest way to level counting what you get back: materials at AH prices (or the vendor's, if cheaper) minus what you get selling what you craft to a vendor, plus the trainer. That's why it sometimes picks a recipe with pricier materials: it sells back for more or needs fewer crafts. Guides usually look only at materials, so the route may not match them.",
+  ["Antes: misión «%s»"] = "First: quest \"%s\"",
+  ["Antes: una misión de %s"] = "First: a quest from %s",
+  ["El instructor no te la enseña hasta que la hagas."] = "The trainer won't teach it until you do it.",
+  ["Las recetas de instructor que piden antes una misión se usan: el paso dice qué misión hacer."] = "Trainer recipes that need a quest first are used: the step tells you which quest to do.",
+  ["Tampoco se usan las recetas de instructor que piden antes una misión que no has hecho."] = "Trainer recipes that need a quest you haven't done aren't used either.",
+  ["¿No quieres aprender esta receta? Abre la ruta en la ventana (el icono del addon, arriba en el asistente) y quítala con la X de su fila: la ruta busca otra."] = "Don't want to learn this recipe? Open the route in the window (the addon icon, at the top of the assistant) and remove it with the X on its row: the route picks another.",
 }

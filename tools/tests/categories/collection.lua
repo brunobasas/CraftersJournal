@@ -83,6 +83,33 @@ test("una receta de especialización que no tienes no sale como «puedes aprende
   expect(Entry().learnableNow, "con Goblin Engineering, Goblin Rocket Helmet no sale como «puedes aprenderla ya»")
 end)
 
+-- Spec recipe-requirements: su instructor no enseña las Discolored Healing Potion hasta
+-- hacer una misión (Discord 2026-11-23). La ficha lo dice y no sale como «puedes aprenderla ya»
+test("una Discolored sin la misión: la ficha dice qué misión es y no se puede aprender ya", function()
+  local LESSER = 1244645
+  FACTION = "Horde"
+  SKILLS[ES.Data.Alchemy.skillLine] = { 100, 150 }
+  OpenPage("patterns")
+  ES:SelectPage("pattern:Alchemy")
+  RunTimers()
+  local frame = ES:GetMainFrame().pages["pattern:Alchemy"].collectionFrame
+  expect(frame and frame.data, "la colección de Alquimia no se ha pintado")
+  local e
+  for _, x in ipairs(frame.data.entries) do if x.id == LESSER then e = x end end
+  e = expect(e, "Lesser Discolored Healing Potion no está en la colección")
+  expect(not e.learnableNow, "sin la misión sale como «puedes aprenderla ya»")
+  expect(e.questFirst and e.questFirst.npc == 1937, "no pide la misión de Apothecary Renferrel")
+  ES:SelectCollectionEntry(frame, e)
+  RunTimers()
+  local want = string.format(ES.L["Antes: una misión de %s"], "Apothecary Renferrel")
+  expect(AllText():find(want, 1, true), "la ficha no dice «%s»", want)
+  -- Vista en la lista de Renferrel: ya se puede aprender
+  ES.db.unlockSeen = { [ES:CharKey()] = { [LESSER] = true } }
+  for _, x in ipairs(ES.Collection:Build("Alchemy").entries) do
+    if x.id == LESSER then expect(x.learnableNow and not x.questFirst, "desbloqueada, no sale como «puedes aprenderla ya»") end
+  end
+end)
+
 -- Spec recipe-search: en español la receta 6695 se llama «Mochila negra de seda» (como en
 -- la ventana de profesión), pero lo que fabrica es la «Talega de seda negra» (5765)
 local function SearchTailoring(text)

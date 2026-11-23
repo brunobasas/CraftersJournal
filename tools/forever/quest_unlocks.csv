@@ -1,0 +1,15 @@
+# Recetas de instructor que el instructor solo enseña después de una misión (spec recipe-requirements).
+# faction: A o H. quest: ID de la misión que hay que tener hecha y quest_name su nombre en inglés (vacíos si aún no se sabe). npc: quién da la misión.
+spell,name,faction,quest,quest_name,npc,source
+4508,Minor Discolored Healing Potion,A,92110,My First Real Potion,249713,Wowhead Forever quest 92110 My First Real Potion (Odd Child; rewards Recipe: Minor Discolored Healing Potion) 2026-11-23
+4508,Minor Discolored Healing Potion,H,,,1937,Discord report 2026-11-23 (Apothecary Renferrel does not teach the Discolored potions until you do his quest; quest ID unknown)
+1244645,Lesser Discolored Healing Potion,A,92110,My First Real Potion,249713,Same chain as Minor Discolored (Odd Child teaches it after My First Real Potion) 2026-11-23
+1244645,Lesser Discolored Healing Potion,H,,,1937,Discord report 2026-11-23 (Apothecary Renferrel would not teach it before his quest)
+1244646,Discolored Healing Potion,A,92110,My First Real Potion,249713,Same chain as Minor Discolored 2026-11-23
+1244646,Discolored Healing Potion,H,,,1937,Same chain as Minor Discolored 2026-11-23
+1244647,Greater Discolored Healing Potion,A,92110,My First Real Potion,249713,Same chain as Minor Discolored 2026-11-23
+1244647,Greater Discolored Healing Potion,H,,,1937,Same chain as Minor Discolored 2026-11-23
+1244648,Superior Discolored Healing Potion,A,92110,My First Real Potion,249713,Same chain as Minor Discolored 2026-11-23
+1244648,Superior Discolored Healing Potion,H,,,1937,Same chain as Minor Discolored 2026-11-23
+1231583,Major Discolored Healing Potion,A,92110,My First Real Potion,249713,Same chain as Minor Discolored 2026-11-23
+1231583,Major Discolored Healing Potion,H,,,1937,Same chain as Minor Discolored 2026-11-23

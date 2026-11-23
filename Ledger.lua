@@ -235,6 +235,20 @@ function Ledger:ReadTrainer()
         -- solo en sitios concretos, como Stranglethorn)
         ES.db.trainerFees[id] = { cost = cost, skill = skill, rep = rep, prof = key, time = time(), npc = npc or (old and old.npc) }
         listed[id] = true
+        -- Receta que el instructor solo enseña tras una misión (Discolored): si te la
+        -- lista, ya la tienes desbloqueada. Por personaje (lo guardado es de la cuenta)
+        local char = r and r.unlock and ES:CharKey()
+        if char then
+          if type(ES.db.unlockSeen) ~= "table" then ES.db.unlockSeen = {} end
+          local mine = ES.db.unlockSeen[char]
+          if type(mine) ~= "table" then mine = {} end
+          ES.db.unlockSeen[char] = mine
+          if not mine[id] then
+            mine[id] = true
+            changed = changed + 1
+            changedProfs[key] = true
+          end
+        end
         if skill and skill > 0 then
           top = math.max(top, skill)
           low = math.min(low, skill)
@@ -276,7 +290,9 @@ function Ledger:ReadTrainer()
     ES.db.trainerMissing = ES.db.trainerMissing or {}
     local missing = ES.db.trainerMissing
     for id, r in pairs(ES.Data[prof].recipes) do
-      local trainerRecipe = (r.fee or r.trainer) and not r.scroll and not r.basic and not r.favor
+      -- (las que piden una misión, no: solo las enseñan unos PNJ concretos y antes de la
+      -- misión ni ellos las listan; que no salgan no dice que Forever las quitara)
+      local trainerRecipe = (r.fee or r.trainer) and not r.scroll and not r.basic and not r.favor and not r.unlock
       local level = r.train or 0
       local now = trainerRecipe and not s.ids[id] and Covered(level) and (Above(level) and "gone" or "rank") or nil
       if missing[id] ~= now then

@@ -562,6 +562,7 @@ local function Paint()
   banner.ahItem = active and line.ahItem or nil
   banner.item = line and line.item or nil
   banner.tooltip = line and line.tooltip or nil
+  banner.learnRow = line and line.learnRow and not state.completed or nil
   if state.completed then
     banner.onClick = function() A.OpenWindow("profit") end -- (lo que sacas vendiendo lo fabricado)
   elseif peeking then
@@ -1016,6 +1017,13 @@ local function CreateUI()
     -- Instructor o vendedor: tu clic le pone la estrella si está cerca (Waypoints.lua)
     if self.go and not self.onClick then ES.Waypoints.HoverRow(self) end
     if self.tooltip then self.tooltip(self) end
+    -- Paso de aprender una receta: cómo quitarla de la ruta (spec route-row-actions;
+    -- Discord: quien no quería ir a por ella la buscaba en las opciones)
+    if self.learnRow then
+      if not self.tooltip then GameTooltip:SetOwner(self, "ANCHOR_TOP") end
+      GameTooltip:AddLine(L["¿No quieres aprender esta receta? Abre la ruta en la ventana (el icono del addon, arriba en el asistente) y quítala con la X de su fila: la ruta busca otra."], 0.6, 0.6, 0.6, true)
+      GameTooltip:Show()
+    end
   end)
   banner:SetScript("OnLeave", function() GameTooltip:Hide() end)
   -- Se arrastra también desde el banner, si no está bloqueado

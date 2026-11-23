@@ -144,6 +144,9 @@ FOREVER_FEES = HERE / "forever" / "trainer_fees.csv"
 PRIVATE = Path(os.environ.get("CJ_PRIVATE_DATA") or (HERE.parent.parent / "CraftersJournal-private"))
 FOREVER_TRAINERS = PRIVATE / "forever_trainers.csv"
 FOREVER_SELL = HERE / "forever" / "sell_prices.csv"
+# Recetas que el instructor solo enseña tras una misión (Discolored Healing Potion: Odd
+# Child y Apothecary Renferrel), con la misión y quién la da por bando
+QUEST_UNLOCKS = HERE / "forever" / "quest_unlocks.csv"
 # Recetas que se compran con Merchant's Favor (tools/forever/fetch_merchants_favor.py)
 MERCHANTS_FAVOR = HERE / "forever" / "merchants_favor.csv"
 
@@ -196,6 +199,19 @@ def favor_key(name):
     """Nombre para cruzar con merchants_favor.csv: en minúsculas y sin la "s" final de
     "Shoulders" (el cliente definitivo renombró "Mender's Mail Shoulder" a "...Shoulders")."""
     return re.sub(r"shoulders$", "shoulder", (name or "").lower())
+
+
+def quest_unlocks():
+    """{spell: {"A"/"H": (misión o None, su nombre o None, PNJ que la da)}} de QUEST_UNLOCKS."""
+    out = defaultdict(dict)
+    with open(QUEST_UNLOCKS, encoding="utf-8") as f:
+        for r in csv.DictReader(line for line in f if not line.startswith("#")):
+            side = r["faction"].strip()
+            if side not in ("A", "H"):
+                raise SystemExit(f"{QUEST_UNLOCKS.name}: bando '{side}' en {r['name']} (A o H)")
+            quest = r["quest"].strip()
+            out[int(r["spell"])][side] = (int(quest) if quest else None, r["quest_name"].strip() or None, int(r["npc"]))
+    return out
 
 
 def merchants_favor(prof):
@@ -722,6 +738,8 @@ def main():
         "-- bop = lo fabricado se liga al recogerlo: no se puede vender en la AH (sí al vendedor)",
         "-- favor / favorRep = se compra con Merchant's Favor en el campamento de tu bando, y la reputación que pide",
         "-- train ajustado a Forever: nivel de Classic menos lo que Forever bajó la amarilla de esa receta",
+        "-- unlock = { A = { q = misión, name = su nombre, npc = quién la da }, H = {...} }: el instructor solo la",
+        "--   enseña tras esa misión (sin q ni name: aún no se sabe qué misión es)",
         "-- basic = se aprende sola al coger la profesión; trainer = de instructor sin precio conocido",
         "--   (receta nueva de Forever que no está en CMaNGOS: se aprende al ponerse amarilla)",
         f"ES.Data.{prof} = {{",
@@ -735,6 +753,7 @@ def main():
     out.append("  trainers = { " + ", ".join("{ %d, %d }" % t for t in trainers) + " },")
     out.append("  recipes = {")
     fees, scrolls = c["fees"], c["scrolls"]
+    unlocks = quest_unlocks()
     favor = merchants_favor(prof)
     favor_found = set()
     for sid in sorted(recipes, key=lambda s: (thresholds[s][0], s)):
@@ -829,6 +848,15 @@ def main():
             # Solo las de nivel bajo: las altas sin instructor ni pergamino son de misión o
             # reputación (Gordok Ogre Suit, Mooncloth Boots...) y no se pueden dar por instructor
             parts.append(f"trainer = true, train = {t[1]}")
+        if sid in unlocks:
+            sides = []
+            for side in ("A", "H"):
+                if side in unlocks[sid]:
+                    quest, qname, npc = unlocks[sid][side]
+                    qname = qname.replace("\\", "\\\\").replace('"', '\\"') if qname else None
+                    sides.append(f"{side} = {{ " + (f"q = {quest}, " if quest else "")
+                                 + (f'name = "{qname}", ' if qname else "") + f"npc = {npc} }}")
+            parts.append("unlock = { " + ", ".join(sides) + " }")
         mf = favor.get(favor_key(c["names"].get(sid)))
         if mf:
             favor_found.add(favor_key(c["names"][sid]))

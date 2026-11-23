@@ -120,6 +120,8 @@ local BROKEN = {
   { "idioma desconocido", function(db) db.lang = "xx" end },
   { "página guardada que ya no existe", function(db) db.lastPage = "auctions" end },
   { "minimapa que no es una tabla", function(db) db.minimap = true end },
+  { "recetas desbloqueadas que no son una tabla", function(db) db.unlockSeen = true end },
+  { "recetas desbloqueadas de un personaje que no son una tabla", function(db) db.unlockSeen = { ["Bruno-Player-1-00000001"] = 5 } end },
 }
 
 for _, case in ipairs(BROKEN) do
@@ -145,6 +147,7 @@ local ARGS = {
   CURRENCY_DISPLAY_UPDATE = { 3402, 10, 1 },
   NEW_RECIPE_LEARNED = { 2152 },
   LEARNED_SPELL_IN_TAB = { 2152, 1 },
+  QUEST_TURNED_IN = { 92110, 0, 0 },
   TRAIT_CONFIG_UPDATED = { 1 },
   TRAIT_NODE_CHANGED = { 1 },
   TRAIT_TREE_CHANGED = { 1 },

@@ -132,7 +132,10 @@ function Collection:Build(profKey)
     -- (las que Forever no enseña no tienen nivel de instructor: el de ponerse amarilla)
     local level = r.train or (r.gone and r.t and r.t[2]) or (r.t and r.t[1]) or 1
     e.level = level
-    if not e.known and skill and skill >= level and e.repOK and e.specOK then
+    -- Su instructor solo la enseña tras una misión que no has hecho (Discolored): aún
+    -- no se puede aprender, y la ficha dice qué misión es (spec recipe-requirements)
+    e.questFirst = not e.known and ES.Planner.QuestFirst(r, e.id) or nil
+    if not e.known and not e.questFirst and skill and skill >= level and e.repOK and e.specOK then
       local best
       for _, s in ipairs(e.sources) do
         local here = s.kind == "trainer" or s.kind == "quest" or s.kind == "basic"

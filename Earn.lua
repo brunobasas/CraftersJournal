@@ -342,15 +342,21 @@ function Earn:Clear(keepMarket)
 end
 
 local function RecipeMarketFor(profKey, data, scan)
+  -- Icono de misión de la profesión desactivado: tampoco se proponen las recetas de
+  -- misión ni las de instructor que piden antes una misión que no has hecho (spec
+  -- recipe-requirements); lo desbloqueado va en la clave
+  local settings = ES.db.prof and ES.db.prof[profKey]
+  local noQuests = settings and settings.useQuests == false or nil
   local key = table.concat({ scan and scan.time or 0, ES:RealmKey(), ES.repStamp or "", tostring(ES:IsNeutralAH()),
-    ES.Market:Index().stamp or "", ES.SpecStamp and ES:SpecStamp() or "" }, ":")
+    ES.Market:Index().stamp or "", ES.SpecStamp and ES:SpecStamp() or "", tostring(noQuests),
+    ES.Planner.UnlockStamp(data) }, ":")
   local m = marketMemo[profKey]
   if m and m.key == key then
     m.ctx.used = {} -- (lo que compró el lote anterior no cuenta: se vuelve a repartir)
     return m.entries, m.ctx
   end
   local entries, ctx = ES.Planner:RecipeMarket(data, {
-    hours = 24, neutral = ES:IsNeutralAH(),
+    hours = 24, neutral = ES:IsNeutralAH(), noQuests = noQuests,
     sourcedScrolls = ES.Waypoints.SOURCED_PROFESSIONS[profKey] or nil,
     -- Lo intermedio, solo con recetas que sabes: lo que no sepas hacer se compra hecho
     knownProducers = true,

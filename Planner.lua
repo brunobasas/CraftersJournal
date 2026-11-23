@@ -1024,6 +1024,59 @@ local function Known(recipe)
   return recipe.id and ES.IsRecipeKnown and ES:IsRecipeKnown(recipe.id)
 end
 
+-- Recetas que el instructor solo enseña tras una misión (recipe.unlock; spec
+-- recipe-requirements). Discord 2026-11-23: Apothecary Renferrel no enseña las
+-- Discolored Healing Potion hasta hacer su misión y la ruta mandaba allí sin decirlo.
+-- La misión y quién la da en tu bando ({ q = misión o nil, npc = PNJ }), o nil
+local SIDE = { Alliance = "A", Horde = "H" }
+function Planner.UnlockFor(recipe)
+  local u = recipe.unlock
+  if not u then return nil end
+  local faction = UnitFactionGroup and UnitFactionGroup("player")
+  return faction and SIDE[faction] and u[SIDE[faction]] or nil
+end
+
+local function QuestDone(questID)
+  if not questID then return false end
+  local fn = (C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted) or IsQuestFlaggedCompleted
+  if not fn then return false end
+  local ok, done = pcall(fn, questID)
+  return ok and done == true
+end
+
+-- ¿Ya te la enseña su instructor? Sí si no pide misión en tu bando, si la misión está
+-- hecha, si ya la sabes o si un instructor se la ha listado a este personaje (Ledger:
+-- ReadTrainer, CraftersJournalDB.unlockSeen: por personaje, porque lo guardado es de
+-- toda la cuenta). Lo último sirve sin saber el número de la misión (la de la Horde)
+function Planner.Unlocked(recipe, id)
+  local mine = Planner.UnlockFor(recipe)
+  if not mine then return true end
+  id = id or recipe.id
+  if id and ES.IsRecipeKnown and ES:IsRecipeKnown(id) then return true end
+  if QuestDone(mine.q) then return true end
+  local char = ES.CharKey and ES:CharKey()
+  local all = char and ES.db and ES.db.unlockSeen
+  local seen = type(all) == "table" and all[char]
+  return type(seen) == "table" and id ~= nil and seen[id] == true
+end
+
+-- La misión que falta para que su instructor te la enseñe ({ q, npc } de tu bando), o
+-- nil si no pide ninguna o ya está desbloqueada
+function Planner.QuestFirst(recipe, id)
+  if not (recipe and recipe.unlock) or Planner.Unlocked(recipe, id) then return nil end
+  return Planner.UnlockFor(recipe)
+end
+
+-- Cuántas recetas con misión de la profesión están ya desbloqueadas (va en la clave de
+-- la ruta: al entregar la misión cambia y la ruta se recalcula)
+function Planner.UnlockStamp(data)
+  local n = 0
+  for id, r in pairs(data and data.recipes or {}) do
+    if r.unlock and Planner.Unlocked(r, id) then n = n + 1 end
+  end
+  return n
+end
+
 -- Añade a `out` (el de RouteNeed) los pergaminos de receta que piden los pasos entre
 -- `from` y `to` y se compran en la AH: uno por receta que aún no sabes (spec
 -- route-shopping-mode). Con "ruta entera", tras comprarlo todo, el asistente volvía a
@@ -1132,8 +1185,12 @@ function Planner.LearnSkill(recipe, opts)
   -- De especialización (Goblin, Armorsmith...): solo si la tienes
   if recipe.spec and not (ES.HasSpecialization and ES:HasSpecialization(recipe.spec)) then return nil end
   -- Ningún instructor visto la enseña (Forever la quitó; ver Ledger:ReadTrainer)
-  if recipe.id and ES.db and ES.db.trainerMissing and ES.db.trainerMissing[recipe.id] == "gone" then return nil end
+  -- (las que piden una misión no: una lectura de antes podía darlas por quitadas)
+  if recipe.id and not recipe.unlock and ES.db and ES.db.trainerMissing and ES.db.trainerMissing[recipe.id] == "gone" then return nil end
   if recipe.rep and not ES:RepMet(recipe.rep) then return nil end -- te falta reputación
+  -- Su instructor solo la enseña tras una misión que no has hecho: con el icono de
+  -- misión desactivado, no se usa (con él, sí: el paso avisa de la misión)
+  if recipe.unlock and opts.noQuests and not Planner.Unlocked(recipe) then return nil end
   -- Merchant's Favor: se compra con fichas y reputación del campamento, no con oro.
   -- Solo con su icono activado (opts.useFavor; por defecto no): entonces cuesta 0 oro
   if recipe.favor then return opts.useFavor and (recipe.train or 1) or nil end
@@ -1175,6 +1232,9 @@ function Planner.LearnCost(ctx, recipe)
   -- De una especialización que no tienes (Tribal, Goblin...): no se puede aprender, ni
   -- se propone en Ganar dinero (como en LearnSkill)
   if recipe.spec and not (ES.HasSpecialization and ES:HasSpecialization(recipe.spec)) then return 0, "spec" end
+  -- Pide una misión que no has hecho y el icono de misión está desactivado: no se
+  -- puede aprender (como en LearnSkill; tampoco sale en Ganar dinero)
+  if recipe.unlock and ctx.opts and ctx.opts.noQuests and not Planner.Unlocked(recipe) then return 0, "locked" end
   local fee = Fee(recipe)
   if fee then return fee, "trainer" end
   if recipe.trainer then return 0, "trainer" end -- de instructor, precio desconocido (se pinta "?")
@@ -3135,6 +3195,8 @@ function Planner:Plan(data, opts)
     local firstUse = not feePaid[st.id]
     st.fee = firstUse and inf.learnCost or 0
     st.learnSource = firstUse and inf.learnSource or nil
+    -- Antes hay que hacer la misión que la desbloquea (el paso avisa y lleva a quien la da)
+    st.questFirst = firstUse and st.learnSource ~= "known" and Planner.QuestFirst(st.recipe) or nil
     feePaid[st.id] = true
     st.total = st.crafts * (st.unitCost - st.unitValue) + st.fee
 

@@ -370,6 +370,44 @@ test("precios de vendedor: enteros positivos", function()
   Report(bad, "precios raros")
 end, { boot = false })
 
+-- Spec recipe-trainers. Discord 2026-11-23: a 260 la ruta mandaba aprender Major
+-- Discolored Healing Potion y el instructor no la enseña hasta 270 (My Forever Recipe
+-- Book decía 250; corregido en tools/forever/trainer_fees.csv)
+test("Major Discolored Healing Potion se aprende a 270", function()
+  local r = expect(ES.Data.Alchemy.recipes[1231583], "falta Major Discolored Healing Potion")
+  expect_eq(r.train, 270, "nivel de aprenderla")
+end, { boot = false })
+
+-- Spec recipe-requirements. Discord 2026-11-23: Apothecary Renferrel no enseña las
+-- Discolored Healing Potion hasta hacer su misión, y la ruta mandaba allí sin decirlo
+test("las seis Discolored Healing Potion piden antes la misión de su instructor", function()
+  local CHAIN = { 4508, 1244645, 1244646, 1244647, 1244648, 1231583 }
+  for _, id in ipairs(CHAIN) do
+    local r = expect(ES.Data.Alchemy.recipes[id], "falta la receta %d", id)
+    local u = r.unlock
+    expect(u and u.A and u.H, "%s: sin misión de los dos bandos", r.name)
+    expect_eq(u.A.q, 92110, r.name .. ": misión del Alliance")
+    expect_eq(u.A.npc, 249713, r.name .. ": quién la da en el Alliance (Odd Child)")
+    expect_eq(u.H.npc, 1937, r.name .. ": quién la da en la Horde (Apothecary Renferrel)")
+  end
+end, { boot = false })
+
+test("recetas con misión: quien da la misión tiene sitio", function()
+  local bad = {}
+  Each(function(prof, id, r)
+    for side, u in pairs(r.unlock or {}) do
+      local npc = ES.Data.NPCs and ES.Data.NPCs[u.npc]
+      if type(u.npc) ~= "number" or not npc then
+        bad[#bad + 1] = string.format("%s %d %s (%s): PNJ %s", prof, id, tostring(r.name), side, tostring(u.npc))
+      end
+      if u.q ~= nil and type(u.q) ~= "number" then
+        bad[#bad + 1] = string.format("%s %d %s (%s): misión %s", prof, id, tostring(r.name), side, tostring(u.q))
+      end
+    end
+  end)
+  Report(bad, "recetas con misión sin PNJ conocido")
+end, { boot = false })
+
 test("la prueba de los colores detecta una receta desordenada", function()
   -- (en una copia en memoria: así se sabe que la de arriba de verdad comprueba)
   local id, r = next(ES.Data.Cooking.recipes)

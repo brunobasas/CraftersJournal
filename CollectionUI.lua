@@ -576,6 +576,8 @@ function ES:RenderCollectionDetail(frame)
   local status
   if e.known then status = GREEN .. CHECK .. " " .. L["La tienes"] .. "|r"
   elseif e.learnableNow then status = ORANGE .. L["Puedes aprenderla ya"] .. "|r"
+  -- Su instructor no te la enseña hasta hacer una misión (spec recipe-requirements)
+  elseif e.questFirst then status = ORANGE .. ES.Waypoints.QuestFirstText(e.questFirst) .. "|r"
   elseif frame.data.skill and frame.data.skill < e.level then status = GREY .. string.format(L["Te falta: necesitas %s %d"], profName, e.level) .. "|r"
   else status = GREY .. L["Te falta"] .. "|r" end
   if #e.alts > 0 then status = status .. GREY .. " · |r" .. string.format(L["La tiene tu personaje: %s"], table.concat(e.alts, ", ")) end
@@ -584,6 +586,15 @@ function ES:RenderCollectionDetail(frame)
   -- Dónde conseguirla: cada fuente, con clic para marcar el camino
   Section(d, L["Dónde conseguirla"])
   local WP = ES.Waypoints
+  -- Antes, la misión: quien la da, con clic para marcar el camino
+  local qf = e.questFirst
+  if qf then
+    local giver = qf.npc and WP.NPC(qf.npc)
+    KV(d, WP.QuestFirstText(qf) .. (giver and (GREY .. " · " .. giver.name .. "|r") or ""),
+      giver and giver.map and ("|cff80c0ff" .. L["Marcar en el mapa"] .. "|r") or "",
+      giver and giver.map and { onClick = function() WP.SetWaypoint(qf.npc) end,
+        hint = L["Clic: marcar el camino (mapa, minimapa y seguimiento)."] } or nil)
+  end
   for _, s in ipairs(e.sources) do
     local go = GoFor(e, s)
     local cost = s.cost and s.cost > 0 and ES.Money(s.cost) or ""

@@ -12,6 +12,8 @@ ES.Data = ES.Data or {}
 -- bop = lo fabricado se liga al recogerlo: no se puede vender en la AH (sí al vendedor)
 -- favor / favorRep = se compra con Merchant's Favor en el campamento de tu bando, y la reputación que pide
 -- train ajustado a Forever: nivel de Classic menos lo que Forever bajó la amarilla de esa receta
+-- unlock = { A = { q = misión, name = su nombre, npc = quién la da }, H = {...} }: el instructor solo la
+--   enseña tras esa misión (sin q ni name: aún no se sabe qué misión es)
 -- basic = se aprende sola al coger la profesión; trainer = de instructor sin precio conocido
 --   (receta nueva de Forever que no está en CMaNGOS: se aprende al ponerse amarilla)
 ES.Data.Alchemy = {
@@ -45,7 +47,7 @@ ES.Data.Alchemy = {
     [3452] = { name = "Mana Potion", t = { 1, 180, 200, 220 }, fee = 5000, train = 160, r = { { 3820, 1 }, { 3356, 1 }, { 3372, 1 } }, out = { 3827, 1 }, oq = 1 },
     [3453] = { name = "Draught of Detect Lesser Invisibility", t = { 1, 215, 235, 255 }, scroll = 3832, train = 195, sq = 2, r = { { 3358, 1 }, { 3818, 1 }, { 3372, 1 } }, out = { 3828, 1 }, oq = 1 },
     [3454] = { name = "Frost Oil", t = { 1, 220, 240, 260 }, scroll = 14634, train = 200, scrollPrice = 2500, sq = 2, r = { { 3358, 4 }, { 3819, 2 }, { 3372, 1 } }, out = { 3829, 2 }, oq = 1 },
-    [4508] = { name = "Minor Discolored Healing Potion", t = { 1, 55, 75, 95 }, fee = 10, train = 50, tr = { 1937, 249713 }, r = { { 3371, 1 }, { 2447, 1 }, { 730, 1 } }, out = { 4596, 1 }, oq = 1 },
+    [4508] = { name = "Minor Discolored Healing Potion", t = { 1, 55, 75, 95 }, fee = 10, train = 50, tr = { 1937, 249713 }, unlock = { A = { q = 92110, name = "My First Real Potion", npc = 249713 }, H = { npc = 1937 } }, r = { { 3371, 1 }, { 2447, 1 }, { 730, 1 } }, out = { 4596, 1 }, oq = 1 },
     [4942] = { name = "Lesser Stoneshield Potion", t = { 1, 230, 250, 270 }, scroll = 4624, train = 215, sq = 1, r = { { 3858, 1 }, { 3821, 1 }, { 3372, 1 } }, out = { 4623, 1 }, oq = 1 },
     [6617] = { name = "Rage Potion", t = { 1, 90, 110, 130 }, scroll = 5640, train = 60, scrollPrice = 100, sq = 1, r = { { 5635, 1 }, { 2450, 1 }, { 3371, 1 } }, out = { 5631, 1 }, oq = 1 },
     [6618] = { name = "Great Rage Potion", t = { 1, 195, 215, 235 }, scroll = 5643, train = 175, scrollPrice = 2000, sq = 1, r = { { 5637, 1 }, { 3356, 1 }, { 3372, 1 } }, out = { 5633, 1 }, oq = 1 },
@@ -136,12 +138,12 @@ ES.Data.Alchemy = {
     [435971] = { name = "Mildly Irradiated Rejuvenation Potion", t = { 1, 225, 230, 235 }, scroll = 215163, train = 225, sq = 4, r = { { 213371, 1 }, { 2456, 1 }, { 215430, 3 }, { 8925, 5 } }, out = { 215162, 5 }, oq = 1 },
     [1213544] = { name = "Flask of Unyielding Sorrow", t = { 1, 315, 322, 330 }, scroll = 234252, train = 305, sq = 1, r = { { 16203, 1 }, { 234012, 1 }, { 13511, 1 }, { 8925, 1 } }, tool = 12, out = { 233966, 1 }, oq = 1 },
     [1230564] = { name = "Mana Well", t = { 1, 20, 20, 20 }, fee = 0, train = 20, r = { { 2447, 1 }, { 3371, 1 } }, out = { 279956, 1 }, oq = 1 },
-    [1231583] = { name = "Major Discolored Healing Potion", t = { 1, 290, 310, 330 }, fee = 10000, train = 250, tr = { 1937, 249713 }, r = { { 8925, 1 }, { 13466, 1 }, { 730, 1 } }, out = { 241650, 1 }, oq = 1 },
+    [1231583] = { name = "Major Discolored Healing Potion", t = { 1, 290, 310, 330 }, fee = 10000, train = 270, tr = { 1937, 249713 }, unlock = { A = { q = 92110, name = "My First Real Potion", npc = 249713 }, H = { npc = 1937 } }, r = { { 8925, 1 }, { 13466, 1 }, { 730, 1 } }, out = { 241650, 1 }, oq = 1 },
     [1244421] = { name = "Distilled Firewater", t = { 1, 260, 265, 270 }, scroll = 236754, train = 250, sq = 2, r = { { 3819, 4 }, { 8846, 2 }, { 3372, 1 } }, out = { 246948, 1 }, oq = 1 },
-    [1244645] = { name = "Lesser Discolored Healing Potion", t = { 1, 85, 105, 125 }, fee = 100, train = 85, tr = { 1937, 249713 }, r = { { 3371, 1 }, { 2450, 1 }, { 730, 1 } }, out = { 247239, 1 }, oq = 1 },
-    [1244646] = { name = "Discolored Healing Potion", t = { 1, 135, 155, 175 }, fee = 500, train = 135, tr = { 1937, 249713 }, r = { { 3372, 1 }, { 2453, 1 }, { 730, 1 } }, out = { 247240, 1 }, oq = 1 },
-    [1244647] = { name = "Greater Discolored Healing Potion", t = { 1, 175, 195, 215 }, fee = 1500, train = 175, tr = { 1937, 249713 }, r = { { 3372, 1 }, { 3356, 1 }, { 730, 1 } }, out = { 247241, 1 }, oq = 1 },
-    [1244648] = { name = "Superior Discolored Healing Potion", t = { 1, 230, 250, 270 }, fee = 5000, train = 230, tr = { 1937, 249713 }, r = { { 8925, 1 }, { 8838, 1 }, { 730, 1 } }, out = { 247242, 1 }, oq = 1 },
+    [1244645] = { name = "Lesser Discolored Healing Potion", t = { 1, 85, 105, 125 }, fee = 100, train = 85, tr = { 1937, 249713 }, unlock = { A = { q = 92110, name = "My First Real Potion", npc = 249713 }, H = { npc = 1937 } }, r = { { 3371, 1 }, { 2450, 1 }, { 730, 1 } }, out = { 247239, 1 }, oq = 1 },
+    [1244646] = { name = "Discolored Healing Potion", t = { 1, 135, 155, 175 }, fee = 500, train = 135, tr = { 1937, 249713 }, unlock = { A = { q = 92110, name = "My First Real Potion", npc = 249713 }, H = { npc = 1937 } }, r = { { 3372, 1 }, { 2453, 1 }, { 730, 1 } }, out = { 247240, 1 }, oq = 1 },
+    [1244647] = { name = "Greater Discolored Healing Potion", t = { 1, 175, 195, 215 }, fee = 1500, train = 175, tr = { 1937, 249713 }, unlock = { A = { q = 92110, name = "My First Real Potion", npc = 249713 }, H = { npc = 1937 } }, r = { { 3372, 1 }, { 3356, 1 }, { 730, 1 } }, out = { 247241, 1 }, oq = 1 },
+    [1244648] = { name = "Superior Discolored Healing Potion", t = { 1, 230, 250, 270 }, fee = 5000, train = 230, tr = { 1937, 249713 }, unlock = { A = { q = 92110, name = "My First Real Potion", npc = 249713 }, H = { npc = 1937 } }, r = { { 8925, 1 }, { 8838, 1 }, { 730, 1 } }, out = { 247242, 1 }, oq = 1 },
     [1245246] = { name = "Minor Arcane Elixir", t = { 1, 10, 12, 15 }, basic = true, r = { { 2447, 1 }, { 3371, 1 } }, out = { 247754, 1 }, oq = 1 },
     [1245250] = { name = "Elixir of Minor Force", t = { 1, 10, 12, 15 }, basic = true, r = { { 765, 1 }, { 3371, 1 } }, out = { 247755, 1 }, oq = 1 },
     [1249630] = { name = "Cerulean Dye", t = { 1, 50, 70, 90 }, fee = 135, train = 40, r = { { 249399, 2 }, { 3371, 1 } }, out = { 249409, 1 }, oq = 2 },

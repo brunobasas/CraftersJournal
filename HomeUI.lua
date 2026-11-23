@@ -81,14 +81,36 @@ ES.CheckLearned = CheckLearned -- para pruebas
 
 do
   local f = CreateFrame("Frame")
-  for _, event in ipairs({ "PLAYER_LOGIN", "BAG_UPDATE_DELAYED", "NEW_RECIPE_LEARNED", "LEARNED_SPELL_IN_TAB", "TRAINER_UPDATE" }) do
+  for _, event in ipairs({ "PLAYER_LOGIN", "BAG_UPDATE_DELAYED", "NEW_RECIPE_LEARNED", "LEARNED_SPELL_IN_TAB", "TRAINER_UPDATE",
+    "QUEST_TURNED_IN" }) do
     ES.SafeRegister(f, event)
   end
   local bagStamp, learnStamp = 0, 0
-  f:SetScript("OnEvent", function(_, event)
+  f:SetScript("OnEvent", function(_, event, arg1)
     if not ES.db then return end
     if event == "PLAYER_LOGIN" then
       CheckLearned() -- lo que ya sabes al entrar (punto de partida)
+      return
+    end
+    -- Entregas la misión que desbloquea recetas de instructor (Discolored): las rutas de
+    -- esas profesiones dejan de avisar de ella (un poco después: el juego tarda en darla
+    -- por hecha; la clave estable lleva Planner.UnlockStamp)
+    if event == "QUEST_TURNED_IN" then
+      local quest = tonumber(arg1)
+      if not quest then return end
+      local profs = {}
+      for _, prof in ipairs(ES.PROFESSIONS) do
+        local data = ES.Data[prof.key]
+        for _, r in pairs(data and data.recipes or {}) do
+          local mine = r.unlock and ES.Planner.UnlockFor(r)
+          if mine and mine.q == quest then profs[#profs + 1] = prof.key break end
+        end
+      end
+      if #profs == 0 then return end
+      C_Timer.After(0.5, function()
+        for _, key in ipairs(profs) do ES:InvalidatePlan(key) end
+        if ES.RefreshAfterLearn then ES:RefreshAfterLearn() end
+      end)
       return
     end
     -- Aprendes una receta (instructor, pergamino): la profesión abierta lo enseña
