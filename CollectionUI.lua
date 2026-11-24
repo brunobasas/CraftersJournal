@@ -93,7 +93,7 @@ end
 local function WhereSource(e, s, short)
   local WP = ES.Waypoints
   if s.kind == "trainer" then
-    return L["Instructor"] .. (s.cost and s.cost > 0 and (" · " .. ES.Money(s.cost)) or "")
+    return L["Instructor"] .. (s.cost and s.cost > 0 and (ES.SEP .. ES.Money(s.cost)) or "")
   end
   if s.kind == "basic" then return L["Se aprende sola al tener la profesión"] end
   if s.gone then
@@ -107,16 +107,16 @@ local function WhereSource(e, s, short)
   if s.kind == "favor" then
     -- Moneda de los campamentos de Forever: su icono, en azul y lo que cuesta en fichas
     return FAVOR_ICON .. " " .. FAVOR .. string.format(L["Merchant's Favor: %d"], s.favor)
-      .. (s.rep and (" · " .. ES.StandingName(s.rep)) or "") .. "|r"
+      .. (s.rep and (ES.SEP .. ES.StandingName(s.rep)) or "") .. "|r"
   end
   -- En la fila (short), solo la reputación: el vendedor y dónde está, en la ficha
   if short and (s.kind == "vendor" or s.kind == "rep") and e.recipe.rep then return RepShort(e.recipe.rep) end
   if s.kind == "vendor" or s.kind == "rep" then
     local v = s.vendors and WP.Nearest(WP.Usable(s.vendors))
     local npc = v and WP.NPC(v)
-    local text = npc and (L["Vendedor: "] .. npc.name .. " · " .. WP.LocationText(npc))
+    local text = npc and (L["Vendedor: "] .. npc.name .. ES.SEP .. WP.LocationText(npc))
       or (s.vendors and #s.vendors > 0 and L["Vendedor del otro bando"]) or L["Vendedor"]
-    if e.recipe.rep then text = RepShort(e.recipe.rep) .. " · " .. text end
+    if e.recipe.rep then text = RepShort(e.recipe.rep) .. ES.SEP .. text end
     return text
   end
   if s.kind == "drop" then
@@ -126,7 +126,7 @@ local function WhereSource(e, s, short)
       if #d.npcs == 1 then
         local npc = WP.NPC(d.npcs[1])
         local lv = WP.NPCLevel(d.npcs[1])
-        return L["Botín: "] .. (npc and (npc.name .. (lv and (" (" .. lv .. ")") or "") .. " · " .. WP.ZoneName(npc)) or "?")
+        return L["Botín: "] .. (npc and (npc.name .. (lv and (" (" .. lv .. ")") or "") .. ES.SEP .. WP.ZoneName(npc)) or "?")
       end
       -- Varias: la zona principal y cuántas son (la lista entera, en la ficha)
       local zones = DropZones(d.npcs)
@@ -148,14 +148,14 @@ local function Where(e, s, short)
   if not s then return L["Fuente desconocida"] end
   local text = WhereSource(e, s, short)
   if e.recipe.spec and s.kind ~= "basic" and not s.gone then
-    text = text .. " · " .. string.format(L["solo con la especialización %s"], e.recipe.spec)
+    text = text .. ES.SEP .. string.format(L["solo con la especialización %s"], e.recipe.spec)
   end
   return text
 end
 
 local function SourceLine(e)
   local text = Where(e, nil, true)
-  if e.recipe.scroll then return RecipeWord(e.recipe) .. GREY .. " · |r" .. text end
+  if e.recipe.scroll then return RecipeWord(e.recipe) .. GREY .. ES.SEP .. "|r" .. text end
   return text
 end
 
@@ -214,7 +214,7 @@ local function CreateFilterPopup(frame)
   local Panel, Label = ES.UI.Panel, ES.UI.Label
   local G = ES.UI.BROWN.group -- (paleta común)
   local p = Panel(frame, G[1], G[2], G[3], 0.99)
-  p:SetSize(300, 402)
+  p:SetSize(445, 402)
   p:SetPoint("TOPRIGHT", frame.filterButton, "BOTTOMRIGHT", 0, -4)
   p:SetFrameStrata("DIALOG")
   p:EnableMouse(true)
@@ -239,7 +239,7 @@ local function CreateFilterPopup(frame)
   end
   Header(L["Mostrar"])
   for i, o in ipairs(SHOW) do
-    Check(o.label, 10 + ((i - 1) % 2) * 140, function() return not Settings().hiddenState[o.key] end,
+    Check(o.label, 10 + ((i - 1) % 2) * 195, function() return not Settings().hiddenState[o.key] end,
       function(on) Settings().hiddenState[o.key] = not on or nil end)
     if i % 2 == 0 then y = y - 22 end
   end
@@ -262,7 +262,7 @@ local function CreateFilterPopup(frame)
   y = y - 28
   Header(L["Orden"])
   for i, o in ipairs(SORTS) do
-    Check(o.label, 10 + ((i - 1) % 2) * 140, function() return Settings().sort == o.key end,
+    Check(o.label, 10 + ((i - 1) % 2) * 195, function() return Settings().sort == o.key end,
       function() Settings().sort = o.key end)
     if i % 2 == 0 then y = y - 22 end
   end
@@ -534,6 +534,7 @@ local function CreateDetail(frame)
   d.sub:SetPoint("TOPLEFT", d.title, "BOTTOMLEFT", 0, -4)
   d.sub:SetPoint("RIGHT", -12, 0)
   d.sub:SetJustifyH("LEFT")
+  d.sub:SetWordWrap(false)
   d.status = Label(d, "", "GameFontHighlight")
   d.status:SetPoint("TOPLEFT", d.icon, "BOTTOMLEFT", 0, -8)
   d.status:SetPoint("RIGHT", -12, 0)
@@ -571,8 +572,8 @@ function ES:RenderCollectionDetail(frame)
   SetIcon(d.icon.tex, texture or ES.Collection.SOURCE_ICON[e.main])
   d.icon.item = e.itemID
   d.title:SetText(r.name or "?")
-  d.sub:SetText((r.scroll and (RecipeWord(r) .. " · ") or (L["Instructor"] .. " · ")) .. profName .. " " .. e.level
-    .. GREY .. "   ·   |r" .. Thresholds({ e.level, r.t[2], r.t[3], r.t[4] })) -- naranja = nivel para aprenderla
+  d.sub:SetText((r.scroll and (RecipeWord(r) .. ES.SEP) or (L["Instructor"] .. ES.SEP)) .. profName .. " " .. e.level
+    .. GREY .. "  " .. ES.SEP .. "  |r" .. Thresholds({ e.level, r.t[2], r.t[3], r.t[4] })) -- naranja = nivel para aprenderla
   local status
   if e.known then status = GREEN .. CHECK .. " " .. L["La tienes"] .. "|r"
   elseif e.learnableNow then status = ORANGE .. L["Puedes aprenderla ya"] .. "|r"
@@ -580,7 +581,7 @@ function ES:RenderCollectionDetail(frame)
   elseif e.questFirst then status = ORANGE .. ES.Waypoints.QuestFirstText(e.questFirst) .. "|r"
   elseif frame.data.skill and frame.data.skill < e.level then status = GREY .. string.format(L["Te falta: necesitas %s %d"], profName, e.level) .. "|r"
   else status = GREY .. L["Te falta"] .. "|r" end
-  if #e.alts > 0 then status = status .. GREY .. " · |r" .. string.format(L["La tiene tu personaje: %s"], table.concat(e.alts, ", ")) end
+  if #e.alts > 0 then status = status .. GREY .. ES.SEP .. "|r" .. string.format(L["La tiene tu personaje: %s"], table.concat(e.alts, ", ")) end
   d.status:SetText(status)
 
   -- Dónde conseguirla: cada fuente, con clic para marcar el camino
@@ -590,7 +591,7 @@ function ES:RenderCollectionDetail(frame)
   local qf = e.questFirst
   if qf then
     local giver = qf.npc and WP.NPC(qf.npc)
-    KV(d, WP.QuestFirstText(qf) .. (giver and (GREY .. " · " .. giver.name .. "|r") or ""),
+    KV(d, WP.QuestFirstText(qf) .. (giver and (GREY .. ES.SEP .. giver.name .. "|r") or ""),
       giver and giver.map and ("|cff80c0ff" .. L["Marcar en el mapa"] .. "|r") or "",
       giver and giver.map and { onClick = function() WP.SetWaypoint(qf.npc) end,
         hint = L["Clic: marcar el camino (mapa, minimapa y seguimiento)."] } or nil)

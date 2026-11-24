@@ -269,7 +269,7 @@ function ES:SetupAuctionPanel(ahFrame)
   if not listButton then
     listButton = CreateFrame("Button", nil, ahFrame, "UIPanelButtonTemplate")
     ES.ahListButton = listButton -- (se esconde en la AH neutral: UI.lua, HideAuctionHouseUI)
-    listButton:SetSize(150, 24)
+    listButton:SetSize(176, 24)
     ES:PlaceScanButtons() -- (a la izquierda del de Crafter's Journal, si se activó: UI.lua)
     listButton:SetScript("OnClick", function() ES:ToggleShoppingMini(ahFrame) end)
     listButton:SetScript("OnEnter", function(self)

@@ -319,7 +319,7 @@ local function ItemLabel(itemID) return ES.UI.ItemLabel(itemID, L["Objeto "] .. 
 -- stats = { { key, label } }
 function ES.UI.ListPage(page, title, icon, stats)
   local Label = ES.UI.Label
-  local head = ES.UI.CardHead(page) -- (fondo y colores de Subir profesiones)
+  local head = ES.UI.CardHead(page, 70) -- (fondo y colores de Subir profesiones)
   page.icon = head:CreateTexture(nil, "ARTWORK")
   page.icon:SetSize(44, 44)
   page.icon:SetPoint("LEFT", 12, 0)
@@ -328,10 +328,10 @@ function ES.UI.ListPage(page, title, icon, stats)
     page.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
   end
   local name = Label(head, title, "GameFontNormalHuge")
-  name:SetPoint("TOPLEFT", page.icon, "TOPRIGHT", 12, 2)
+  name:SetPoint("TOPLEFT", page.icon, "TOPRIGHT", 12, 4)
   name:SetTextColor(0.96, 0.79, 0.25)
   page.subtitle = Label(head, "", "GameFontHighlightSmall")
-  page.subtitle:SetPoint("BOTTOMLEFT", page.icon, "BOTTOMRIGHT", 12, 2)
+  page.subtitle:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -3)
   page.subtitle:SetPoint("RIGHT", -170, 0)
   page.subtitle:SetJustifyH("LEFT")
   -- Botón a la derecha de la cabecera (cada página decide qué hace)
@@ -347,7 +347,7 @@ function ES.UI.ListPage(page, title, icon, stats)
   page.stats = {}
   for i, s in ipairs(stats) do
     local label = Label(strip, s.label, "GameFontDisableSmall")
-    label:SetPoint("TOPLEFT", (i - 1) * 196 + 6, -2)
+    label:SetPoint("TOPLEFT", (i - 1) * 220 + 6, -2)
     local value = Label(strip, "", "GameFontHighlightLarge")
     value:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -3)
     page.stats[s.key] = value
@@ -527,10 +527,10 @@ local function Line(e, mode)
   elseif mode == "never" then
     sub = GREY .. (e.never == "tool" and L["herramienta de profesión: no se vende"]
       or e.never == "gear" and L["tu equipo: no se vende"] or L["lo marcaste para no venderlo"])
-      .. " · " .. L["clic derecho: volver a proponerlo"] .. "|r"
+      .. ES.SEP .. L["clic derecho: volver a proponerlo"] .. "|r"
   elseif mode == "keep" then
     sub = GREEN .. string.format(L["guarda %d para tus rutas"], e.keep) .. "|r"
-      .. (e.count > e.keep and (GREY .. " · " .. string.format(L["%d de sobra"], e.count - e.keep) .. "|r") or "")
+      .. (e.count > e.keep and (GREY .. ES.SEP .. string.format(L["%d de sobra"], e.count - e.keep) .. "|r") or "")
   else
     local parts = {}
     if e.ahN > 0 then
@@ -548,9 +548,9 @@ local function Line(e, mode)
       if e.riskyAH then parts[#parts + 1] = GREY .. L["AH arriesgada: puede caducar"] .. "|r" end
     end
     if e.de then parts[#parts + 1] = GOLD .. string.format(L["desencantado: ~%s"], ES.Money(e.de.value)) .. "|r" end
-    if e.rise then parts[1] = GREEN .. string.format(L["+%d%% sobre su precio habitual"], math.floor(e.rise * 100 + 0.5)) .. "|r · " .. (parts[1] or "") end
+    if e.rise then parts[1] = GREEN .. string.format(L["+%d%% sobre su precio habitual"], math.floor(e.rise * 100 + 0.5)) .. "|r" .. ES.SEP .. (parts[1] or "") end
     if e.keep > 0 then parts[#parts + 1] = GREY .. string.format(L["guarda %d para tus rutas"], e.keep) .. "|r" end
-    sub = table.concat(parts, " · ")
+    sub = table.concat(parts, ES.SEP)
   end
   local sells = mode ~= "keep" and mode ~= "never" and mode ~= "notworth"
   return {
@@ -689,7 +689,7 @@ function ES:RenderInventory()
       hinted = true
       -- (con algo en la AH: también el Ctrl+clic derecho, que la pasa al vendedor)
       local ahRows = #rising > 0 or #ah > 0
-      title = title .. GREY .. "  ·  " .. (ahRows and L["Clic derecho: no venderlo nunca · Ctrl+clic derecho: al vendedor."]
+      title = title .. GREY .. " " .. ES.SEP .. " " .. (ahRows and L["Clic derecho: no venderlo nunca · Ctrl+clic derecho: al vendedor."]
         or L["Clic derecho en una fila: no venderlo nunca."]) .. "|r"
     end
     lines[#lines + 1] = { section = title }

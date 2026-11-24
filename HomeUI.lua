@@ -322,7 +322,9 @@ local function CreateCard(parent)
 
   card.note = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   card.note:SetPoint("BOTTOMRIGHT", -14, 12)
+  card.note:SetPoint("LEFT", card.level, "RIGHT", 8, 0)
   card.note:SetJustifyH("RIGHT")
+  card.note:SetWordWrap(false)
 
   local hl = card:CreateTexture(nil, "HIGHLIGHT")
   hl:SetPoint("TOPLEFT", 4, -4)

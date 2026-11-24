@@ -95,7 +95,7 @@ local function PriceField(parent, commit)
   function f:SetValue(copper, sourceText)
     if box:IsShown() and box:HasFocus() == true then return end
     self.copper = copper
-    self.text:SetText((copper and Money(copper) or (ORANGE .. "?|r")) .. (sourceText and (GREY .. " · |r" .. sourceText) or ""))
+    self.text:SetText((copper and Money(copper) or (ORANGE .. "?|r")) .. (sourceText and (GREY .. ES.SEP .. "|r" .. sourceText) or ""))
   end
   return f
 end
@@ -129,7 +129,7 @@ end
 local function CreateSearch(page, head)
   local box = CreateFrame("EditBox", nil, head, "InputBoxTemplate")
   page.search = box
-  box:SetSize(240, 22)
+  box:SetSize(256, 22)
   box:SetPoint("RIGHT", -16, 0)
   box:SetAutoFocus(false)
   local hint = ES.UI.Label(box, L["Añadir receta: escribe su nombre"], "GameFontDisableSmall")
@@ -572,7 +572,7 @@ local function CreateSheet(page)
   -- Abajo: el botón principal, "Añadir a la lista de compra", a la derecha y más
   -- grande; "Precios automáticos", pequeño a la izquierda (antes tres botones iguales)
   page.reset = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-  page.reset:SetSize(BUTTON_W - 30, 20)
+  page.reset:SetSize(BUTTON_W + 6, 20)
   page.reset:SetPoint("BOTTOMLEFT", 12, 11)
   page.reset:SetText(L["Precios automáticos"])
   page.reset:SetScript("OnClick", function()
@@ -620,18 +620,18 @@ function ES:CreateCalculatorPage(page)
   local head = UI.Panel(page, UI.BROWN.card[1], UI.BROWN.card[2], UI.BROWN.card[3], UI.BROWN.card[4])
   head:SetPoint("TOPLEFT", UI.PAD, -UI.PAD + 2)
   head:SetPoint("TOPRIGHT", -UI.PAD, -UI.PAD + 2)
-  head:SetHeight(66)
+  head:SetHeight(70)
   local icon = head:CreateTexture(nil, "ARTWORK")
   icon:SetSize(44, 44)
   icon:SetPoint("LEFT", 12, 0)
   icon:SetTexture("Interface\\Icons\\INV_Misc_Note_02")
   icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
   local title = UI.Label(head, L["Calculadora"], "GameFontNormalHuge")
-  title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 12, 2)
+  title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 12, 4)
   title:SetTextColor(0.96, 0.79, 0.25)
   local sub = UI.Label(head, L["Cuánto ganas con una receta: materiales en crudo, venta, comisión y depósito. Escribe tus precios si la AH ha cambiado."], "GameFontHighlightSmall")
-  sub:SetPoint("BOTTOMLEFT", icon, "BOTTOMRIGHT", 12, 2)
-  sub:SetPoint("RIGHT", -270, 0)
+  sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
+  sub:SetPoint("RIGHT", -286, 0)
   sub:SetJustifyH("LEFT")
   CreateSearch(page, head)
 
@@ -715,7 +715,7 @@ function ES:RenderCalculator()
   local name = RecipeLabel(selected)
   page.title:SetText(name)
   page.titleSub:SetText(ES:ProfLabel(selected.prof)
-    .. (ES:IsRecipeKnown(selected.recipe) and "" or (ORANGE .. " · " .. L["no la sabes"] .. "|r")))
+    .. (ES:IsRecipeKnown(selected.recipe) and "" or (ORANGE .. ES.SEP .. L["no la sabes"] .. "|r")))
   if page.qty:HasFocus() ~= true then page.qty:SetText(tostring(selected.qty or 1)) end
 
   -- La hoja como un árbol (Calc:Compute, res.display): cada intermedio con su fila

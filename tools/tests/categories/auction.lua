@@ -194,6 +194,47 @@ test("escaneo de Auctionator a medio leer al cerrar la AH: lo dice en el chat y 
     "la cabecera dice «%s» y no que se canceló", tostring(ES:GetMainFrame().lastScan:GetText()))
 end, { state = "scan" })
 
+-- Tras un /reload justo después de escanear, al abrir la AH Auctionator (u otro addon)
+-- pide su escaneo automático: dentro del límite de 15 min el servidor no responde. El
+-- addon se quedaba "escaneando" 2 min y reiniciaba la cuenta atrás desde esa petición
+test("escaneo de otro addon dentro del límite de 15 min: no se espera ni mueve la cuenta atrás", function()
+  InstallAuctionator()
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  local last = time() - 60 -- (el escaneo de antes del /reload, guardado)
+  ES.db.lastFullScan = { ["otro addon"] = last }
+  OpenAH()
+  local wait = ES.Scanner:SecondsUntilNextScan()
+  expect(wait > 0, "la prueba espera el límite de 15 min activo")
+  QueryAuctionItems("", nil, nil, 0, nil, nil, true, false, nil)
+  ES.Scanner:OnForeignScan("legacy")
+  expect(not ES.Scanner:IsBusy(), "espera un escaneo que el servidor no va a mandar")
+  expect_eq(ES.db.lastFullScan["otro addon"], last, "la cuenta atrás se reinició con una petición ignorada")
+  RunTimers()
+  expect(not ES.Scanner:IsBusy(), "se quedó escaneando")
+end, { state = "scan" })
+
+-- Un error al leer las subastas (datos raros del servidor, p. ej. justo tras un /reload)
+-- rompía la cadena de pasos y el escaneo se quedaba "ocupado" para siempre: no se podía
+-- volver a escanear ni anunciar. Ahora se apunta y se cancela
+test("un error al leer las subastas no deja el escaneo bloqueado", function()
+  InstallAuctionator()
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  OpenAH()
+  local read = ES.Scanner.ReadAuction
+  ES.Scanner.ReadAuction = function() error("subasta rota") end
+  QueryAuctionItems("", nil, nil, 0, nil, nil, true, false, nil)
+  ES.Scanner:OnForeignScan("legacy")
+  RunTimers()
+  ES.Scanner.ReadAuction = read
+  expect(not ES.Scanner:IsBusy(), "el escaneo se quedó ocupado tras el error")
+  -- (el error se apunta: aquí es el esperado, no un fallo de la prueba)
+  local found = false
+  for i = #RECORDED_ERRORS, 1, -1 do
+    if RECORDED_ERRORS[i]:find("subasta rota", 1, true) then found = true table.remove(RECORDED_ERRORS, i) end
+  end
+  expect(found, "no se apuntó el error del escaneo")
+end, { state = "empty" })
+
 test("escaneo de otro addon sin respuesta aún al cerrar la AH: nada en el chat", function()
   InstallAuctionator()
   AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
@@ -535,6 +576,38 @@ test("dos compras iguales seguidas cuentan las dos", function()
   FireEvent("CHAT_MSG_SYSTEM", msg)
   expect_eq(ES:HaveForShopping(765), 10, "dos compras de 5")
 end, { state = "full" })
+
+-- El aviso "Compra detectada... cuenta ya para la ruta y la lista de compra" solo con lo
+-- que piden la Lista de compra o una ruta empezada (salía con cualquier compra:
+-- Stonescale Eel sin ruta ni lista)
+local STONESCALE_EEL, LINEN_CLOTH = 13757, 2589
+local function BuyAndSaid(itemID)
+  local key = ES.L["Compra detectada: %s ×%d. Cuenta ya para la ruta y la lista de compra."]:match("^(.-)%%")
+  local printed = #PRINTS
+  OpenAH()
+  ES.ahOpen = true
+  ERR_AUCTION_WON_S = "You won an auction for %s"
+  NOW = NOW + 1
+  FireEvent("CHAT_MSG_SYSTEM", string.format("You won an auction for |cffffffff|Hitem:%d::|h[x]|h|rx1", itemID))
+  local said = false
+  for i = printed + 1, #PRINTS do
+    if PRINTS[i]:find(key, 1, true) then said = true end
+  end
+  return said
+end
+
+test("compra en la AH: solo avisa si la pide la lista de compra o la ruta", function()
+  expect(not BuyAndSaid(STONESCALE_EEL), "avisa de una compra que no pide nada")
+  expect_eq(ES:HaveForShopping(STONESCALE_EEL), 1, "la compra no se apuntó (debe contar si luego se añade)")
+  ES.Shopping.Add("calc", "peces", { { itemID = STONESCALE_EEL, quantity = 5, unit = 100, source = "ah" } })
+  expect(BuyAndSaid(STONESCALE_EEL), "no avisa de un material de la lista de compra")
+end)
+
+test("compra en la AH: avisa de un material de la ruta empezada", function()
+  StartRoute("Tailoring", 1, 75)
+  expect(BuyAndSaid(LINEN_CLOTH), "no avisa de un material de la ruta empezada")
+  expect(not BuyAndSaid(STONESCALE_EEL), "avisa de una compra que la ruta no pide")
+end)
 
 ---------------------------------------------------------------------------
 -- Lo comprado deja de contar al llegar a las bolsas aunque el addon esté cerrado
@@ -1460,6 +1533,27 @@ local function Post()
   local d = ES.ConfirmFrame()
   return d and d._shown and d.pending and d or nil
 end
+
+-- El panel de vender de la AH decía «2 × 8s 99c», su pregunta «a 8s» y anunciaba a 8s:
+-- se perdían los cobres (Discord). Todo anuncio va con cobres (Forever los admite), y la
+-- pregunta dice el mismo precio que la fila
+test("anunciar con cobres: el panel de vender anuncia a 8s 99c, no a 8s", function()
+  PostingAH({ commodity = true }, function(ah)
+    ES.db.noPostConfirm = nil
+    ES.AuctionSell.Post(POST_ITEM, 2, 899, 8)
+    local d = expect(ES.ConfirmFrame(), "no sale la pregunta de anunciar")
+    local text = tostring(d.text:GetText())
+    expect(text:find(ES.Money(899), 1, true), "la pregunta no dice 8s 99c: %s", text)
+    d.pending.onYes()
+    local call = expect(ah.calls[1], "no llama a la AH")
+    expect_eq(call[1], "PostCommodity", "llamada")
+    expect_eq(call[5], 899, "precio anunciado")
+    ES.Ledger.pendingPost = nil
+    ES.Ledger:PostOnAH(POST_ITEM, 1, 12345, 2) -- (y el de BulkMoney, igual)
+    call = expect(ah.calls[2], "no llama a la AH la segunda vez")
+    expect_eq(call[5], 12345, "precio con cobres")
+  end)
+end, { state = "scan" })
 
 test("la AH pide confirmar un anuncio del addon: sale su pregunta, sin «no confirmó»", function()
   PostingAH({ needs = true }, function(ah)

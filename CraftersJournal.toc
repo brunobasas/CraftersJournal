@@ -61,6 +61,10 @@ HomeUI.lua
 HeaderUI.lua
 AuctionUI.lua
 EarnUI.lua
+#@do-not-package@
+BulkMoneyUI.lua
+BulkPostUI.lua
+#@end-do-not-package@
 ShoppingUI.lua
 Disenchant.lua
 InventoryUI.lua

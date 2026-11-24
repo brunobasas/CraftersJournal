@@ -1531,6 +1531,10 @@ local function Acquire(ctx, itemID, qty, depth, extra, actions, why, skip)
 
   local best, kind, craft
   local vendor = ES.Data.VendorPrices[itemID]
+  -- opts.vendorDiscount: descuento en lo que se compra al vendedor (reputación con tu
+  -- capital, Bartering: la pestaña BulkMoney); las rutas no lo usan
+  local discount = ctx.opts.vendorDiscount
+  if vendor and discount and discount > 0 then vendor = math.floor(vendor * (1 - discount) + 0.5) end
   if vendor then best, kind = vendor * qty, "vendor" end
 
   local ladder = ctx.ladders[itemID]
@@ -3574,7 +3578,10 @@ end
 function Planner:RecipeMarket(data, opts)
   local o = { from = 1, to = 300, includeScrolls = false, ignoreSupply = true,
     hours = opts.hours, neutral = opts.neutral, sourcedScrolls = opts.sourcedScrolls, noQuests = opts.noQuests,
-    noLimited = opts.noLimited, knownProducers = opts.knownProducers }
+    noLimited = opts.noLimited, knownProducers = opts.knownProducers, vendorDiscount = opts.vendorDiscount,
+    foreignProducers = opts.foreignProducers,
+    -- (precios propios en vez de los del escaneo: los tuyos de BulkMoney)
+    prices = opts.prices, pricesTime = opts.pricesTime }
   Annotate(data) -- (antes del contexto: knownProducers pregunta por r.id)
   local ctx = NewContext(data, o)
   local list = {}

@@ -31,17 +31,17 @@ local KIND_ICON = {
 
 function ES:CreateShoppingPage(page)
   local Label = ES.UI.Label
-  local head = ES.UI.CardHead(page) -- (fondo y colores de Subir profesiones)
+  local head = ES.UI.CardHead(page, 70) -- (fondo y colores de Subir profesiones)
   local icon = head:CreateTexture(nil, "ARTWORK")
   icon:SetSize(44, 44)
   icon:SetPoint("LEFT", 12, 0)
   icon:SetTexture("Interface\\Icons\\INV_Misc_Note_01")
   icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
   local name = Label(head, L["Lista de compra"], "GameFontNormalHuge")
-  name:SetPoint("TOPLEFT", icon, "TOPRIGHT", 12, 2)
+  name:SetPoint("TOPLEFT", icon, "TOPRIGHT", 12, 4)
   name:SetTextColor(0.96, 0.79, 0.25)
   page.subtitle = Label(head, "", "GameFontHighlightSmall")
-  page.subtitle:SetPoint("BOTTOMLEFT", icon, "BOTTOMRIGHT", 12, 2)
+  page.subtitle:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -3)
   page.subtitle:SetPoint("RIGHT", -190, 0)
   page.subtitle:SetJustifyH("LEFT")
 
@@ -85,9 +85,10 @@ function ES:CreateShoppingPage(page)
   page.status:SetPoint("TOPLEFT", strip, "BOTTOMLEFT", 2, -2)
   page.status:SetPoint("RIGHT", strip, "RIGHT", 0, 0)
   page.status:SetJustifyH("LEFT")
-  page.status:SetWordWrap(false)
+  page.status:SetWordWrap(true) -- (hasta dos líneas: en ruso no cabe en una)
+  if page.status.SetMaxLines then page.status:SetMaxLines(2) end
 
-  local list = ES.UI.ListPanel(page, head, 70)
+  local list = ES.UI.ListPanel(page, head, 78)
   local scroll = ES.UI.WheelScroll(list)
   scroll:SetPoint("TOPLEFT", 8, -8)
   scroll:SetPoint("BOTTOMRIGHT", -8, 8)
@@ -150,6 +151,8 @@ local function BuildLines(st, ahOpen)
       local it = e.it
       local name, texture = ES.UI.ItemLabel(it.itemID, L["Objeto "] .. it.itemID)
       local where = it.source == "ah" and string.format(L["AH ~%s/u"], ES.Money(it.unit or 0)) or string.format(L["vendedor %s/u"], ES.Money(it.unit or 0))
+      -- (BulkMoney: hasta dónde compensa pagarlo)
+      if it.source == "ah" and it.max then where = where .. ES.SEP .. string.format(L["compensa hasta %s/u"], ES.Money(it.max)) end
       local line = { icon = texture or 134400, item = it.itemID, current = it.itemID == selected and e.left > 0,
         source = it.source == "vendor" and "vendor" or "ah" }
       -- (la lista de una ruta empezada se calcula sola: no se quitan materiales a mano)
@@ -170,11 +173,11 @@ local function BuildLines(st, ahOpen)
         line.value = "|TInterface\\RaidFrame\\ReadyCheck-Ready:16|t"
       else
         line.title = string.format("%d× %s", e.left, name or "")
-        line.sub = where .. (e.bought > 0 and (" · " .. progress) or "")
+        line.sub = where .. (e.bought > 0 and (ES.SEP .. progress) or "")
         -- Abierta su compra: cuántas hay baratas ahora
         local t = it.source == "ah" and it.itemID == selected and ES.CommodityTiers and ES:CommodityTiers(it.itemID, it.unit)
         if t and t.next and t.cheap < e.left then
-          line.sub = line.sub .. " · " .. ORANGE .. string.format(L["solo %d baratas; luego %s/u"], t.cheap, ES.Money(t.next)) .. "|r"
+          line.sub = line.sub .. ES.SEP .. ORANGE .. string.format(L["solo %d baratas; luego %s/u"], t.cheap, ES.Money(t.next)) .. "|r"
         end
         line.value = Signed(e.left * (it.unit or 0))
         if it.source == "ah" then
@@ -259,7 +262,7 @@ end
 ---------------------------------------------------------------------------
 -- Panel pequeño junto a la AH: la misma lista, para comprar sin la ventana grande
 ---------------------------------------------------------------------------
-local MINI_W, MINI_H, MINI_ROW, MINI_SECTION = 300, 440, 34, 20
+local MINI_W, MINI_H, MINI_ROW, MINI_SECTION = 324, 440, 38, 20
 local mini
 
 -- Junto a la AH la lista para comprar con un clic: sin totales ni ✕ por material (eso,
@@ -276,19 +279,19 @@ local function MiniRow(parent)
   hl:SetAllPoints()
   hl:SetColorTexture(1, 0.82, 0.25, 0.10)
   row.icon = row:CreateTexture(nil, "ARTWORK")
-  row.icon:SetSize(24, 24)
+  row.icon:SetSize(26, 26)
   row.icon:SetPoint("LEFT", 4, 0)
   row.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
   row.value = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   row.value:SetPoint("TOPRIGHT", row, "TOPRIGHT", -6, -4)
   row.value:SetJustifyH("RIGHT")
   row.title = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  row.title:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 5, -1)
+  row.title:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 5, 0)
   row.title:SetPoint("RIGHT", row.value, "LEFT", -4, 0)
   row.title:SetJustifyH("LEFT")
   row.title:SetWordWrap(false)
   row.sub = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  row.sub:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 5, 1)
+  row.sub:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 5, -2)
   row.sub:SetPoint("RIGHT", row, "RIGHT", -6, 0)
   row.sub:SetJustifyH("LEFT")
   row.sub:SetWordWrap(false)

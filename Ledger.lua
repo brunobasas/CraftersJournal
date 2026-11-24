@@ -439,7 +439,7 @@ function Ledger.LearnAtTrainer(targets)
     -- (para diagnosticar en el juego: lo que buscaba y lo que el instructor ofrece)
     local want = {}
     for _, t in ipairs(targets) do want[#want + 1] = tostring(t.recipeID or ("rango " .. tostring(t.rank))) end
-    Log("instructor: no encuentra " .. table.concat(want, ", ") .. " · profesión " .. tostring(TrainerProfession()))
+    Log("instructor: no encuentra " .. table.concat(want, ", ") .. ES.SEP .. "profesión " .. tostring(TrainerProfession()))
     for i = 1, math.min(GetNumTrainerServices and GetNumTrainerServices() or 0, 40) do
       local name, sub, kind = GetTrainerServiceInfo(i)
       Log(string.format("  %d %s | %s | %s | %s", i, tostring(name), tostring(sub), tostring(kind),
@@ -728,10 +728,11 @@ function Ledger:SellToVendor(itemID, n)
   return sold
 end
 
--- Precio de anuncio en la AH de Forever: solo admite platas enteras (redondeo hacia abajo)
+-- Precio de anuncio en la AH: el de la fila tal cual, con cobres (la AH de Forever los
+-- admite). Antes se redondeaba a platas enteras y el panel de vender decía 8s 99c pero
+-- anunciaba a 8s (Discord)
 function Ledger.PostPrice(unit)
-  unit = math.floor(unit or 0)
-  return math.max(unit - unit % 100, 100)
+  return math.max(1, math.floor(unit or 0))
 end
 
 ---------------------------------------------------------------------------
@@ -832,7 +833,11 @@ function Ledger.AddOnWay(itemID, n, via)
   Log(string.format("AH: comprado %d× %d por %s (de camino al buzón)", add, itemID, via))
   -- Se dice en el chat: así se ve que la compra cuenta (y si algún día no sale, que no
   -- se detectó: queda Saltar en el asistente). Sin el texto del mensaje de la AH, que
-  -- si no esta línea se leería otra vez como compra
+  -- si no esta línea se leería otra vez como compra. Solo si el objeto lo pide la Lista
+  -- de compra o una ruta empezada (Shopping.Wants): con lo demás no hay nada que contar
+  -- (salía con cualquier compra: "Stonescale Eel... cuenta ya para la ruta" sin ruta).
+  -- Se apunta igual: si se añade luego a una lista, ya cuenta
+  if not (ES.Shopping and ES.Shopping.Wants and ES.Shopping.Wants(itemID)) then return true end
   local name = (GetItemInfo and GetItemInfo(itemID)) or (ES.DataItemName and ES:DataItemName(itemID)) or tostring(itemID)
   if ES.Print then ES:Print(string.format(L["Compra detectada: %s ×%d. Cuenta ya para la ruta y la lista de compra."], name, add)) end
   return true
@@ -1031,7 +1036,7 @@ end
 -- `hours` horas (24 por defecto; ver DurationIndex). Solo con la AH de Forever
 -- (C_AuctionHouse); con la clásica, se anuncia a mano. Los materiales
 -- (commodities) van en un solo anuncio; el resto, todos de una vez y, si la AH no
--- lo acepta, de uno en uno. Devuelve cuántos anunció.
+-- lo acepta, de uno en uno. Devuelve cuántos anunció. Al precio con cobres (Ledger.PostPrice)
 function Ledger:PostOnAH(itemID, n, unit, hours)
   local AH = C_AuctionHouse
   if not (ES:IsAuctionHouseOpen() and AH and AH.PostItem and ItemLocation) then
@@ -1171,6 +1176,7 @@ function Ledger:CancelAsked(p)
   Ledger.pendingPost = nil
   ES:Print(string.format(L["Anuncio cancelado: %s"], p.name))
   if ES.AuctionSell then ES.AuctionSell:Refresh() end
+  if p.onResult then pcall(p.onResult, false, p) end
 end
 
 -- ¿Es `message` un error de la AH? Los textos del juego ERR_AUCTION_* (en el idioma
@@ -1202,4 +1208,6 @@ function Ledger:ConfirmPost(ok, message)
     ES:Print(string.format(L["La Casa de Subastas no aceptó %s: %s"], p.name, tostring(message or "?")))
   end
   if ES.AuctionSell then ES.AuctionSell:Refresh() end
+  -- (quien anunció quiere saber cómo acabó: el botón de anunciar de BulkMoney)
+  if p.onResult then pcall(p.onResult, ok, p) end
 end

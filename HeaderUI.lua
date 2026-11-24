@@ -169,7 +169,7 @@ end
 local function CreateReport(f)
   local b = CreateFrame("Button", nil, f, "BackdropTemplate")
   f.reportButton = b
-  b:SetSize(92, 24)
+  b:SetSize(106, 24)
   b:SetPoint("TOPLEFT", 18, -15) -- a la izquierda del todo: a la derecha tapaba "Último escaneo"
   SetBackdrop(b, 12, 4)
   b:SetBackdropColor(0.12, 0.115, 0.105, 0.98)
@@ -300,7 +300,7 @@ function ES:CreateHeader(f)
   -- "Último escaneo: hace 3 min", en pequeño a la izquierda del botón; se actualiza cada 30 s
   f.lastScan = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   f.lastScan:SetPoint("RIGHT", scan, "LEFT", -10, 0)
-  f.lastScan:SetWidth(170) -- cabe "Cancelado · último: hace 2 días"
+  f.lastScan:SetWidth(275) -- cabe "Cancelado · último: hace 2 días" (y en ruso)
   f.lastScan:SetJustifyH("RIGHT")
   f.lastScan:SetWordWrap(false)
   local ticker = CreateFrame("Frame", nil, f)

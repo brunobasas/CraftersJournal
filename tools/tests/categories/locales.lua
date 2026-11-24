@@ -245,6 +245,80 @@ test("ruso con el cliente en inglés: recetas y objetos con su nombre ruso de lo
   expect(not ES.NamesExpanded("ru"), "el ruso sigue convertido tras dejarlo")
 end, { boot = false })
 
+-- Spec localized-names, «Textos que la fuente del cliente puede dibujar»: la fuente del
+-- cliente ruso no tiene «·» (sale un cuadrado; lo vio un jugador ruso en la v0.70.0)
+local MIDDOT = "\194\183"
+local function HasDot(s) return type(s) == "string" and s:find(MIDDOT, 1, true) ~= nil end
+local DOT_KEY = "Instructor " .. MIDDOT .. " aún no la tienes" -- (una clave con « · »)
+
+test("ruso: ninguna traducción lleva «·»", function()
+  local bad = {}
+  for key, v in pairs(ES.Locales.ru) do if HasDot(v) then bad[#bad + 1] = key end end
+  expect(#bad == 0, "%d traducciones con «·»: %s", #bad, table.concat(Sorted(bad), " | "):sub(1, 600))
+end, { boot = false })
+
+test("cliente ruso: el separador sale « - » en cualquier idioma y la interfaz no pinta ningún «·»", function()
+  GetLocale = function() return "ruRU" end
+  Boot("full")
+  expect_eq(ES.SEP, " - ", "ES.SEP con el cliente ruso")
+  expect(HasDot(ES.Locales.en[DOT_KEY]), "la clave de ejemplo ya no lleva «·» en inglés: %s", DOT_KEY)
+  for _, lang in ipairs({ "ru", "en", "de", "fr", "es" }) do
+    ES.lang = lang
+    expect(not HasDot(ES.L[DOT_KEY]), "%s: sale con «·»: %s", lang, ES.L[DOT_KEY])
+  end
+  ES.lang = "ru"
+  -- En inglés (sus textos llevan «·»): todas las pestañas y una ruta empezada
+  OpenMain()
+  ES:SetLanguage("en")
+  RunTimers()
+  for key in pairs(TAB_PAGES) do OpenPage(key) end
+  StartRoute("Leatherworking", 1, 150)
+  local dots = {}
+  for line in (AllText() .. "\n"):gmatch("(.-)\n") do
+    if HasDot(line) then dots[#dots + 1] = line end
+  end
+  expect(#dots == 0, "%d textos con «·» en la interfaz:\n    %s", #dots, table.concat(dots, "\n    "):sub(1, 1500))
+end, { boot = false })
+
+-- (Con el cliente en inglés y el addon en ruso también salía el cuadrado: el juego usa la
+-- fuente rusa para cualquier texto con cirílico)
+test("addon en ruso con el cliente en inglés: separador « - », y «·» otra vez al pasar a español", function()
+  GetLocale = function() return "enUS" end
+  Boot("full")
+  expect_eq(ES.SEP, " " .. MIDDOT .. " ", "ES.SEP con el cliente y el addon en inglés")
+  OpenMain()
+  ES:SetLanguage("ru")
+  RunTimers()
+  expect_eq(ES.SEP, " - ", "ES.SEP con el addon en ruso")
+  for key in pairs(TAB_PAGES) do OpenPage(key) end
+  StartRoute("Leatherworking", 1, 150)
+  local dots = {}
+  for line in (AllText() .. "\n"):gmatch("(.-)\n") do
+    if HasDot(line) then dots[#dots + 1] = line end
+  end
+  expect(#dots == 0, "%d textos con «·» en la interfaz:\n    %s", #dots, table.concat(dots, "\n    "):sub(1, 1500))
+  ES:SetLanguage("es")
+  expect_eq(ES.SEP, " " .. MIDDOT .. " ", "ES.SEP al pasar a español")
+  expect_eq(ES.L[DOT_KEY], DOT_KEY, "texto en español con su «·»")
+end, { boot = false })
+
+test("cliente en español: el separador sigue siendo «·»", function()
+  GetLocale = function() return "esES" end
+  Boot({ lang = "en" })
+  expect_eq(ES.SEP, " " .. MIDDOT .. " ", "ES.SEP con el cliente en español")
+  expect_eq(ES.L[DOT_KEY], ES.Locales.en[DOT_KEY], "texto en inglés con su «·»")
+end, { boot = false })
+
+-- (Lo vio el mismo jugador: con el cliente ruso la moneda se iba a la línea siguiente,
+-- lejos de su número)
+test("dinero: cada número pegado a su moneda aunque el juego ponga espacios", function()
+  local function Icon(n) return "|TInterface\\MoneyFrame\\UI-" .. n .. "Icon:0:0:2:0|t" end
+  GetCoinTextureString = function() return "3 " .. Icon("Gold") .. " 62 " .. Icon("Silver") .. " 5 " .. Icon("Copper") end
+  local s = ES.Money(36205)
+  expect(not s:find("%s|T"), "espacio delante de un icono: %s", s)
+  expect_eq(s, "3" .. Icon("Gold") .. " 62" .. Icon("Silver") .. " 5" .. Icon("Copper"), "monedas")
+end)
+
 test("instructor en el idioma del cliente con el addon en otro: reconoce las recetas", function()
   GetLocale = function() return "frFR" end
   Boot({ lang = "es" })

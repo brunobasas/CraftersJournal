@@ -394,7 +394,7 @@ local function NavTick()
     else
       nav.big:SetText(why == "continent" and L["En otro continente"] or GREY .. L["Sin posición aquí"] .. "|r")
       if zoneFor ~= npc or zoneLang ~= ES.lang then
-        zoneFor, zoneLang, zoneText = npc, ES.lang, npc.name .. " · " .. ES.Waypoints.ZoneName(npc)
+        zoneFor, zoneLang, zoneText = npc, ES.lang, npc.name .. ES.SEP .. ES.Waypoints.ZoneName(npc)
       end
       nav.small:SetText(zoneText)
     end
@@ -721,8 +721,8 @@ local function HelpTopics()
         or L["Con la AH abierta, compra el siguiente material; con un vendedor, le compra. Si no tienes nada abierto, te lleva al PNJ más cercano. Nunca compra sin tu clic."] },
     { title = L["El color dice qué toca"],
       -- (solo los colores: el orden de los pasos no ayuda a jugar)
-      text = Colored("craft", L["Fabricar"]) .. "   ·   " .. Colored("buy", A.BANK and L["Comprar o ir al banco"] or L["Comprar"])
-        .. "   ·   " .. Colored("npc", L["Ir a un PNJ"]) },
+      text = Colored("craft", L["Fabricar"]) .. "  " .. ES.SEP .. "  " .. Colored("buy", A.BANK and L["Comprar o ir al banco"] or L["Comprar"])
+        .. "  " .. ES.SEP .. "  " .. Colored("npc", L["Ir a un PNJ"]) },
     { title = L["¿Por qué pide más fabricaciones de las que me dan los materiales?"],
       text = L["La ruta compra por tandas: en las recetas amarillas y verdes no todas suben punto. \"Esta tanda: N\" es para cuántas te llega lo que llevas. Con suerte basta; si no, al acabarla te manda a comprar más."]
         .. " " .. string.format(L["Cada tanda es de unas %d fabricaciones: se cambia en /cj opciones, Lista de compra."], ES.Planner.BatchCrafts()) },

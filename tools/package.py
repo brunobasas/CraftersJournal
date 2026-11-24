@@ -23,9 +23,10 @@ ROOT = Path(__file__).resolve().parent.parent
 NAME = "CraftersJournal"
 IGNORE_DIRS = {"tools", "docs", "dist", ".github", ".git", "__pycache__", "openspec"}
 IGNORE_EXT = {".py", ".md", ".pyc"}
-# Herramientas del desarrollador y los bancos del asistente (apagados), que aún no se
-# publican (como en .pkgmeta). El asistente de ruta sí (beta)
-IGNORE_FILES = {"DevTools.lua", "Data/Bankers.lua"}
+# Herramientas del desarrollador, los bancos del asistente (apagados) y BulkMoney, que
+# aún no se publican (como en .pkgmeta). El asistente de ruta sí (beta)
+BULK_FILES = {"BulkMoneyUI.lua", "BulkPostUI.lua"}
+IGNORE_FILES = {"DevTools.lua", "Data/Bankers.lua"} | BULK_FILES
 IGNORE_PREFIXES = ()
 # Como BigWigsMods/packager: en el .toc se quita lo que va entre estas dos líneas
 DO_NOT_PACKAGE = re.compile(r"^#@do-not-package@\s*$.*?^#@end-do-not-package@\s*$\n?", re.M | re.S)
@@ -91,6 +92,9 @@ def main():
             "DevTools.lua se ha colado en el zip"
         assert "Bankers" not in toc_out and not any("Bankers" in n for n in z.namelist()), \
             "los bancos del asistente (aún sin publicar) se han colado en el zip"
+        for bulk in BULK_FILES:
+            assert bulk not in toc_out and f"{NAME}/{bulk}" not in z.namelist(), \
+                f"{bulk} (BulkMoney, aún sin publicar) se ha colado en el zip"
         # El asistente sí va: su archivo, su línea del .toc, los buzones y sus iconos
         for need in ("Assistant.lua", "Data/Mailboxes.lua", "Media/Assistant/HelpBig.tga"):
             assert f"{NAME}/{need}" in z.namelist(), f"falta {need} en el zip"

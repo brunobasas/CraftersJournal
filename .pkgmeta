@@ -31,3 +31,7 @@ ignore:
   # Bancos del asistente de ruta (A.BANK, apagado): aún solo en la copia de desarrollo.
   # Su línea del .toc también va dentro de #@do-not-package@. El asistente se publica (beta)
   - Data/Bankers.lua
+  # BulkMoney (pestaña de desarrollo) y su botón de anunciar: aún solo en la copia de
+  # desarrollo. Sus líneas del .toc también van dentro de #@do-not-package@
+  - BulkMoneyUI.lua
+  - BulkPostUI.lua

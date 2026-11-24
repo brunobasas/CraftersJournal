@@ -206,6 +206,21 @@ function Scanner:StartWithAuctionator(f)
   ES:RefreshScanButtons()
 end
 
+-- Cada paso del escaneo (esperar, leer, resumir) va en el siguiente fotograma: si uno da
+-- error, la cadena se rompía y el escaneo se quedaba "ocupado" para siempre (no se
+-- podía volver a escanear ni anunciar). Con error, se apunta y se cancela
+local function Guarded(fn, what)
+  return function()
+    local ok, err = pcall(fn)
+    if ok then return end
+    ES:RecordError("scan", err)
+    ES:ScanLog(what .. ": error " .. tostring(err))
+    if Scanner.state == "saving" then Scanner.state = "processing" end -- (Abort no cancela al guardar)
+    Scanner:Abort(L["El escaneo falló al leer las subastas: vuelve a escanear cuando el botón lo permita."])
+  end
+end
+Scanner.Guarded = Guarded -- (pruebas)
+
 -- Empieza a esperar los datos del escaneo completo que acaba de pedir Auctionator u
 -- otro addon, para leerlos cuando lleguen (ver OnForeignScan). No pide nada ni silencia
 -- a nadie: ese addon necesita su evento. `before`: las subastas que había cuando lo pidió
@@ -236,6 +251,7 @@ function Scanner:Begin(api, before)
   local started = GetTime()
   local lastCount, stableTicks, changed = before, 0, false
 
+  local SafeTick
   local function Tick()
     if self.scanID ~= id or self.state ~= "waiting" then return end
     local elapsed = math.floor(GetTime() - started)
@@ -276,9 +292,10 @@ function Scanner:Begin(api, before)
 
     SetStatus(self.viaAuctionator and string.format(L["Escaneando con Auctionator... %d s"], elapsed)
       or string.format(L["Leyendo el escaneo que pidió otro addon... %d s"], elapsed))
-    C_Timer.After(1, Tick)
+    C_Timer.After(1, SafeTick)
   end
-  Tick()
+  SafeTick = Guarded(Tick, "esperando")
+  SafeTick()
 end
 
 function Scanner:CountResults()
@@ -379,6 +396,7 @@ function Scanner:Process()
   local band = History.STUCK_BAND
   local reach = History.PrevReach(ES.db.track and ES.db.track[self.key or ES:RealmKey()])
 
+  local SafeStep
   local function Step()
     if self.scanID ~= id then return end
 
@@ -448,13 +466,14 @@ function Scanner:Process()
       end
     end
     if index <= last then
-      C_Timer.After(0, Step)
+      C_Timer.After(0, SafeStep)
     else
       self:Finish(items, sigs, total)
     end
   end
 
-  Step()
+  SafeStep = Guarded(Step, "leyendo")
+  SafeStep()
 end
 
 -- { [precio] = cantidad } -> { p1, q1, p2, q2, ... } ordenado de más barato a más
@@ -527,6 +546,7 @@ function Scanner:Finish(items, sigs, total)
   local t0 = debugprofilestop and debugprofilestop()
   local frames = 0
 
+  local SafeStep
   local function Step()
     if self.scanID ~= id then return end
     frames = frames + 1
@@ -559,7 +579,7 @@ function Scanner:Finish(items, sigs, total)
       if started and i % 50 == 0 and debugprofilestop() - started > FRAME_BUDGET then break end
     end
     if i <= #ids then
-      C_Timer.After(0, Step)
+      C_Timer.After(0, SafeStep)
       return
     end
     if t0 then
@@ -567,7 +587,8 @@ function Scanner:Finish(items, sigs, total)
     end
     self:Save(saved, #ids, knownOwners, sigs, total, mins)
   end
-  Step()
+  SafeStep = Guarded(Step, "resumiendo")
+  SafeStep()
 end
 
 -- Guarda el escaneo resumido (ver Finish) y avisa a las vistas
@@ -624,6 +645,19 @@ end
 -- AH, Crafter's Journal nunca pide un escaneo por su cuenta
 function Scanner:OnForeignScan(api)
   if not ES.db then return end
+  -- Dentro del límite del servidor (la petición anterior fue hace menos de 15 min) no
+  -- va a responder: no se espera nada ni se mueve la cuenta atrás. Pasaba tras un
+  -- /reload justo después de escanear: al abrir la AH, el escaneo automático de
+  -- Auctionator u otro addon dejaba el botón "escaneando" 2 min y reiniciaba los 15 min
+  -- desde una petición que el servidor ignoraba. (Uno que pides tú con Escanear ya no se
+  -- lanza dentro del límite: Start)
+  local wait = self:SecondsUntilNextScan()
+  if wait > 0 and not self:IsBusy() and not self.launchingAuctionator then
+    ES:ScanLog(string.format("otro addon pidió un escaneo completo (API %s) dentro del límite del servidor (faltan %s): no se espera respuesta",
+      api, ES.Countdown(wait)))
+    ES:RefreshScanButtons()
+    return
+  end
   LastFullScan()[OTHER_ADDON] = time()
   ES:ScanLog("otro addon pidió un escaneo completo (API " .. api .. ")")
   if not self:IsBusy() then

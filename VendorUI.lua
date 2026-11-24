@@ -19,9 +19,9 @@ ES.VendorShop = Vendor
 
 local BUY_GAP = 0.35
 local MAX_WAITS = 8 -- comprobaciones (de 1 s) esperando a que llegue lo comprado (no se vuelve a comprar)
-local ROW_H, MAX_ROWS = 34, 12
-local WIDTH = 300
-local COST_W = 74 -- columna del precio a la derecha de cada fila (hasta "99g 99s 99c")
+local ROW_H, MAX_ROWS = 38, 12
+local WIDTH = 324
+local COST_W = 84 -- columna del precio a la derecha de cada fila (hasta "99g 99s 99c")
 
 local function Ledger() return ES.Ledger end
 
@@ -362,13 +362,13 @@ local function CreatePanel()
     hl:SetAllPoints()
     hl:SetColorTexture(1, 0.82, 0.25, 0.1)
     row.icon = row:CreateTexture(nil, "ARTWORK")
-    row.icon:SetSize(26, 26)
+    row.icon:SetSize(28, 28)
     row.icon:SetPoint("LEFT", 2, 0)
     -- Precio arriba a la derecha, en la línea del nombre: el nombre acaba antes de
     -- él y "Tienes 0/163 · compras 165 × 4c · en lotes de 5" tiene todo el ancho
     -- (antes el precio iba centrado y ese texto se metía debajo)
     row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, -1)
+    row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, 0)
     row.name:SetPoint("RIGHT", row, "RIGHT", -COST_W, 0)
     row.name:SetJustifyH("LEFT")
     row.name:SetWordWrap(false)
@@ -377,7 +377,7 @@ local function CreatePanel()
     row.cost:SetPoint("RIGHT", row, "RIGHT", -4, 0)
     row.cost:SetJustifyH("RIGHT")
     row.qty = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    row.qty:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 6, 1)
+    row.qty:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 6, -2)
     row.qty:SetPoint("RIGHT", row, "RIGHT", -4, 0)
     row.qty:SetJustifyH("LEFT")
     row.qty:SetWordWrap(false)
@@ -487,7 +487,7 @@ function Vendor:Refresh()
       row.qty:SetText(string.format(L["Tienes %d/%d · compras %d × %s"], math.min(e.have, e.need), e.need, e.qty,
         ES.Money(e.price / e.batch))
         -- Vende de N en N: puede comprar algo más de lo que falta (que se sepa por qué)
-        .. (e.batch > 1 and e.qty > e.need - e.have and (" · " .. string.format(L["en lotes de %d"], e.batch)) or ""))
+        .. (e.batch > 1 and e.qty > e.need - e.have and (ES.SEP .. string.format(L["en lotes de %d"], e.batch)) or ""))
       row.cost:SetText(ES.Money(e.cost))
     else
       -- Ya lo tienes: se ve, en gris, para que sepas que este vendedor también lo vende

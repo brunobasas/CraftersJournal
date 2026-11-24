@@ -78,7 +78,7 @@ ES.OptionLabel = OptionLabel -- (también el diálogo de confirmar: ES:Confirm, 
 -- opciones. Antes el engranaje abría el panel entero y había que buscar la casilla
 local function GearMenu(gear, frame, key)
   local m = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-  m:SetSize(230, 112)
+  m:SetSize(316, 124)
   m:SetPoint("TOPRIGHT", gear, "BOTTOMRIGHT", 6, -4)
   if m.SetFrameStrata then m:SetFrameStrata("DIALOG") end
   if m.SetClampedToScreen then m:SetClampedToScreen(true) end
@@ -96,7 +96,7 @@ local function GearMenu(gear, frame, key)
   m.title:SetJustifyH("LEFT")
   m.title:SetWordWrap(false)
   m.off = CreateFrame("Button", nil, m, "UIPanelButtonTemplate")
-  m.off:SetSize(206, 24)
+  m.off:SetSize(292, 24)
   m.off:SetPoint("TOP", 0, -30)
   m.off:SetScript("OnClick", function()
     m.open = false
@@ -106,9 +106,9 @@ local function GearMenu(gear, frame, key)
   end)
   m.note = m:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   m.note:SetPoint("TOP", m.off, "BOTTOM", 0, -5)
-  m.note:SetWidth(206)
+  m.note:SetWidth(292)
   m.all = CreateFrame("Button", nil, m, "UIPanelButtonTemplate")
-  m.all:SetSize(206, 22)
+  m.all:SetSize(292, 22)
   m.all:SetPoint("BOTTOM", 0, 10)
   m.all:SetScript("OnClick", function()
     m.open = false
@@ -816,7 +816,7 @@ local function CreateWindow()
 
   -- Textos al mostrarse: el idioma o las opciones pueden haber cambiado
   function f:Refresh()
-    self.title:SetText("Crafter's Journal · " .. L["Opciones"])
+    self.title:SetText("Crafter's Journal" .. ES.SEP .. L["Opciones"])
     for i, b in ipairs(self.categoryButtons) do b.text:SetText(L[CATEGORIES[i].label]) end
     self.discordButton.title:SetText(L["Únete a nuestro Discord"])
     self.discordButton.sub:SetText(L["Ideas, errores y novedades"])

@@ -52,7 +52,7 @@ local function IdeaTooltip(idea)
     local e = idea.e
     GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
     GameTooltip:AddLine((ItemLabel(e.itemID, e.recipe.name)))
-    GameTooltip:AddLine(ES:ProfLabel(idea.profKey) .. " · " .. e.recipe.name, 0.8, 0.8, 0.8)
+    GameTooltip:AddLine(ES:ProfLabel(idea.profKey) .. ES.SEP .. e.recipe.name, 0.8, 0.8, 0.8)
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(e.qty > 1 and string.format(L["Materiales (1 fabricación = %s uds):"], ES.Num(e.qty)) or L["Materiales (1 fabricación):"], 1, 0.82, 0)
     for _, rg in ipairs(e.reagents or {}) do
@@ -99,9 +99,37 @@ local function IdeaTooltip(idea)
         GameTooltip:AddLine(L["Hasta aquí: no quedan más materiales a la venta en la AH."], 0.8, 0.8, 0.8, true)
       elseif idea.limit == "max" then
         GameTooltip:AddLine(string.format(L["Tope de %d fabricaciones: con más aún daría beneficio."], idea.crafts), 0.8, 0.8, 0.8, true)
-      elseif idea.limit == "time" then
+      elseif idea.limit == "time" and not idea.shuffle then
         GameTooltip:AddLine(string.format(L["Hasta aquí: unos %d min de fabricar. Más fabricaciones aún darían beneficio, pero no compensa el tiempo."],
           math.floor(ES.Earn.VENDOR_TIME_BUDGET / 60)), 0.8, 0.8, 0.8, true)
+      end
+      -- Fabricar en cantidad: una hora de fabricar (o menos, si antes deja de compensar)
+      if idea.shuffle and (idea.crafts or 0) > 0 then
+        if idea.limit == "time" then
+          GameTooltip:AddLine(L["Lo que cabe en una hora de fabricar: más horas aún darían beneficio. Compensa si fabricas sin estar delante."], 1, 0.82, 0, true)
+        else
+          GameTooltip:AddLine(string.format(L["Solo unos %d min de fabricar: es lo que deja en una hora."],
+            math.max(1, math.floor((idea.seconds or 0) / 60 + 0.5))), 1, 0.82, 0, true)
+        end
+        if idea.noProf then
+          GameTooltip:AddLine(string.format(L["No tienes %s: es para otro personaje."], ES:ProfLabel(idea.profKey)), 1, 0.6, 0.2, true)
+        end
+        if idea.learnable and e.learnSource == "unknown" then
+          GameTooltip:AddLine(L["No se sabe dónde se consigue su receta (quizá un botín raro): sale por si tú o alguien de tu cuenta la tiene."], 1, 0.6, 0.2, true)
+        end
+        if (idea.stockCrafts or 0) > idea.crafts then
+          GameTooltip:AddLine(string.format(L["En la AH hay para %d fabricaciones (~%d h): compensa comprar ya también lo de las horas siguientes."],
+            idea.stockCrafts, math.max(1, math.floor((idea.stockHours or 0) + 0.5))), 0.6, 1, 0.6, true)
+        end
+        -- Precio máximo de compra de cada material de la AH (Earn.MaxPrices)
+        if idea.maxPrices and #idea.maxPrices > 0 then
+          GameTooltip:AddLine(" ")
+          GameTooltip:AddLine(L["Compensa comprar hasta (con lo demás a lo de hoy):"], 1, 0.82, 0)
+          for _, p in ipairs(idea.maxPrices) do
+            GameTooltip:AddDoubleLine((ItemLabel(p.itemID, "#" .. p.itemID)),
+              ES.Money(p.max) .. GREY .. ES.SEP .. string.format(L["hoy ~%s"], ES.Money(p.now)) .. "|r", 1, 1, 1, 1, 1, 1)
+          end
+        end
       end
       -- Lo intermedio que fabricas tú (de lo que compras): hay que hacerlo antes. Si
       -- no, la lista de compra pedía Heavy Stone sin decir que es para hacer el Heavy
@@ -109,7 +137,9 @@ local function IdeaTooltip(idea)
       local first = {}
       for _, a in ipairs(idea.actions or {}) do
         if a.kind == "craft" and a.item ~= e.itemID and (a.qty or 0) > 0 then
+          -- (de otra profesión, como fundir con Minería: se dice cuál)
           first[#first + 1] = string.format("%d× %s", math.ceil(a.qty - 0.001), (ItemLabel(a.item, "#" .. a.item)))
+            .. (a.prof and (" (" .. ES:ProfLabel(a.prof) .. ")") or "")
         end
       end
       if #first > 0 and idea.crafts > 0 then
@@ -253,19 +283,52 @@ local function IdeaLine(idea, dim)
   return HideRecipe(IdeaLineBase(idea, dim), idea.e.id)
 end
 
+-- BulkMoney (BulkMoneyUI.lua): cada línea es una hora de fabricar (Earn:VendorShuffle):
+-- el título, las fabricaciones de esa hora; la cifra, el oro por hora (lo que dejan).
+-- Si deja de compensar antes de la hora, cuándo; si no la sabes, cómo se aprende
+-- (con su propia ✕: quitarla de BulkMoney no la quita de Ganar dinero, Earn.SetBulkHidden)
+function ES.UI.BulkMoneyLine(idea)
+  local line = IdeaLineBase(idea)
+  local id = idea.e.id
+  line.onSkip = function()
+    ES.Earn.SetBulkHidden(id, true)
+    if ES.RenderBulkMoney then ES:RenderBulkMoney() end
+  end
+  line.skipTitle = L["Quitar de BulkMoney"]
+  line.skipTip = L["No volver a proponer esta receta aquí: por ejemplo, si no sabes conseguir su patrón. No la quita de Ganar dinero. Se recupera con la fila de recetas quitadas, al final de la lista."]
+  local e = idea.e
+  line.value = GREEN .. "+" .. string.format(L["%s/h"], ES.Money(idea.profit or 0)) .. "|r"
+  local minutes = math.max(1, math.floor((idea.seconds or 0) / 60 + 0.5))
+  if minutes < 55 then
+    line.sub = line.sub .. ES.SEP .. ORANGE .. string.format(L["se acaba en ~%d min"], minutes) .. "|r"
+  elseif (idea.stockHours or 0) >= 1.5 then
+    -- Hay material barato para más horas (Earn.StockFor): compensa comprarlo ya
+    line.sub = line.sub .. ES.SEP .. GREEN .. string.format(L["en la AH hay para ~%d h"], math.floor(idea.stockHours + 0.5)) .. "|r"
+  end
+  if idea.learnable then
+    local learn = (LEARN_LABEL[e.learnSource] or (e.learnSource == "basic" and L["al aprender la profesión"])
+      or (e.learnSource == "rep" and L["Reputación"])
+      or (e.learnSource == "unknown" and (ORANGE .. L["Fuente desconocida"] .. "|r")) or "?")
+      .. ((e.learnCost or 0) > 0 and (" " .. ES.Money(e.learnCost)) or "")
+    local req = idea.canLearn and (GREEN .. L["ya puedes"] .. "|r") or (ORANGE .. string.format(L["pide %d"], idea.need) .. "|r")
+    line.sub = line.sub .. ES.SEP .. learn .. ES.SEP .. req
+  end
+  return line
+end
+
 function ES:CreateEarnPage(page)
   local Label = ES.UI.Label
-  local head = ES.UI.CardHead(page) -- (fondo y colores de Subir profesiones)
+  local head = ES.UI.CardHead(page, 70) -- (fondo y colores de Subir profesiones)
   local icon = head:CreateTexture(nil, "ARTWORK")
   icon:SetSize(44, 44)
   icon:SetPoint("LEFT", 12, 0)
   icon:SetTexture("Interface\\Icons\\INV_Misc_Coin_02")
   icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
   local name = Label(head, L["Ganar dinero"], "GameFontNormalHuge")
-  name:SetPoint("TOPLEFT", icon, "TOPRIGHT", 12, 2)
+  name:SetPoint("TOPLEFT", icon, "TOPRIGHT", 12, 4)
   name:SetTextColor(0.96, 0.79, 0.25)
   page.subtitle = Label(head, "", "GameFontHighlightSmall")
-  page.subtitle:SetPoint("BOTTOMLEFT", icon, "BOTTOMRIGHT", 12, 2)
+  page.subtitle:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -3)
   page.subtitle:SetPoint("RIGHT", -370, 0)
   page.subtitle:SetJustifyH("LEFT")
 
@@ -554,7 +617,7 @@ function ES:RenderEarn()
         or string.format(L["vendedor %s/u"], ES.Money(e.vendor))
       if idea.cooldown then where = where .. L[" · con enfriamiento"] end
       lines[#lines + 1] = HideRecipe({ icon = texture or 134400, title = name or e.recipe.name,
-        sub = string.format("%s · %s · %s · %s", ES:ProfLabel(idea.profKey), learn, req, where),
+        sub = string.format("%s" .. ES.SEP .. "%s" .. ES.SEP .. "%s" .. ES.SEP .. "%s", ES:ProfLabel(idea.profKey), learn, req, where),
         value = GREEN .. "+" .. ES.Money(PerUnit(e, e.profit)) .. "/u|r", item = e.itemID, tooltip = IdeaTooltip(idea) }, e.id)
     end
   end

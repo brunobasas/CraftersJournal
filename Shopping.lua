@@ -10,7 +10,8 @@ local _, ES = ...
 -- la más nueva.
 --
 -- Por personaje: ES.charData.shopping[i] =
---   { t, kind ("route" | "money" | "calc"), key, title, items = { { itemID, need, unit, source } } }
+--   { t, kind ("route" | "money" | "calc"), key, title, items = { { itemID, need, unit, source, max } } }
+--   (max: precio máximo de compra por unidad, solo las de BulkMoney)
 
 local Shopping = {}
 ES.Shopping = Shopping
@@ -44,6 +45,8 @@ function Shopping.Add(kind, title, items, opts)
       end
       m.quantity = m.quantity + it.quantity
       m.cost = m.cost + (it.unit or 0) * it.quantity
+      -- (max: precio máximo de compra, BulkMoney; repetido, el más bajo)
+      if it.max then m.max = math.min(m.max or it.max, it.max) end
     end
   end
   local list = { t = time(), kind = kind, key = opts.key, title = title, items = {} }
@@ -51,7 +54,7 @@ function Shopping.Add(kind, title, items, opts)
     -- (lo que llevas no se resta aquí: se cuenta al enseñarla, ver Status)
     local need = math.ceil(m.quantity - 0.001)
     if need > 0 then
-      list.items[#list.items + 1] = { itemID = m.itemID, need = need, unit = m.cost / m.quantity, source = m.source }
+      list.items[#list.items + 1] = { itemID = m.itemID, need = need, unit = m.cost / m.quantity, source = m.source, max = m.max }
     end
   end
   if #list.items == 0 then return nil end
@@ -258,6 +261,42 @@ function Shopping.Status()
     if not (list.kind == "route" and phased[list.key]) then AddList(list) end
   end
   return res
+end
+
+-- ¿Pide este objeto la Lista de compra o una ruta empezada? Lo usa el aviso de la compra
+-- en la AH (Ledger.AddOnWay): antes salía con todo lo que comprabas, también lo que no
+-- tenía nada que ver (Stonescale Eel sin ruta ni lista). Cuenta: las listas guardadas,
+-- la del tramo (o la ruta entera) de cada ruta empezada, y lo que la ruta empezada pide
+-- en cualquier tramo aunque su lista esté quitada: lo que compra, lo que fabrica (sus
+-- intermedios, que valen como su material) y sus pergaminos
+function Shopping.Wants(itemID)
+  if not itemID then return false end
+  for _, list in ipairs(Shopping.Lists()) do
+    for _, it in ipairs(list.items or {}) do
+      if it.itemID == itemID then return true end
+    end
+  end
+  for _, list in ipairs(Shopping.PhaseLists()) do
+    for _, it in ipairs(list.items) do
+      if it.itemID == itemID then return true end
+    end
+  end
+  for _, p in ipairs(ES.PROFESSIONS or {}) do
+    local lock = ES.Data[p.key] and ES.RouteLock and ES:RouteLock(p.key)
+    local plan = lock and not lock.completed and ES:LockedPlan(p.key)
+    if plan then
+      for _, e in ipairs(plan.shopping or {}) do
+        if e.itemID == itemID then return true end
+      end
+      for _, c in ipairs(plan.crafted or {}) do
+        if c.itemID == itemID then return true end
+      end
+      for _, st in ipairs(plan.steps or {}) do
+        if st.recipe and st.recipe.scroll == itemID then return true end
+      end
+    end
+  end
+  return false
 end
 
 -- ¿Ha terminado la ruta de esta profesión? (ruta empezada y completada, o tu nivel ya

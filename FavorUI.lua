@@ -16,7 +16,7 @@ local function ItemLabel(itemID) return ES.UI.ItemLabel(itemID, "#" .. itemID) e
 
 -- "Experto · Tejidos"
 local function CrateName(c)
-  return (TIER[c.tier] or "?") .. " · " .. (KIND[c.kind] or c.kind)
+  return (TIER[c.tier] or "?") .. ES.SEP .. (KIND[c.kind] or c.kind)
 end
 ES.Favor.CrateName = CrateName
 
@@ -97,11 +97,11 @@ local function Line(o, mine)
     value = GREY .. "—|r"
   elseif mine then
     sub = string.format(L["llénala con %s (%s)"], FillText(o.fill), ES.Money(o.fill.cost))
-      .. (o.haveFill and (" · " .. GREEN .. L["ya lo tienes"] .. "|r") or "")
+      .. (o.haveFill and (ES.SEP .. GREEN .. L["ya lo tienes"] .. "|r") or "")
     value = ES.UI.Signed(o.fill.cost)
   else
     sub = string.format(L["caja %s + %s (%s)"], ES.Money(o.crateCost), FillText(o.fill), ES.Money(o.fill.cost))
-      .. (o.haveFill and (" · " .. GREEN .. L["ya tienes el paquete"] .. "|r") or "")
+      .. (o.haveFill and (ES.SEP .. GREEN .. L["ya tienes el paquete"] .. "|r") or "")
     value = string.format(L["%s/punto"], ES.Money(math.floor(o.perFavor + 0.5)))
   end
   return { icon = texture or (GetItemIcon and GetItemIcon(c.id)) or ICON, title = title, sub = sub, value = value,

@@ -738,6 +738,7 @@ function ES:RefreshAllViews()
   if self.RefreshProfessionPages then self:RefreshProfessionPages() end -- planes de cada profesión
   if self.Earn then self.Earn:Clear() end                       -- Ganar dinero
   if self.RenderEarn then self:RenderEarn() end
+  if self.RenderBulkMoney then self:RenderBulkMoney() end      -- BulkMoney (solo desarrollo; solo si se ve)
   if self.RenderInventory then self:RenderInventory() end      -- Inventario
   if self.RefreshPatternPages then self:RefreshPatternPages() end -- Colección de recetas
   if self.RenderCalculator then self:RenderCalculator() end    -- Calculadora (sus precios salen del escaneo)
@@ -976,6 +977,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
     end
     LoadCharacterData()
     ES.lang = ES.db.lang or ES.DefaultLanguage()
+    ES.ApplyClientFont()
     ES.db.lastGetAll, ES.db.serverLimit = nil, nil -- claves de versiones anteriores (ver Scanner.lua)
     -- (de versiones anteriores: modo desarrollo, pestaña Subastas y comandos de depuración)
     ES.db.userPreview, ES.db.topSortBy, ES.db.topWindow, ES.db.debugFrame, ES.db.trainerFeesCSV = nil, nil, nil, nil, nil

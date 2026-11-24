@@ -1,6 +1,6 @@
 -- Opciones: la ventana, y cada opción cambia lo que guarda y se aplica sin errores
 
-local PAGES = { "home", "shopping", "money", "inventory", "invest", "favor", "calc", "patterns", "Leatherworking" }
+local PAGES = { "home", "shopping", "money", "bulk", "inventory", "invest", "favor", "calc", "patterns", "Leatherworking" }
 
 test("la ventana de opciones se abre en cada categoría", function()
   for _, cat in ipairs(ES.OPTION_CATEGORIES) do
@@ -84,7 +84,7 @@ end)
 ---------------------------------------------------------------------------
 -- Pestañas: orden, ocultas e inicio (ES.Tabs, UI.lua; categoría Pestañas)
 ---------------------------------------------------------------------------
-local DEFAULT_TABS = { "home", "shopping", "money", "inventory", "invest", "favor", "calc", "patterns" }
+local DEFAULT_TABS = { "home", "shopping", "money", "bulk", "inventory", "invest", "favor", "calc", "patterns" }
 
 local function Joined(list) return table.concat(list, ",") end
 -- Un orden completo (como el que se guarda): estas primero y luego las demás
@@ -126,18 +126,36 @@ end)
 
 test("pestañas: orden guardado, claves que ya no existen y pestañas nuevas", function()
   ES.db.tabOrder = { "shopping", "auctions", "home", "shopping", 7, "patterns", "calc" }
-  -- (faltan money, inventory, invest y favor: como si fueran nuevas en esta versión)
+  -- (faltan money, bulk, inventory, invest y favor: como si fueran nuevas en esta versión)
   -- (money va tras shopping, que la precede en el de siempre, y así cada una)
-  expect_eq(Joined(ES.Tabs.Order()), "shopping,money,inventory,invest,favor,home,patterns,calc",
+  expect_eq(Joined(ES.Tabs.Order()), "shopping,money,bulk,inventory,invest,favor,home,patterns,calc",
     "las que faltan, tras la que las precede en el orden de siempre")
   -- Falta la primera del de siempre: no la precede ninguna y va arriba
   ES.db.tabOrder = { "calc", "shopping", "money", "inventory", "invest", "favor", "patterns" }
-  expect_eq(Joined(ES.Tabs.Order()), "home,calc,shopping,money,inventory,invest,favor,patterns",
+  expect_eq(Joined(ES.Tabs.Order()), "home,calc,shopping,money,bulk,inventory,invest,favor,patterns",
     "nueva sin ninguna antes")
   ES.db.tabOrder = OrderWith("calc", "home")
   expect_eq(ES.Tabs.Order()[1], "calc", "la primera guardada sigue arriba")
   ES.db.tabOrder = "roto"
   expect_eq(Joined(ES.Tabs.Order()), Joined(DEFAULT_TABS), "orden guardado roto")
+end)
+
+-- BulkMoney es solo para el desarrollador: existe en la copia de desarrollo (carga
+-- DevTools.lua) y no en lo publicado (sin DevTools.lua: ES.DevCommand no existe)
+test("pestañas: BulkMoney solo en la copia de desarrollo", function()
+  expect(ES.Tabs.Info("bulk"), "en la copia de desarrollo no está BulkMoney (la prueba no prueba nada)")
+  ES.DevCommand = nil -- (lo publicado)
+  expect(not ES.Tabs.Info("bulk"), "lo publicado tiene BulkMoney")
+  expect(not Joined(ES.Tabs.Order()):find("bulk", 1, true), "BulkMoney en el orden de lo publicado")
+  -- Un orden guardado con ella (de la copia de desarrollo, misma cuenta): fuera
+  ES.db.tabOrder = OrderWith("bulk", "calc")
+  expect(not Joined(ES.Tabs.Order()):find("bulk", 1, true), "BulkMoney en el orden guardado de lo publicado")
+  ES.db.tabOrder = nil
+  OpenMain()
+  for _, tab in ipairs(ES:GetMainFrame().tabs) do expect(tab.key ~= "bulk", "lo publicado tiene la pestaña BulkMoney") end
+  expect(not ES:GetMainFrame().pages.bulk, "lo publicado tiene la página BulkMoney")
+  ES:SelectPage("bulk")
+  expect(ES.db.lastPage ~= "bulk", "lo publicado abre BulkMoney")
 end)
 
 test("pestañas: ocultas, la de inicio y nunca ninguna", function()
@@ -158,13 +176,13 @@ test("pestañas: mover, ocultar, no ocultar la última y restaurar", function()
   local T = ES.Tabs
   expect(not T.Move(1, 1), "mismo puesto")
   expect(not T.Move(1, 0), "subir la primera")
-  expect(not T.Move(8, 9), "bajar la última")
+  expect(not T.Move(9, 10), "bajar la última")
   expect_eq(ES.db.tabOrder, nil, "sin cambio no se guarda nada")
   expect(T.Move(2, 3), "bajar Lista de compra")
-  expect_eq(Joined(T.Order()), "home,money,shopping,inventory,invest,favor,calc,patterns", "tras bajarla")
+  expect_eq(Joined(T.Order()), "home,money,shopping,bulk,inventory,invest,favor,calc,patterns", "tras bajarla")
   expect(T.Move(3, 2), "volver a subirla")
   expect_eq(ES.db.tabOrder, nil, "de vuelta al orden de siempre no se guarda nada")
-  expect(T.Move(8, 1), "Colección arriba")
+  expect(T.Move(9, 1), "Colección arriba")
   expect_eq(T.StartKey(), "patterns", "la de arriba es la de inicio")
   -- Ocultar todas menos una
   for i, k in ipairs(DEFAULT_TABS) do
@@ -199,9 +217,9 @@ end)
 test("pestañas: con la ventana abierta, ocultar y reordenar se ve al momento", function()
   OpenMain()
   ES.Tabs.SetHidden("favor", true)
-  expect_eq(Joined(ShownTabs()), "home,shopping,money,inventory,invest,calc,patterns", "tras ocultar Merchant's Favor")
-  ES.Tabs.Move(4, 1)
-  expect_eq(Joined(ShownTabs()), "inventory,home,shopping,money,invest,calc,patterns", "tras subir Inventario")
+  expect_eq(Joined(ShownTabs()), "home,shopping,money,bulk,inventory,invest,calc,patterns", "tras ocultar Merchant's Favor")
+  ES.Tabs.Move(5, 1)
+  expect_eq(Joined(ShownTabs()), "inventory,home,shopping,money,bulk,invest,calc,patterns", "tras subir Inventario")
   ES.Tabs.Reset()
   expect_eq(Joined(ShownTabs()), Joined(DEFAULT_TABS), "tras restaurar")
 end)
@@ -280,10 +298,10 @@ test("Pestañas en opciones: una fila por pestaña, en su orden, solo con icono 
   expect(row.desc == nil and row.start == nil, "la fila tiene descripción o «Inicio»")
   expect(page.header:IsShown(), "el botón Ocultar no se ve")
   expect(page.header.reset == nil, "sigue el botón Restaurar")
-  ES.Tabs.Move(7, 1)
+  ES.Tabs.Move(8, 1)
   ES.Tabs.SetHidden("calc", true)
   page = TabsPage()
-  expect_eq(Joined(RowKeys(page)), "calc,home,shopping,money,inventory,invest,favor,patterns", "filas tras cambiar el orden")
+  expect_eq(Joined(RowKeys(page)), "calc,home,shopping,money,bulk,inventory,invest,favor,patterns", "filas tras cambiar el orden")
   expect(Row(page, "calc").hiddenText:IsShown(), "la oculta no dice OCULTA")
   -- El botón solo con esta categoría
   ES:OpenOptions("general")
@@ -295,12 +313,12 @@ test("Pestañas en opciones: las flechas suben y bajan una fila", function()
   OpenMain()
   local page = TabsPage()
   Click(Row(page, "shopping").down)
-  expect_eq(Joined(RowKeys(page)), "home,money,shopping,inventory,invest,favor,calc,patterns", "filas tras bajar Lista de compra")
-  expect_eq(Joined(ShownTabs()), "home,money,shopping,inventory,invest,favor,calc,patterns", "pestañas tras bajarla")
+  expect_eq(Joined(RowKeys(page)), "home,money,shopping,bulk,inventory,invest,favor,calc,patterns", "filas tras bajar Lista de compra")
+  expect_eq(Joined(ShownTabs()), "home,money,shopping,bulk,inventory,invest,favor,calc,patterns", "pestañas tras bajarla")
   Click(Row(page, "home").up)
-  expect_eq(Joined(RowKeys(page)), "home,money,shopping,inventory,invest,favor,calc,patterns", "subir la primera no hace nada")
+  expect_eq(Joined(RowKeys(page)), "home,money,shopping,bulk,inventory,invest,favor,calc,patterns", "subir la primera no hace nada")
   Click(Row(page, "patterns").down)
-  expect_eq(Row(page, "patterns").index, 8, "bajar la última no hace nada")
+  expect_eq(Row(page, "patterns").index, 9, "bajar la última no hace nada")
 end)
 
 test("Pestañas en opciones: modo ocultar, Hecho y avisos", function()
@@ -382,23 +400,23 @@ test("Pestañas en opciones: arrastrar una fila la cambia de sitio; fuera, nada"
     OpenMain()
     local page = TabsPage()
     FakeGeometry(page, scale)
-    -- Inventario (4.ª) por encima de Subir profesiones
+    -- Inventario (5.ª) por encima de Subir profesiones
     local row = Drag(page, "inventory", 200, 395, scale)
     expect(page.dropLine:IsShown(), "escala %s: no sale la línea de dónde caerá", scale)
     Drop(page, row)
-    expect_eq(Joined(RowKeys(page)), "inventory,home,shopping,money,invest,favor,calc,patterns", "escala " .. scale .. ": filas")
-    expect_eq(Joined(ShownTabs()), "inventory,home,shopping,money,invest,favor,calc,patterns", "escala " .. scale .. ": pestañas")
-    -- Subir profesiones (ahora 2.ª) entre Merchant's Favor (6.ª) y la Calculadora (7.ª)
-    row = Drag(page, "home", 200, 400 - 6 * 37 + 1, scale)
+    expect_eq(Joined(RowKeys(page)), "inventory,home,shopping,money,bulk,invest,favor,calc,patterns", "escala " .. scale .. ": filas")
+    expect_eq(Joined(ShownTabs()), "inventory,home,shopping,money,bulk,invest,favor,calc,patterns", "escala " .. scale .. ": pestañas")
+    -- Subir profesiones (ahora 2.ª) entre Merchant's Favor (7.ª) y la Calculadora (8.ª)
+    row = Drag(page, "home", 200, 400 - 7 * 37 + 1, scale)
     Drop(page, row)
-    expect_eq(Joined(RowKeys(page)), "inventory,shopping,money,invest,favor,home,calc,patterns", "escala " .. scale .. ": entre dos")
+    expect_eq(Joined(RowKeys(page)), "inventory,shopping,money,bulk,invest,favor,home,calc,patterns", "escala " .. scale .. ": entre dos")
     -- Soltarla fuera de la lista (debajo, y a la derecha)
     row = Drag(page, "calc", 200, 20, scale)
     expect(not page.dropLine:IsShown(), "fuera de la lista sale la línea")
     Drop(page, row)
     row = Drag(page, "calc", 600, 395, scale)
     Drop(page, row)
-    expect_eq(Joined(RowKeys(page)), "inventory,shopping,money,invest,favor,home,calc,patterns", "escala " .. scale .. ": soltada fuera")
+    expect_eq(Joined(RowKeys(page)), "inventory,shopping,money,bulk,invest,favor,home,calc,patterns", "escala " .. scale .. ": soltada fuera")
   end
 end)
 

@@ -26,19 +26,40 @@ end
 
 ES.lang = ES.DefaultLanguage()
 
+-- La fuente rusa no tiene «·» (sale un cuadrado), y la usan el cliente ruso y también
+-- cualquier texto con cirílico (el juego elige la fuente por las letras del texto: con
+-- el cliente en inglés y el addon en ruso también salía el cuadrado). Con cualquiera de
+-- los dos, el separador « · » se dibuja « - »: ES.SEP en las uniones que arma el código
+-- y ES.L en los textos traducidos (en cualquier idioma)
+-- (se vuelve a mirar en ADDON_LOADED y al cambiar de idioma)
+local NO_MIDDOT = { ruRU = true }
+local NO_MIDDOT_LANG = { ru = true }
+local MIDDOT = "\194\183"
+local noDot
+function ES.ApplyClientFont()
+  noDot = (GetLocale and NO_MIDDOT[GetLocale()]) or NO_MIDDOT_LANG[ES.lang] or false
+  ES.SEP = noDot and " - " or " " .. MIDDOT .. " "
+end
+ES.ApplyClientFont()
+
+local function Font(v)
+  if noDot and v:find(MIDDOT, 1, true) then return (v:gsub(MIDDOT, "-")) end
+  return v
+end
+
 -- Un texto sin traducir en alemán o francés sale en inglés, no en español (la clave):
 -- lo entiende más gente. En inglés, si falta, el español (lo que hubo siempre)
 ES.L = setmetatable({}, {
   __index = function(_, key)
     local t = ES.Locales[ES.lang]
     local v = t and t[key]
-    if v then return v end
+    if v then return Font(v) end
     if ES.lang ~= "es" and ES.lang ~= "en" then
       local en = ES.Locales.en
       v = en and en[key]
-      if v then return v end
+      if v then return Font(v) end
     end
-    return key
+    return Font(key)
   end,
 })
 
@@ -77,6 +98,7 @@ function ES:SetLanguage(lang)
   if lang == self.lang then return end
   self.lang = lang
   self.db.lang = lang
+  ES.ApplyClientFont()
   ES.ApplyLocalization()
   self:LocalizeRecipeNames()
   if self.ReleaseUnusedNames then self.ReleaseUnusedNames() end -- (el idioma anterior, si ya no se usa)

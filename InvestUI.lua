@@ -1256,7 +1256,7 @@ function ES:RenderInvest()
     page.status:SetText(BLUE_TIP .. L["Precios de tus últimos escaneos. Instala Auctionator para volver a escanear y tener el historial de precios."] .. "|r")
   elseif PH.Available() then
     page.status:SetText(GREY .. L["Precios del historial de Auctionator: se ponen al día cada vez que escaneas."]
-      .. (missing and ("  ·  " .. missing) or "") .. "|r")
+      .. (missing and (" " .. ES.SEP .. " " .. missing) or "") .. "|r")
   else
     page.status:SetText(missing and (GREY .. missing .. "|r") or "")
   end
@@ -1843,7 +1843,7 @@ local function ItemInfo(itemID)
   if kind and kind ~= "" then parts[#parts + 1] = BLUE .. kind .. "|r" end
   local vendor = ES:VendorSellPrice(itemID)
   if vendor and vendor > 0 then parts[#parts + 1] = L["Vendedor: "] .. Money(vendor) end
-  return table.concat(parts, GREY .. "  ·  |r")
+  return table.concat(parts, GREY .. " " .. ES.SEP .. " |r")
 end
 
 function ES:RenderInvestItem()
@@ -1906,7 +1906,7 @@ function ES:RenderInvestItem()
       for _, p in ipairs(parts) do
         if not (p.drop and p.drop <= maxDrop) then out[#out + 1] = p.label and (p.label .. " " .. p.value) or p.value end
       end
-      return table.concat(out, "  ·  ")
+      return table.concat(out, " " .. ES.SEP .. " ")
     end
     page.position:SetText(Text(0))
     local width = tonumber(page.position:GetWidth()) or 0

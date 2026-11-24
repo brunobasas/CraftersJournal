@@ -5,17 +5,25 @@ local GOLD_ICON   = "|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t"
 local SILVER_ICON = "|TInterface\\MoneyFrame\\UI-SilverIcon:0:0:2:0|t"
 local COPPER_ICON = "|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t"
 
-local CoinString = (C_CurrencyInfo and C_CurrencyInfo.GetCoinTextureString) or GetCoinTextureString
-  or function(copper)
-    local g = math.floor(copper / 10000)
-    local s = math.floor(copper / 100) % 100
-    local c = copper % 100
-    local parts = {}
-    if g > 0 then parts[#parts + 1] = g .. GOLD_ICON end
-    if s > 0 then parts[#parts + 1] = s .. SILVER_ICON end
-    if c > 0 or #parts == 0 then parts[#parts + 1] = c .. COPPER_ICON end
-    return table.concat(parts, " ")
-  end
+local function OwnCoinString(copper)
+  local g = math.floor(copper / 10000)
+  local s = math.floor(copper / 100) % 100
+  local c = copper % 100
+  local parts = {}
+  if g > 0 then parts[#parts + 1] = g .. GOLD_ICON end
+  if s > 0 then parts[#parts + 1] = s .. SILVER_ICON end
+  if c > 0 or #parts == 0 then parts[#parts + 1] = c .. COPPER_ICON end
+  return table.concat(parts, " ")
+end
+
+-- Cada número pegado a su moneda: el cliente ruso pone un espacio entre el número y el
+-- icono, y al partir la línea la moneda se quedaba sola en la siguiente. El espacio
+-- entre monedas se queda (ahí sí se puede partir). La función del juego se busca en
+-- cada llamada (las pruebas ponen una con espacios)
+local function CoinString(copper)
+  local game = (C_CurrencyInfo and C_CurrencyInfo.GetCoinTextureString) or GetCoinTextureString or OwnCoinString
+  return (game(copper):gsub("%s+|T", "|T"))
+end
 
 local function Money(copper)
   copper = tonumber(copper)
@@ -229,6 +237,7 @@ local function CreateMainFrame()
 
   ES:CreateHomePage(AddPage("home", L["Subir profesiones"]))
   ES:CreateEarnPage(AddPage("money", ""))
+  if ES.Tabs.Info("bulk") then ES:CreateBulkMoneyPage(AddPage("bulk", "")) end -- (solo en desarrollo)
   ES:CreateInventoryPage(AddPage("inventory", ""))
   ES:CreateInvestPage(AddPage("invest", ""))
   ES:CreateInvestItemPage(AddPage("investItem", ""))
@@ -284,6 +293,9 @@ local TABS = ES.Localize({
     desc = "Lo que pide tu ruta empezada (sale sola) y lo que añades desde Ganar dinero o la calculadora; con la AH abierta, se compra desde aquí." },
   { key = "money",    label = "Ganar dinero",         icon = "Interface\\Icons\\INV_Misc_Coin_02",
     desc = "Qué fabricar hoy con tus recetas porque da beneficio." },
+  -- (nombre provisional; solo en la copia de desarrollo: Tabs.Available)
+  { key = "bulk",     label = "BulkMoney",            icon = "Interface\\Icons\\INV_Misc_Coin_03", dev = true,
+    desc = "Fabricar en cantidad para vender al vendedor: qué recetas, de cualquier profesión, dejan más oro por hora de fabricar." },
   { key = "inventory", label = "Inventario",          icon = "Interface\\Icons\\INV_Misc_Bag_08",
     desc = "Qué vender de tus bolsas, dónde y cuánto sacas; y lo que ha subido de precio." },
   { key = "invest",   label = "Inversiones",          icon = ES.Invest.ICON,
@@ -310,13 +322,26 @@ ES.TABS = TABS -- (la categoría Pestañas de las opciones: TabsOptionsUI.lua)
 local Tabs = {}
 ES.Tabs = Tabs
 
+-- Pestañas de desarrollo (dev = true: BulkMoney): solo en la copia de desarrollo, la
+-- que carga DevTools.lua (no se publica: #@do-not-package@). Para los jugadores no
+-- existen: ni pestaña, ni página, ni fila en las opciones
+function Tabs.IsDevCopy() return ES.DevCommand ~= nil end
+local function Available()
+  local out = {}
+  for _, t in ipairs(TABS) do
+    if not t.dev or Tabs.IsDevCopy() then out[#out + 1] = t end
+  end
+  return out
+end
+Tabs.Available = Available
+
 function Tabs.Info(key)
-  for _, t in ipairs(TABS) do if t.key == key then return t end end
+  for _, t in ipairs(Available()) do if t.key == key then return t end end
 end
 
 local function DefaultOrder()
   local out = {}
-  for i, t in ipairs(TABS) do out[i] = t.key end
+  for i, t in ipairs(Available()) do out[i] = t.key end
   return out
 end
 
@@ -337,9 +362,10 @@ function Tabs.Order()
       seen[key] = true
     end
   end
-  for i, t in ipairs(TABS) do
+  local tabs = Available()
+  for i, t in ipairs(tabs) do
     if not seen[t.key] then
-      local prev = i > 1 and IndexOf(out, TABS[i - 1].key)
+      local prev = i > 1 and IndexOf(out, tabs[i - 1].key)
       table.insert(out, prev and prev + 1 or 1, t.key)
       seen[t.key] = true
     end
@@ -532,8 +558,9 @@ end
 
 function ES:CreateSideTabs(f)
   f.tabs = {}
-  -- (todas, también las ocultas: dónde va cada una lo decide ES:LayoutTabs)
-  for _, t in ipairs(TABS) do
+  -- (todas, también las ocultas: dónde va cada una lo decide ES:LayoutTabs; las de
+  -- desarrollo, solo en la copia de desarrollo)
+  for _, t in ipairs(Available()) do
     local tab = CreateTab(f, t.icon == "skills" and ES.SKILLS_ICON or t.icon)
     tab.key = t.key
     -- Vuelve a donde estabas en esa pestaña (la profesión que mirabas), no a su portada;
@@ -855,7 +882,7 @@ function ES:RefreshScanButtons()
   if busy then
     progress = string.format("%d%%", math.floor((self.Scanner.progress or 0) * 100))
     if self.Scanner.state == "waiting" and (self.Scanner.waited or 0) > 0 then
-      progress = progress .. string.format(" · %ds", self.Scanner.waited) -- esperando al servidor
+      progress = progress .. string.format(ES.SEP .. "%ds", self.Scanner.waited) -- esperando al servidor
     end
   elseif wait > 0 then
     progress = Countdown(wait)
@@ -953,7 +980,7 @@ function ES:OnAuctionHouseShow()
   end
   if not ahButton then
     ahButton = CreateFrame("Button", "CraftersJournalAHButton", ahFrame, "UIPanelButtonTemplate")
-    ahButton:SetSize(180, 24)
+    ahButton:SetSize(280, 24)
     ahButton:SetPoint("BOTTOMRIGHT", ahFrame, "TOPRIGHT", 0, 2)
     -- Abre el addon siempre; escanea solo si se puede (sin escaneo en curso ni el
     -- límite de 15 min del servidor). Si no, se abre con los últimos precios

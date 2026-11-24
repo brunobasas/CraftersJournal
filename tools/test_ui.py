@@ -1533,7 +1533,7 @@ step("portada: tarjetas de profesiones", function()
   assert(tostring(lw.level._text):find("%d+|r / %d+"), "nivel no mostrado: " .. tostring(lw.level._text))
   -- Pestañas laterales: cada una abre su página y queda marcada
   local mf = ES:GetMainFrame()
-  assert(#mf.tabs == 8, "pestañas: " .. #mf.tabs)
+  assert(#mf.tabs == 9, "pestañas: " .. #mf.tabs)
   for _, tab in ipairs(mf.tabs) do
     tab._scripts.OnClick(tab)
     assert(ES.db.lastPage == tab.key, "la pestaña " .. tab.key .. " no abre su página")
@@ -2087,8 +2087,8 @@ step("portada: tarjetas de profesiones", function()
   assert(lastLine.total and lastLine.title == "Te falta por comprar", "con la ruta empezada, el total es lo que falta: " .. tostring(lastLine.title))
   log[#log+1] = "     lista con ruta empezada: " .. table.concat(sections, " | ")
   page.view = "route"
-  -- Anunciar en la AH: a platas enteras (la AH de Forever no admite cobres)
-  assert(ES.Ledger.PostPrice(2070) == 2000 and ES.Ledger.PostPrice(50) == 100, "precio de anuncio en platas enteras")
+  -- Anunciar en la AH: con cobres, como dice la fila (la AH de Forever los admite)
+  assert(ES.Ledger.PostPrice(2070) == 2070 and ES.Ledger.PostPrice(50) == 50, "precio de anuncio sin los cobres")
   -- Con la AH abierta y nada en las bolsas, el clic avisa en vez de marcar el subastador
   -- (y sin repetir "no llevas ninguno": el título ya dice "0 en bolsas")
   local savedOpen = ES.IsAuctionHouseOpen
@@ -4584,6 +4584,9 @@ step("novedades: una vez por versión, y en vista de desarrollo cuando quieras",
     "Data\\Mailboxes.lua debe publicarse con el asistente")
   assert(TOC_TEXT:find("#@do%-not%-package@%s+Data\\Bankers%.lua%s+#@end%-do%-not%-package@"),
     "Data\\Bankers.lua (banco apagado) sigue sin publicarse")
+  -- BulkMoney y su botón de anunciar (en desarrollo): tampoco se publican
+  assert(TOC_TEXT:find("#@do%-not%-package@%s+BulkMoneyUI%.lua%s+BulkPostUI%.lua%s+#@end%-do%-not%-package@"),
+    "BulkMoneyUI.lua y BulkPostUI.lua deben ir dentro de #@do-not-package@ en el .toc")
   GetAddOnMetadata = savedGet
   ES.db.whatsNewSeen, ES.db.scans, ES.db.lastPage, ES.db.devTools = savedSeen, savedScans, savedPage, savedDev
   log[#log+1] = "     novedades: una vez por versión, nada en instalaciones nuevas, /cj whatsnew solo en la copia de desarrollo"
@@ -4688,7 +4691,11 @@ end)
 step("sin modo desarrollo: ni Subastas, ni Flipping, ni Pesca, ni buscador", function()
   assert(ES.DEV == nil and ES.DEV_BUILD == nil, "queda el modo desarrollo")
   local f = ES:GetMainFrame()
-  assert(#f.tabs == 8, "pestañas: " .. #f.tabs) -- portada, lista de compra, ganar dinero, inventario, inversiones, Merchant's Favor, calculadora y colección
+  -- portada, lista de compra, ganar dinero, inventario, inversiones, Merchant's Favor,
+  -- calculadora y colección; y, solo en esta copia de desarrollo, BulkMoney (dev)
+  local published = 0
+  for _, tab in ipairs(f.tabs) do if not ES.Tabs.Info(tab.key).dev then published = published + 1 end end
+  assert(published == 8, "pestañas publicadas: " .. published)
   assert(not f.globalSearch, "queda el buscador de la cabecera")
   assert(not ES.optionsPanel, "queda el panel de Opciones (con el interruptor de vista de jugador)")
   -- Lo guardado de versiones anteriores (la última página) vuelve a la portada

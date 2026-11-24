@@ -247,7 +247,10 @@ local function VendorCrafts(idea)
     if not cur.cost or not prev.cost then return false, "supply" end
     if not WithinSupply(ctx, cur.extra) then return false, "supply" end
     local marginal = cur.cost - prev.cost
-    if idea.sale - marginal < math.max(MIN_PROFIT, MIN_MARGIN * marginal) then return false, "margin" end
+    -- (idea.noMargin, BulkMoney: sin el 10%: el vendedor paga siempre lo mismo, no hay
+    -- riesgo que cubrir; basta con que deje MIN_PROFIT)
+    local need = idea.noMargin and MIN_PROFIT or math.max(MIN_PROFIT, MIN_MARGIN * marginal)
+    if idea.sale - marginal < need then return false, "margin" end
     return true
   end
   local ok, why = Fits(1)
@@ -256,12 +259,15 @@ local function VendorCrafts(idea)
   -- con lo intermedio: los segundos por fabricación de la idea entera (lo mismo que
   -- mide Earn.Timing), medidos en el tope que saldría sin lo intermedio (en 1, el
   -- redondeo de un intermedio que da 2 contaría una fabricación entera)
-  local own = idea.craftSecs or DEFAULT_CAST
-  local max = math.min(VENDOR_MAX, math.max(1, math.floor(Earn.VENDOR_TIME_BUDGET / own)))
+  -- (idea.timeBudget: otro tope de tiempo; la sección de fabricar en cantidad,
+  -- Earn:VendorShuffle, mira una hora)
+  local budget = idea.timeBudget or Earn.VENDOR_TIME_BUDGET
+  local own = idea.craftSecs or Earn.CraftSeconds(idea.e.id)
+  local max = math.min(VENDOR_MAX, math.max(1, math.floor(budget / own)))
   local ref = At(max).cost and max or 1
   local perCraft = IdeaSeconds(idea, ref, At(ref).actions) / ref
   if perCraft > own then
-    max = math.min(max, math.max(1, math.floor(Earn.VENDOR_TIME_BUDGET / perCraft)))
+    max = math.min(max, math.max(1, math.floor(budget / perCraft)))
   end
   if Fits(max) then return max, max < VENDOR_MAX and "time" or "max", At(max) end
   local lo, hi = 1, max
@@ -335,10 +341,13 @@ local cache
 -- `keepMarket`: solo las ideas (bolsas, cantidades); sin él, todo (aprendes una receta,
 -- escaneo nuevo...)
 local marketMemo = {}
-ES.MemPart("Ganar dinero: ideas y costes por profesión", function() return { cache, marketMemo } end)
+-- BulkMoney (Earn:VendorShuffle): la lista y los costes de cada profesión con el
+-- descuento de vendedor
+local shuffleCache, shuffleMemo = nil, {}
+ES.MemPart("Ganar dinero: ideas y costes por profesión", function() return { cache, marketMemo, shuffleCache, shuffleMemo } end)
 function Earn:Clear(keepMarket)
-  cache = nil
-  if not keepMarket then marketMemo = {} end
+  cache, shuffleCache = nil, nil
+  if not keepMarket then marketMemo, shuffleMemo = {}, {} end
 end
 
 local function RecipeMarketFor(profKey, data, scan)
@@ -494,10 +503,25 @@ function Earn.SetHidden(id, hidden)
   Earn:Clear(true) -- (se vuelve a hacer el lote sin ellas; los precios no cambian)
 end
 
--- Las quitadas, con su nombre: { { id, name } }, por nombre
-function Earn.HiddenList()
+-- Recetas quitadas de BulkMoney con la ✕ de su fila (ES.db.bulkHidden[receta]): una lista
+-- aparte de la de Ganar dinero (quitar una en una pestaña no la quita de la otra). Para
+-- una receta cuyo patrón no sabes conseguir (Felblood Soul Bag, origen desconocido) o que
+-- pide una estación que no tienes
+function Earn.IsBulkHidden(id)
+  return ES.db.bulkHidden ~= nil and ES.db.bulkHidden[id] == true
+end
+
+function Earn.SetBulkHidden(id, hidden)
+  ES.db.bulkHidden = ES.db.bulkHidden or {}
+  ES.db.bulkHidden[id] = hidden and true or nil
+  if not next(ES.db.bulkHidden) then ES.db.bulkHidden = nil end
+  shuffleCache = nil -- (la lista se rehace sin ella; los precios no cambian)
+end
+
+-- Las quitadas, con su nombre: { { id, name } }, por nombre (`bulk`: las de BulkMoney)
+function Earn.HiddenList(bulk)
   local list = {}
-  for id in pairs(ES.db.earnHidden or {}) do
+  for id in pairs((bulk and ES.db.bulkHidden or ES.db.earnHidden) or {}) do
     local name
     for _, p in ipairs(ES.PROFESSIONS or {}) do
       local r = ES.Data[p.key] and ES.Data[p.key].recipes and ES.Data[p.key].recipes[id]
@@ -671,6 +695,443 @@ function Earn:Ideas()
   table.sort(res.vendor, function(a, b) return a.profit > b.profit end)
   cache = res
   return res
+end
+
+---------------------------------------------------------------------------
+-- BulkMoney: fabricar en cantidad para el vendedor (el «vendor shuffle», Reddit: una
+-- segunda cuenta fabricando y vendiendo al vendedor todo el día, ~5 g/h). Pestaña
+-- propia (BulkMoneyUI.lua). Como la venta al vendedor de Ganar dinero, pero sin el
+-- mínimo de oro por hora: cada línea es UNA HORA de fabricar (o menos, si antes deja
+-- de compensar), así que su beneficio es el oro por hora, y se ordenan por él.
+-- Compensa si fabricas sin estar delante. De TODAS las profesiones, la sepas o no
+-- (cómo se aprende, en la fila): sirve para elegir qué hacer con un personaje de otra
+-- cuenta. Sin las de enfriamiento. Cada línea, como si fuera la única.
+-- Lo que se compra al vendedor, con descuento (Earn.VendorDiscount): el de tu
+-- reputación con tu capital (el de la Calculadora) y, si lo marcas, Bartering (talento
+-- de legado: -10% en todos los vendedores; por ahora una casilla, ES.db.bulkBartering).
+-- Las profesiones cuestan ~10-40 ms cada una, una vez por escaneo y descuento
+---------------------------------------------------------------------------
+Earn.SHUFFLE_MAX = 15 -- líneas en la pestaña
+Earn.SHUFFLE_SECONDS = 3600 -- cada línea: una hora de fabricar
+Earn.BARTERING = 0.10 -- Bartering, rango 2/2
+-- De dónde se aprende: todas, también las de reputación y las de origen desconocido (un
+-- patrón de botín raro: Felblood Soul Bag, +1g47 por fabricación); la fila lo dice
+local SHUFFLE_SOURCES = { known = true, basic = true, trainer = true, vendor = true, scroll = true, ah = true,
+  quest = true, owned = true, favor = true, rep = true, unknown = true }
+
+-- Descuento total en los vendedores: reputación con tu capital y Bartering, uno sobre
+-- el otro (no se sabe si el juego los suma o los multiplica: multiplicados, se queda
+-- corto por poco). Devuelve total, el de ciudad, la ciudad y si cuenta Bartering
+function Earn.VendorDiscount()
+  local city, cityName = 0, nil
+  if ES.Calc and ES.Calc.CityDiscount then city, cityName = ES.Calc.CityDiscount() end
+  local barter = ES.db and ES.db.bulkBartering and Earn.BARTERING or 0
+  return 1 - (1 - city) * (1 - barter), city, cityName, barter > 0
+end
+
+-- Fundición de Minería (ES.EXTRA_RECIPE_DATA) para una profesión que no tienes: todas
+-- las recetas que fabrican lo que usa (y, hacia abajo, lo que usan ellas: Iron Bar
+-- para Smelt Steel), las sepas o no; como ES:ForeignProducers, que solo da las que
+-- sabes. Si el mineral sale más barato que la barra, se funde (Iron Ore -> Iron Bar
+-- para el Gyrochronatom). Los datos no cambian: se guarda por profesión
+local smeltIndex = {}
+function Earn.SmeltProducers(profKey)
+  local cached = smeltIndex[profKey]
+  if cached ~= nil then return cached or nil end
+  local data = ES.Data[profKey]
+  local byItem, profOf = {}, {}
+  for _, extra in ipairs(ES.EXTRA_RECIPE_DATA or {}) do
+    local d = ES.Data[extra.key]
+    if d and d.recipes then
+      ES.Planner.Annotate(d)
+      for id, r in pairs(d.recipes) do
+        if r.out and r.r and #r.r > 0 then
+          byItem[r.out[1]] = byItem[r.out[1]] or {}
+          table.insert(byItem[r.out[1]], id)
+          profOf[id] = extra.key
+        end
+      end
+    end
+  end
+  local out = { producers = {}, recipes = {}, prof = {}, stamp = "" }
+  local need, queue, i, any = {}, {}, 1, false
+  local function Need(itemID)
+    if not need[itemID] then need[itemID] = true queue[#queue + 1] = itemID end
+  end
+  for _, r in pairs(data and data.recipes or {}) do
+    for _, rq in ipairs(r.r or {}) do Need(rq[1]) end
+  end
+  while queue[i] do
+    local list = byItem[queue[i]]
+    if list then
+      table.sort(list)
+      out.producers[queue[i]] = list
+      for _, id in ipairs(list) do
+        local r = ES.Data[profOf[id]].recipes[id]
+        out.recipes[id], out.prof[id], any = r, profOf[id], true
+        for _, rq in ipairs(r.r) do Need(rq[1]) end
+      end
+    end
+    i = i + 1
+  end
+  smeltIndex[profKey] = any and out or false
+  return any and out or nil
+end
+
+---------------------------------------------------------------------------
+-- Tus precios de materiales en BulkMoney (como en la Calculadora): sustituyen al de la AH
+-- en sus cuentas, como si pudieras comprar los que quieras a ese precio (lo que tú
+-- pagas o lo que te cuesta farmearlo). Se quedan hasta que los borras (vacío): no los
+-- quita un escaneo nuevo, la fila de cada material dice también el de la AH.
+--   ES.db.bulkPrices[objeto] = cobre por unidad
+---------------------------------------------------------------------------
+Earn.BULK_PRICE_SUPPLY = 100000 -- unidades "a la venta" a tu precio (sin límite, en la práctica)
+
+function Earn.BulkPrice(itemID)
+  local t = ES.db and ES.db.bulkPrices
+  return type(t) == "table" and t[itemID] or nil
+end
+
+function Earn.SetBulkPrice(itemID, copper)
+  if type(ES.db.bulkPrices) ~= "table" then ES.db.bulkPrices = {} end
+  copper = tonumber(copper)
+  ES.db.bulkPrices[itemID] = (copper and copper > 0) and math.floor(copper + 0.5) or nil
+  if not next(ES.db.bulkPrices) then ES.db.bulkPrices = nil end
+  shuffleCache, shuffleMemo = nil, {} -- (otros precios: se rehace todo)
+end
+
+-- Firma de tus precios (para las cachés) y los precios del escaneo con los tuyos encima,
+-- o nil si no hay ninguno
+local function BulkPricesStamp()
+  local parts = {}
+  for id, p in pairs(ES.db and ES.db.bulkPrices or {}) do parts[#parts + 1] = id .. "=" .. p end
+  table.sort(parts)
+  return table.concat(parts, ",")
+end
+local function PricesWithMine(scan)
+  local mine = ES.db and ES.db.bulkPrices
+  if type(mine) ~= "table" or not next(mine) or not scan then return nil end
+  local prices = {}
+  for id, entry in pairs(scan.items or {}) do prices[id] = entry end
+  for id, p in pairs(mine) do
+    local n = Earn.BULK_PRICE_SUPPLY
+    prices[id] = { minUnit = p, avgUnit = p, median = p, quantity = n, listings = 1, sellers = 1, topShare = 1, ladder = { p, n } }
+  end
+  return prices
+end
+
+-- Precios de las recetas de una profesión con el descuento de vendedor. Las tuyas, con
+-- lo intermedio que sabes hacer (como Ganar dinero), también de otras profesiones y de
+-- la fundición (ES:ForeignProducers); las que no tienes, fabricándolo aunque no sepas
+-- la receta (aprenderías la profesión entera) y fundiendo el mineral
+-- (Earn.SmeltProducers)
+-- (`noForeign`: sin lo de otras profesiones, para comparar: fundir ahorra unos cobres
+-- por barra pero cuesta tiempo de fabricar, y aquí manda el oro por hora)
+local function ForeignFor(profKey, mine)
+  local foreign
+  if mine then
+    foreign = ES:ForeignProducers(profKey)
+    if not next(foreign.producers) then foreign = nil end
+  else
+    foreign = Earn.SmeltProducers(profKey)
+  end
+  return foreign
+end
+
+local function ShuffleMarketFor(profKey, data, scan, mine, discount, noForeign)
+  local foreign = not noForeign and ForeignFor(profKey, mine) or nil
+  local key = table.concat({ scan and scan.time or 0, ES:RealmKey(), ES.repStamp or "", tostring(ES:IsNeutralAH()),
+    ES.Market:Index().stamp or "", tostring(mine), discount, mine and ES.Planner.UnlockStamp(data) or "",
+    ES.SpecStamp and ES:SpecStamp() or "", mine and foreign and foreign.stamp or "", BulkPricesStamp() }, ":")
+  local memoKey = profKey .. (noForeign and ":solo" or "")
+  local m = shuffleMemo[memoKey]
+  if m and m.key == key then return m.entries, m.ctx end
+  local prices = PricesWithMine(scan) -- (tus precios encima de los del escaneo)
+  local entries, ctx = ES.Planner:RecipeMarket(data, { hours = 24, neutral = ES:IsNeutralAH(),
+    prices = prices, pricesTime = prices and scan and scan.time or nil,
+    sourcedScrolls = ES.Waypoints.SOURCED_PROFESSIONS[profKey] or nil, knownProducers = mine or nil,
+    vendorDiscount = discount > 0 and discount or nil, foreignProducers = foreign,
+    anySource = true }) -- (también Merchant's Favor y origen desconocido: SHUFFLE_SOURCES)
+  shuffleMemo[memoKey] = { key = key, entries = entries, ctx = ctx }
+  return entries, ctx
+end
+
+-- Precio máximo de compra de cada material de la AH de una línea ya costeada: hasta
+-- dónde puedes pagarlo (de media, con los demás materiales a lo de hoy) y que cada
+-- fabricación aún deje MIN_PROFIT. Para comprar cuando aparezca barato, no solo el día
+-- del escaneo, y saber hasta dónde subir en un material con pocas subastas.
+-- { { itemID, now = lo que pagas hoy de media, max, perCraft } }, de más a menos gasto
+function Earn.MaxPrices(idea)
+  local crafts = idea.crafts or 0
+  if crafts <= 0 then return {} end
+  local slack = (idea.profit or 0) / crafts - MIN_PROFIT
+  local byItem, list = {}, {}
+  for _, a in ipairs(idea.actions or {}) do
+    if a.kind == "ah" and (a.qty or 0) > 0 then
+      local m = byItem[a.item]
+      if not m then
+        m = { itemID = a.item, qty = 0, cost = 0 }
+        byItem[a.item] = m
+        list[#list + 1] = m
+      end
+      m.qty, m.cost = m.qty + a.qty, m.cost + (a.cost or 0)
+    end
+  end
+  for _, m in ipairs(list) do
+    m.now = m.cost / m.qty
+    m.perCraft = m.qty / crafts
+    m.max = math.floor(m.now + math.max(0, slack) / m.perCraft)
+  end
+  table.sort(list, function(a, b) return a.cost > b.cost end)
+  return list
+end
+
+-- Para cuántas fabricaciones (y horas de fabricar) hay ya en la AH por debajo del precio
+-- máximo de cada material (Earn.MaxPrices): si hay para más de una hora, compensa
+-- comprar ya para fabricar después. Lo limita el material que antes se acaba (Raptor
+-- Hide Harness: mucho Heavy Leather barato, pero solo 395 Raptor Hide). Va en la fila
+-- de cada línea, no aparte: una sección propia, con otra cifra de oro para la misma
+-- receta, confundía. Devuelve fabricaciones y horas, o nil sin materiales de la AH
+function Earn.StockFor(idea)
+  local ladders = idea.ctx and idea.ctx.ladders or {}
+  local all = math.huge
+  for _, p in ipairs(idea.maxPrices or {}) do
+    local ladder, units = ladders[p.itemID], 0
+    for j = 1, ladder and #ladder or 0, 2 do
+      if ladder[j] <= p.max then units = units + ladder[j + 1] end
+    end
+    all = math.min(all, math.floor(units / p.perCraft + 1e-6))
+  end
+  if all == math.huge then return nil end
+  local secs = (idea.seconds or 0) / math.max(1, idea.crafts or 1)
+  return all, all * secs / 3600
+end
+
+-- Los materiales que se compran para las líneas de la pestaña (las SHUFFLE_MAX primeras)
+-- y los que tienen tu precio aunque ya no salgan (para poder quitarlo), de más a menos
+-- gasto: { { itemID, source ("ah" | "vendor"), unit (lo que se paga de media en las
+-- líneas), mine (tu precio), ah (la más barata del escaneo) } }
+function Earn.BulkMaterials(res)
+  local scan = ES.db.scans and ES.db.scans[ES:RealmKey()]
+  local byItem, list = {}, {}
+  local function Get(itemID, source)
+    local m = byItem[itemID]
+    if not m then
+      local ah = scan and scan.items and scan.items[itemID]
+      m = { itemID = itemID, source = source, qty = 0, cost = 0, mine = Earn.BulkPrice(itemID), ah = ah and ah.minUnit }
+      byItem[itemID] = m
+      list[#list + 1] = m
+    end
+    return m
+  end
+  for i, idea in ipairs(res and res.list or {}) do
+    if i > Earn.SHUFFLE_MAX then break end
+    for _, a in ipairs(idea.actions or {}) do
+      if (a.kind == "ah" or a.kind == "vendor") and (a.qty or 0) > 0 then
+        local m = Get(a.item, a.kind)
+        m.qty, m.cost = m.qty + a.qty, m.cost + (a.cost or 0)
+      end
+    end
+  end
+  for id in pairs(ES.db.bulkPrices or {}) do Get(id, "ah") end
+  for _, m in ipairs(list) do m.unit = m.qty > 0 and m.cost / m.qty or m.mine or m.ah end
+  table.sort(list, function(a, b)
+    if a.cost ~= b.cost then return a.cost > b.cost end
+    return a.itemID < b.itemID
+  end)
+  return list
+end
+
+---------------------------------------------------------------------------
+-- Con gangas (BulkMoney): recetas que HOY no dejan nada vendiendo al vendedor, pero sí
+-- comprando sus materiales de la AH por debajo de un precio objetivo, y cuántas veces ha
+-- pasado en tu historial de escaneos (ES.History: cada escaneo guarda el mínimo y la
+-- mediana de cada objeto). La mediana por debajo: suele estar barato (hay volumen); solo
+-- el mínimo: gangas sueltas, para cazarlas (el sniper de otro addon, con el objetivo de
+-- precio). El objetivo de cada material, con los demás a lo de hoy
+---------------------------------------------------------------------------
+Earn.BARGAIN_MAX_DROP = 0.35 -- lo más que tendrían que bajar sus materiales de la AH
+Earn.BARGAIN_MIN_SHARE = 0.10 -- escaneos con el mínimo por debajo, como poco
+Earn.BARGAIN_MAX = 8
+
+-- Mínimo y mediana de cada objeto en cada escaneo del historial: { [objeto] = { mins, meds } }.
+-- Se lee una vez por historial (cambia con cada escaneo)
+local bargainHistory = { key = nil, items = {}, n = 0 }
+local function HistoryPrices()
+  local entries = ES.History:Entries()
+  local last = entries[#entries]
+  local key = #entries .. ":" .. tostring(last and last.time)
+  if bargainHistory.key == key then return bargainHistory.items, bargainHistory.n end
+  local items = {}
+  for _, entry in ipairs(entries) do
+    for id, min, _, median in (entry.snap or ""):gmatch(";(%d+):(%d+):(%d+):(%d+)") do
+      id = tonumber(id)
+      local h = items[id]
+      if not h then h = { mins = {}, meds = {} } items[id] = h end
+      h.mins[#h.mins + 1] = tonumber(min)
+      h.meds[#h.meds + 1] = tonumber(median)
+    end
+  end
+  bargainHistory.key, bargainHistory.items, bargainHistory.n = key, items, #entries
+  return items, #entries
+end
+
+-- { list = { { e, profKey, sale, gap, drop, best (lo que deja con lo más barato visto),
+--   mats = { { itemID, qty, now (por unidad), target, low, minBelow, medBelow, onSale } } } },
+--   scans = escaneos del historial }, de más a menos frecuentes
+-- (se guarda hasta que cambian los precios de BulkMoney o el historial: ~100 ms)
+local bargainCache
+function Earn:BulkBargains()
+  local res = Earn:VendorShuffle()
+  local hist, n = HistoryPrices()
+  if bargainCache and bargainCache.shuffle == res and bargainCache.hkey == bargainHistory.key then return bargainCache.out end
+  local out = { list = {}, scans = 0 }
+  bargainCache = { shuffle = res, hkey = bargainHistory.key, out = out }
+  local scan = ES.db.scans and ES.db.scans[ES:RealmKey()]
+  if not scan then return out end
+  out.scans = n
+  if n == 0 then return out end
+  local mine = {}
+  for _, k in ipairs(Earn.MyProfessions()) do mine[k] = true end
+  for _, p in ipairs(ES.PROFESSIONS) do
+    local data = ES.Data[p.key]
+    if data then
+      local entries = ShuffleMarketFor(p.key, data, scan, mine[p.key] or false, res.discount or 0)
+      for _, e in ipairs(entries) do
+        local sale = (e.vendor or 0) * math.max(1, e.qty or 1)
+        local gap = e.cost and (e.cost - sale + MIN_PROFIT)
+        if gap and gap > 0 and sale > 0 and SHUFFLE_SOURCES[e.learnSource] and not Earn.IsBulkHidden(e.id)
+          and not (e.recipe and ES.Planner.Cooldown(e.recipe, e.id)) then
+          local ahCost, mats = 0, {}
+          for _, rg in ipairs(e.reagents or {}) do
+            if rg.kinds and rg.kinds.ah and (rg.cost or 0) > 0 and (rg.qty or 0) > 0 then
+              ahCost = ahCost + rg.cost
+              mats[#mats + 1] = rg
+            end
+          end
+          if ahCost > 0 and gap / ahCost <= Earn.BARGAIN_MAX_DROP then
+            local best, often, list = e.cost, false, {}
+            for _, rg in ipairs(mats) do
+              local h = hist[rg.item]
+              local m = { itemID = rg.item, qty = rg.qty, now = rg.cost / rg.qty, target = (rg.cost - gap) / rg.qty,
+                minBelow = 0, medBelow = 0, onSale = scan.items[rg.item] and scan.items[rg.item].quantity or 0 }
+              if h then
+                for _, v in ipairs(h.mins) do
+                  if v <= m.target then m.minBelow = m.minBelow + 1 end
+                  if not m.low or v < m.low then m.low = v end
+                end
+                for _, v in ipairs(h.meds) do if v <= m.target then m.medBelow = m.medBelow + 1 end end
+                best = best - rg.cost + math.min(rg.cost, m.low * rg.qty)
+              end
+              if m.target > 0 and m.minBelow >= math.max(2, n * Earn.BARGAIN_MIN_SHARE) then often = true end
+              list[#list + 1] = m
+            end
+            if often and sale - best >= MIN_PROFIT then
+              table.sort(list, function(a, b) return a.minBelow > b.minBelow end)
+              out.list[#out.list + 1] = { e = e, profKey = p.key, sale = sale, gap = gap, drop = gap / ahCost,
+                best = sale - best, mats = list }
+            end
+          end
+        end
+      end
+    end
+  end
+  -- Primero lo que suele estar barato (mediana por debajo), luego las gangas sueltas
+  table.sort(out.list, function(a, b)
+    local am, bm = a.mats[1].medBelow, b.mats[1].medBelow
+    if am ~= bm then return am > bm end
+    if a.mats[1].minBelow ~= b.mats[1].minBelow then return a.mats[1].minBelow > b.mats[1].minBelow end
+    return a.best > b.best
+  end)
+  while #out.list > Earn.BARGAIN_MAX do table.remove(out.list) end
+  return out
+end
+
+-- { list = ideas de más a menos oro por hora, discount, city, cityName, bartering, scanTime }
+function Earn:VendorShuffle()
+  local scan = ES.db.scans and ES.db.scans[ES:RealmKey()]
+  local discount, city, cityName, bartering = Earn.VendorDiscount()
+  local profs = Earn.MyProfessions()
+  local mine, ranks = {}, {}
+  for _, k in ipairs(profs) do
+    mine[k] = true
+    ranks[#ranks + 1] = k .. "=" .. tostring(ES:GetProfessionSkill(ES.Data[k].skillLine) or 0)
+  end
+  local stamp = table.concat({ scan and scan.time or 0, ES:RealmKey(), ES.repStamp or "", discount,
+    table.concat(ranks, ","), ES.SpecStamp and ES:SpecStamp() or "", BulkPricesStamp() }, ":")
+  if shuffleCache and shuffleCache.stamp == stamp then return shuffleCache end
+  local out = { stamp = stamp, list = {}, discount = discount, city = city, cityName = cityName, bartering = bartering,
+    scanTime = scan and scan.time }
+  shuffleCache = out
+  if not scan then return out end
+  -- Una hora de fabricar `e` con los precios de `ctx`, como si fuera la única línea (lo
+  -- que compren las demás no cuenta); nil si no deja nada
+  local function Cost(e, ctx, profKey)
+    local sale = (e.vendor or 0) * math.max(1, e.qty or 1)
+    -- (sin el 10% de margen: al vendedor no hay riesgo; basta con MIN_PROFIT)
+    if not (e.cost and sale > 0 and SHUFFLE_SOURCES[e.learnSource] and sale - e.cost >= MIN_PROFIT
+      and not Earn.IsBulkHidden(e.id) -- (quitada con la ✕ de su fila)
+      and not (e.recipe and ES.Planner.Cooldown(e.recipe, e.id))) then return nil end
+    local idea = { e = e, profKey = profKey, ctx = ctx, sellWhere = "vendor", sale = sale, itemID = e.itemID,
+      timeBudget = Earn.SHUFFLE_SECONDS, shuffle = true, noMargin = true,
+      why = L["Se vende al vendedor: venta segura, sin límite de ventas."] }
+    local used = ctx.used
+    ctx.used = {}
+    Earn.CostIdea(idea)
+    ctx.used = used
+    return idea.crafts > 0 and idea.profit > 0 and idea or nil
+  end
+  local function UsesForeign(idea)
+    for _, a in ipairs(idea.actions or {}) do
+      if a.kind == "craft" and a.prof then return true end
+    end
+    return false
+  end
+  for _, p in ipairs(ES.PROFESSIONS) do
+    local data = ES.Data[p.key]
+    if data then
+      local rank = mine[p.key] and ES:GetProfessionSkill(data.skillLine) or 0
+      local entries, ctx = ShuffleMarketFor(p.key, data, scan, mine[p.key] or false, discount)
+      -- Sin fundir (lo de otras profesiones): solo si alguna línea funde, para comparar
+      local plain, plainCtx
+      for _, e in ipairs(entries) do
+        local idea = Cost(e, ctx, p.key)
+        if idea and UsesForeign(idea) then
+          if not plain then
+            local list
+            list, plainCtx = ShuffleMarketFor(p.key, data, scan, mine[p.key] or false, discount, true)
+            plain = {}
+            for _, pe in ipairs(list) do plain[pe.id] = pe end
+          end
+          -- Fundir ahorra unos cobres por barra pero cuesta tiempo: se queda lo que deje
+          -- más en la hora
+          local other = plain[e.id] and Cost(plain[e.id], plainCtx, p.key)
+          if other and other.profit > idea.profit then idea, e = other, other.e end
+        end
+        if idea then
+          idea.maxPrices = Earn.MaxPrices(idea)
+          idea.stockCrafts, idea.stockHours = Earn.StockFor(idea)
+          if e.learnSource == "known" then
+            idea.shopping = Earn.Shopping({ idea })
+            -- (la lista de compra lleva el precio máximo de cada material de la AH)
+            local max = {}
+            for _, mp in ipairs(idea.maxPrices) do max[mp.itemID] = mp.max end
+            for _, n in ipairs(idea.shopping) do
+              if n.source == "ah" then n.max = max[n.itemID] end
+            end
+          else
+            idea.learnable, idea.rank, idea.need = true, rank, e.learn or 1
+            idea.canLearn = mine[p.key] and rank >= idea.need or false
+            idea.noProf = not mine[p.key] or nil
+            idea.payback = (e.learnCost or 0) > 0 and math.ceil(e.learnCost / math.max(1, idea.profit / idea.crafts)) or nil
+          end
+          out.list[#out.list + 1] = idea
+        end
+      end
+    end
+  end
+  table.sort(out.list, function(a, b) return a.profit > b.profit end)
+  return out
 end
 
 ---------------------------------------------------------------------------
