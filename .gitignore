@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 # Zips generados por tools/package.py
 dist/
+# Informes de tools/earn_audit.py (con tus precios: no se publican)
+earn_audit_*.txt
 # OpenSpec: las especificaciones van en su propio repo privado (openspec/ es ese repo)
 # y las skills se regeneran con `openspec init`. No se publican con el addon
 openspec/

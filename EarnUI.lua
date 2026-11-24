@@ -547,7 +547,10 @@ function ES:RenderEarn()
       local learn = (LEARN_LABEL[e.learnSource] or "?") .. ((e.learnCost or 0) > 0 and (" " .. ES.Money(e.learnCost)) or "")
       local req = idea.canLearn and (GREEN .. L["ya puedes"] .. "|r")
         or (ORANGE .. string.format(L["pide %d"], idea.need) .. "|r")
-      local where = idea.sellWhere == "ah" and string.format(L["AH %s/u"], ES.Money(e.ahPrice or e.ahMin))
+      -- (en la AH, cuántos hay a la venta y la alerta, como en el lote: se ve si hay mercado)
+      local where = idea.sellWhere == "ah"
+        and string.format(L["AH %s/u (%d a la venta) · %s"], ES.Money(e.ahPrice or e.ahMin), e.quantity or 0,
+          ES.Market.LABELS[idea.verdict] or "")
         or string.format(L["vendedor %s/u"], ES.Money(e.vendor))
       if idea.cooldown then where = where .. L[" · con enfriamiento"] end
       lines[#lines + 1] = HideRecipe({ icon = texture or 134400, title = name or e.recipe.name,

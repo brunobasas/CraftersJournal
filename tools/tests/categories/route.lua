@@ -788,6 +788,45 @@ test("bolsas: con la opción desactivada, nada de las bolsas invalida la ruta", 
   expect(page.plan == plan, "la ruta de la página cambió")
 end, { state = "scan" })
 
+-- CurseForge: «en Encantamiento 150+ propone fabricar el Silver Rod aunque llevo un
+-- Golden Rod, que sirve de cualquiera de los inferiores». Con "usar lo de las bolsas"
+-- desactivado, la ruta no miraba las herramientas que llevas: pedía las varas de plata
+-- y de oro (y la de oro salía con ✓, porque la fila sí mira las bolsas)
+test("herramientas: la vara que llevas cuenta aunque la ruta no use lo de las bolsas", function()
+  local SILVER, GOLDEN = 6339, 11130
+  local function Rods(plan)
+    local ids = {}
+    for _, tl in ipairs(plan.tools or {}) do ids[#ids + 1] = tl.item end
+    return ids
+  end
+  local function Has(plan, item)
+    for _, tl in ipairs(plan.tools or {}) do if tl.item == item then return true end end
+    return false
+  end
+  expect(not (ES.db.prof and ES.db.prof.Enchanting and ES.db.prof.Enchanting.useBags), "la opción está activada: la prueba no prueba nada")
+  local without = PlanRoute("Enchanting", 140, 220)
+  expect(Has(without, SILVER) and Has(without, GOLDEN), "sin varas, la ruta no pide la de plata y la de oro: la prueba no prueba nada (pide %s)",
+    table.concat(Rods(without), ", "))
+  local key = ES:StableRouteKey("Enchanting", 140, 220, 225)
+  BAGS[GOLDEN] = 1
+  expect(ES:StableRouteKey("Enchanting", 140, 220, 225) ~= key, "conseguir la vara de oro no cambia la clave de la ruta")
+  local plan = PlanRoute("Enchanting", 140, 220)
+  expect_eq(#Rods(plan), 0, "varas que pide la ruta llevando la de oro (%s)", table.concat(Rods(plan), ", "))
+  -- Y la página abierta se recalcula al conseguirla (sin "usar lo de las bolsas")
+  BAGS[GOLDEN] = nil
+  ES.db.prof = ES.db.prof or {}
+  ES.db.prof.Enchanting = ES.db.prof.Enchanting or {}
+  ES.db.prof.Enchanting.target = 220
+  local page, before = PageRoute("Enchanting", 140, 225)
+  expect(Has(before, GOLDEN), "la ruta de la página (%d-%d) no pide la vara de oro: la prueba no prueba nada (pide %s)",
+    before.from or 0, before.to or 0, table.concat(Rods(before), ", "))
+  BAGS[GOLDEN] = 1
+  FireEvent("BAG_UPDATE_DELAYED")
+  RunTimers()
+  expect(page.plan ~= before, "la página sigue con la ruta de antes de conseguir la vara")
+  expect(not Has(page.plan, GOLDEN), "la ruta de la página sigue pidiendo la vara de oro")
+end, { state = "scan" })
+
 test("bolsas: la ruta guardada no vale si al entrar llevas otra cantidad de un material suyo", function()
   local _, plan, cap = BagRoute("Tailoring", 50, 75)
   local saved = expect(ES.db.prof.Tailoring.lastRoute, "no se guardó la ruta")

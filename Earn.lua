@@ -447,6 +447,11 @@ local LEARNABLE = { trainer = true, vendor = true, scroll = true, ah = true, que
 -- Al vendedor no hay tope de ventas (VendorCrafts): para decidir si una receta que no
 -- sabes llega al mínimo se cuentan estas fabricaciones, sin costear la escalera
 local LEARN_VENDOR_CRAFTS = 20
+-- Subastas que tiene que haber de lo fabricado para creerse su precio. Con menos, no
+-- se sabe si es el precio ni si hay mercado (CurseForge: Mooncloth Shoulders a 350g
+-- por una sola subasta, como receta para aprender). Con datos de TSM vale lo que diga
+-- TSM (demanda y venta media)
+Earn.LEARN_MIN_LISTINGS = 3
 
 -- Añade `e` (de Planner:RecipeMarket) a res.learnable si da beneficio: el mismo
 -- margen que las que sabes y, con lo más que se fabricaría en una línea (MAX_BATCH;
@@ -467,6 +472,8 @@ function Earn.AddLearnable(res, e, profKey, rank, minLine, cooldown)
     -- allí se venden muy por debajo del precio con el que contamos (Discord: Frost
     -- Tunic, 0,82 al día y 48s de media frente a 3g50)
     if s.demand.flag or ES.Market.TSMLowPrice(s, e.ahPrice or e.ahMin) then return end
+    -- Sin TSM, con muy pocas subastas no hay mercado del que fiarse
+    if not s.demand.known and (e.listings or 0) < Earn.LEARN_MIN_LISTINGS then return end
   end
   if e.profit * (cooldown and 1 or idea.sellWhere == "ah" and MAX_BATCH or LEARN_VENDOR_CRAFTS) < minLine then return end
   idea.canLearn = rank >= idea.need

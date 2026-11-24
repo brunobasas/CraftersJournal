@@ -317,6 +317,7 @@ function ES:PlanOptions(profKey, from, to, cap)
     hours = 24,
     neutral = self:IsNeutralAH(),
     owned = settings.useBags and self:GetOwnedReagents(ES.Data[profKey], foreign) or nil,
+    tools = self:CarriedTools(), -- (siempre: la vara que llevas no se gasta, ver ES:CarriedTools)
     ignoreSupply = true, -- no se mira cuántos hay a la venta: el plan no se para por existencias
     includeScrolls = false, -- recetas de pergamino/drop: pendiente para una versión futura
     reuseCrafted = true,
@@ -445,6 +446,7 @@ function ES:LockedPlan(profKey)
   if plan and plan.lockStarted == lock.started and plan.lockPrices == lock.scanTime then return plan end
   local opts = self:ForcedPlanOptions(profKey, lock.from, lock.to, lock.cap, lock.choice, lock.via)
   opts.owned, opts.excluded = lock.owned, nil
+  opts.tools = lock.tools or opts.tools -- (las herramientas del principio; rutas fijadas antes: las de ahora)
   opts.prices, opts.pricesTime = lock.prices, lock.scanTime
   plan = self.Planner:Plan(ES.Data[profKey], opts)
   plan.lockStarted, plan.lockPrices = lock.started, lock.scanTime
@@ -459,6 +461,7 @@ function ES:RefreshRoutePrices(profKey)
   if not lock then return end
   local opts = self:ForcedPlanOptions(profKey, lock.from, lock.to, lock.cap, lock.choice, lock.via)
   opts.owned, opts.excluded = lock.owned, nil
+  opts.tools = lock.tools or opts.tools
   local plan = self.Planner:Plan(ES.Data[profKey], opts) -- con el último escaneo
   lock.prices, lock.scanTime = RoutePrices(plan)
   plan.lockStarted, plan.lockPrices = lock.started, lock.scanTime
@@ -479,8 +482,13 @@ function ES:StartRoute(page)
   local via = {}
   for itemID, way in pairs(plan.ctx and plan.ctx.via or {}) do via[itemID] = way end
   local prices, scanTime = RoutePrices(plan)
+  local tools
+  if plan.ctx and plan.ctx.opts.tools then
+    tools = {}
+    for itemID, q in pairs(plan.ctx.opts.tools) do tools[itemID] = q end
+  end
   local lock = { from = plan.from, to = plan.to, cap = page.detected and page.detected.cap or nil, choice = choice,
-    via = via, owned = owned, started = time(), scanTime = scanTime, prices = prices }
+    via = via, owned = owned, tools = tools, started = time(), scanTime = scanTime, prices = prices }
   self.db.prof[page.profKey].lock = lock
   plan.lockStarted, plan.lockPrices = lock.started, lock.scanTime
   self.lockedPlans[page.profKey] = plan
@@ -611,7 +619,9 @@ function ES:StableRouteKey(profKey, from, to, cap)
     -- (recetas sabidas de otras profesiones que fabrican lo que usa: aprender Smelt Thorium)
     self:ForeignProducers(profKey).stamp,
     -- (recetas en enfriamiento: la ruta no las propone hasta que estén listas)
-    "cd" .. table.concat(self.Earn and self.Earn.OnCooldown and self.Earn.OnCooldown(profKey) or {}, ",") }, ":")
+    "cd" .. table.concat(self.Earn and self.Earn.OnCooldown and self.Earn.OnCooldown(profKey) or {}, ","),
+    -- (herramientas que llevas: con la vara de oro ya no pide las inferiores)
+    "t" .. self:ToolsStamp(nil, profKey) }, ":")
 end
 function ES:PlanKey(profKey, from, to, cap, stable)
   return (stable or self:StableRouteKey(profKey, from, to, cap)) .. ":" .. self.planGen .. "." .. (self.planGens[profKey] or 0)
@@ -2348,7 +2358,10 @@ function ES:RefreshAfterBags()
       local settings = self.db.prof and self.db.prof[page.profKey] or {}
       local cached = self.homePlanCache[page.profKey]
       local still = cached and cached.plan == page.plan and self.RouteBagsMatch(cached.bags)
-      if settings.useBags and not settings.lock and not still then self:RecalcWhenQuiet(page) else self:RenderPlan(page) end
+      -- (las herramientas cuentan siempre: conseguir o perder una vara cambia la ruta)
+      local opts = page.plan and page.plan.ctx and page.plan.ctx.opts
+      local toolsChanged = opts and opts.tools and self:ToolsStamp(opts.tools, page.profKey) ~= self:ToolsStamp(nil, page.profKey)
+      if not settings.lock and ((settings.useBags and not still) or toolsChanged) then self:RecalcWhenQuiet(page) else self:RenderPlan(page) end
     end
   end
 end

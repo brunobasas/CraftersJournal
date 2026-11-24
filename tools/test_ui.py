@@ -6736,7 +6736,8 @@ step("ganar dinero: enfriamientos listos en el lote", function()
     assert(ES.Earn.ReadCooldowns("Leatherworking") and ES.Earn.CooldownLeft(id) == 0, "leído listo")
     -- Para aprender (Mooncloth): sí, contando una fabricación cada vez
     local lres = { learnable = {} }
-    local le = { cost = 1000, profit = 5000, sellWhere = "ah", itemID = 990001, ahPrice = 6000, learn = 1, learnCost = 20000 }
+    local le = { cost = 1000, profit = 5000, sellWhere = "ah", itemID = 990001, ahPrice = 6000, learn = 1, learnCost = 20000,
+      listings = 5, quantity = 5 } -- (con mercado: ver Earn.LEARN_MIN_LISTINGS)
     ES.Earn.AddLearnable(lres, le, "Leatherworking", 150, 1000, true)
     assert(#lres.learnable == 1 and lres.learnable[1].cooldown and lres.learnable[1].payback == 4,
       "enfriamiento para aprender: se propone y se recupera en 4")

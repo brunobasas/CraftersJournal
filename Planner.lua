@@ -437,9 +437,37 @@ local function PointItems(plan, s)
   return set
 end
 
+-- Rangos que no se suben solo con pasar por el instructor: los de Cooking y First Aid
+-- por encima de 150 (Experto es un libro de un vendedor lejano; Artesano, una misión) y
+-- los que piden más nivel de personaje del que tienes. Puede que no llegues a subirlo
+-- (o que no quieras): no se compra para los puntos de después.
+-- CurseForge: subiendo First Aid hasta 225 la lista le hizo comprar 107 Mageweave Cloth
+-- (la tanda de Mageweave Bandage de 210 llegaba a 258) y vendió 88
+local QUEST_RANKS = { [129] = 150, [185] = 150 } -- [skillLine] = por encima de este tope
+local function HardRank(data, rank)
+  local over = QUEST_RANKS[data.skillLine]
+  if over and rank[1] > over then return true end
+  local need, have = rank[4] or 0, UnitLevel and UnitLevel("player")
+  return need > 0 and have ~= nil and have < need
+end
+
+-- El nivel entre `from` y `to` (los dos fuera) en el que la ruta se topa con un rango
+-- así que aún no tienes, o nil
+function Planner.RankStop(plan, from, to)
+  local data = plan and plan.ctx and plan.ctx.data
+  if not (data and data.ranks) then return nil end
+  local max = data.skillLine and ES.GetProfessionSkill and select(2, ES:GetProfessionSkill(data.skillLine))
+  local cap = APPRENTICE_CAP -- (el tope que sube cada rango)
+  for _, rank in ipairs(data.ranks) do
+    if cap > from and cap < to and not (max and max > cap) and HardRank(data, rank) then return cap end
+    cap = rank[1]
+  end
+end
+
 -- Tramo en el que estás: { from, to, steps = { pasos } } o nil (ruta acabada). Es el
 -- paso de tu nivel; los siguientes se juntan si no piden ningún material nuevo
--- (Copper Bracers y luego Copper Chain Pants: una sola visita a la AH)
+-- (Copper Bracers y luego Copper Chain Pants: una sola visita a la AH). Se acaba en un
+-- rango que no es ir al instructor (Planner.RankStop)
 function Planner.Phase(plan, level)
   local steps = plan and plan.steps or {}
   local first
@@ -460,6 +488,13 @@ function Planner.Phase(plan, level)
     if new or st.from ~= phase.to then break end
     phase.to = st.to
     phase.steps[#phase.steps + 1] = st
+  end
+  local stop = Planner.RankStop(plan, phase.from, phase.to)
+  if stop then
+    phase.to, phase.rankStop = stop, true
+    for i = #phase.steps, 2, -1 do
+      if phase.steps[i].from >= stop then table.remove(phase.steps, i) end
+    end
   end
   return phase
 end
@@ -1349,12 +1384,13 @@ local function NewContext(data, opts)
   end
   for itemID, way in pairs(opts.via or {}) do ctx.via[itemID] = way end
   -- Herramientas por familia (bastones rúnicos, martillo, piedra filosofal):
-  -- dentro de una familia la mejor que ya tienes cubre las inferiores
+  -- dentro de una familia la mejor que ya tienes cubre las inferiores. opts.tools: las
+  -- que llevas, aunque la ruta no use lo de las bolsas (ES:CarriedTools)
   ctx.toolMask = {}
-  local ownedTools = opts.owned or {}
   for _, tool in pairs(ES.Data.Tools or {}) do
     local fam = tool.family or "rod"
-    if ownedTools[tool.item] and tool.mask > (ctx.toolMask[fam] or 0) then ctx.toolMask[fam] = tool.mask end
+    local have = (opts.tools and opts.tools[tool.item]) or (opts.owned and opts.owned[tool.item])
+    if have and have > 0 and tool.mask > (ctx.toolMask[fam] or 0) then ctx.toolMask[fam] = tool.mask end
   end
   if not shared then
     for id, r in pairs(data.recipes) do

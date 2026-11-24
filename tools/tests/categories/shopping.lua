@@ -616,3 +616,46 @@ test("ruta entera con los materiales comprados: sigue pidiendo el pergamino que 
   expect_eq(red.left, 1, "pergaminos de la Bolsa roja de lana que faltan")
   expect(items[AZURE_CLOAK_SCROLL] and items[AZURE_CLOAK_SCROLL].left == 1, "con todo comprado deja de pedir el pergamino de la Capa de seda azur")
 end)
+
+-- Rangos que no son ir al instructor ------------------------------------------------
+-- CurseForge: subiendo First Aid hasta 225 la lista le hizo comprar de más Mageweave
+-- Cloth y vendió 88. La ruta a 300 sube con Mageweave Bandage de 210 a 270 y la tanda
+-- de 210 llegaba a 258: 107 telas. Pero a 225 el tope solo se sube con la misión de
+-- Artesano (nivel 35); quien se queda ahí gasta 19. La tanda se para en ese rango
+local MAGEWEAVE = 4338
+
+local function FirstAidAt210(cap)
+  local _, plan = StartRoute("FirstAid", 210, 300)
+  SKILLS[ES.Data.FirstAid.skillLine] = { 210, cap } -- (el tope real del personaje)
+  local need, phase = ES.Planner.RouteNeed("FirstAid", plan, 210)
+  return need[MAGEWEAVE] and need[MAGEWEAVE].need or 0, phase, plan
+end
+
+test("First Aid a 300 con el tope en 225: la tanda no pasa de 225", function()
+  local n, phase, plan = FirstAidAt210(225)
+  local st = plan.steps[#plan.steps]
+  expect(st.recipe.out[1] == 8544 and st.to > 225, "la ruta ya no sube con Mageweave Bandage más allá de 225: la prueba no prueba nada")
+  expect_eq(phase.batchTo or phase.to, 225, "hasta dónde llega la tanda")
+  expect(n > 0 and n <= 22, "pide %d Mageweave Cloth para 210-225 (hacen falta ~19)", n)
+  note("pide %d Mageweave Cloth", n)
+end)
+
+test("First Aid con Artesano ya aprendido: la tanda sigue más allá de 225", function()
+  local n, phase = FirstAidAt210(300)
+  expect((phase.batchTo or phase.to) > 225, "la tanda se para en 225 con el rango ya aprendido")
+  expect(n > 40, "pide solo %d Mageweave Cloth", n)
+end)
+
+test("rango que pide más nivel de personaje: la tanda se para; con el nivel, no", function()
+  -- Peletería: Artesano (225 → 300) pide nivel 35; Experto (150 → 225) no es un problema a 60
+  local plan = PlanRoute("Leatherworking", 200, 260)
+  SKILLS[ES.Data.Leatherworking.skillLine] = { 200, 225 }
+  local level = UnitLevel
+  UnitLevel = function() return 30 end
+  expect_eq(ES.Planner.RankStop(plan, 200, 260), 225, "nivel 30: dónde se para la tanda")
+  UnitLevel = level
+  expect_eq(ES.Planner.RankStop(plan, 200, 260), nil, "nivel 60: dónde se para la tanda")
+  -- (un rango de instructor sin requisitos no la para: Oficial, a 75)
+  SKILLS[ES.Data.Leatherworking.skillLine] = { 60, 75 }
+  expect_eq(ES.Planner.RankStop(PlanRoute("Leatherworking", 60, 100), 60, 100), nil, "Oficial a nivel 60")
+end)

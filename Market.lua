@@ -301,11 +301,16 @@ function Market:Stuck(itemID)
   if it then
     hazard, exposure, hours, rem, tot = it[I_HAZARD], it[I_EXPOSURE], it[I_HOURS], it[I_REM], it[I_TOT]
   end
+  -- gone: subastas baratas que se van al día (las que había menos las que seguían, por
+  -- las horas observadas; sin extrapolar como la vida, que con todas idas entre dos
+  -- escaneos seguidos daba ~4 por subasta). Es una cota: también se van las que caducan
+  -- o se retiran (y las que se vuelven a anunciar más baratas)
+  local gone = hours > 0 and (tot - rem) / hours * 24 or nil
   if exposure < STUCK_MIN_EXPOSURE or hours < STUCK_MIN_HOURS then
-    return { known = false, rem = rem, tot = tot, hours = hours }
+    return { known = false, rem = rem, tot = tot, hours = hours, gone = gone }
   end
   local life = hazard > 0 and exposure / hazard or math.huge
-  return { known = true, flag = life >= STUCK_LIFE_HOURS, life = life, rem = rem, tot = tot, hours = hours }
+  return { known = true, flag = life >= STUCK_LIFE_HOURS, life = life, rem = rem, tot = tot, hours = hours, gone = gone }
 end
 
 -- Días que lleva el precio mínimo sin moverse (más de un 3%)

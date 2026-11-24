@@ -715,9 +715,11 @@ do
         rem, tot = rem + r, tot + t
       end
     end
-    if exposure < 24 or hours < 6 then return { known = false, rem = rem, tot = tot, hours = hours } end
+    -- (gone: las baratas que se van al día, las que había menos las que seguían)
+    local gone = hours > 0 and (tot - rem) / hours * 24 or nil
+    if exposure < 24 or hours < 6 then return { known = false, rem = rem, tot = tot, hours = hours, gone = gone } end
     local life = hazard > 0 and exposure / hazard or math.huge
-    return { known = true, flag = life >= 24, life = life, rem = rem, tot = tot, hours = hours }
+    return { known = true, flag = life >= 24, life = life, rem = rem, tot = tot, hours = hours, gone = gone }
   end
   function Ref.PriceStuck(points)
     if #points < 2 then return { known = false } end
@@ -1568,4 +1570,24 @@ test("un anuncio de la pantalla de Blizzard: su ventana de confirmar no se toca"
     local d = ES.ConfirmFrame()
     expect(not (d and d._shown), "sale la pregunta del addon para un anuncio del juego")
   end)
+end, { state = "scan" })
+
+-- tools/earn_audit.py: cuántas de las subastas baratas se van al día (cota de ventas),
+-- contadas tal cual: las que había menos las que seguían, por las horas observadas
+test("estancado: las baratas que se van al día (gone)", function()
+  local key, ITEM, t = ES:RealmKey(), 777001, time()
+  ES.db.history = { [key] = {
+    -- 2 h: de 10 baratas siguen 2 · 4 h: de 8 siguen 6
+    { time = t - 4 * 3600, elapsed = 2 * 3600, stuck = ";" .. ITEM .. ":2:10" },
+    { time = t - 60, elapsed = 4 * 3600, stuck = ";" .. ITEM .. ":6:8" },
+  } }
+  BuildIndexNow()
+  local st = ES.Market:Stuck(ITEM)
+  expect(st.known, "6 h y 52 subastas·hora: debería poder opinar")
+  expect_near(st.gone, (18 - 8) / 6 * 24, 1e-6, "baratas que se van al día")
+  -- Con todas idas, no se extrapola (la vida sí: -log de la supervivencia mínima)
+  ES.db.history = { [key] = { { time = t - 60, elapsed = 6 * 3600, stuck = ";" .. ITEM .. ":0:5" } } }
+  BuildIndexNow()
+  expect_near(ES.Market:Stuck(ITEM).gone, 5 / 6 * 24, 1e-6, "todas idas: las que había")
+  expect_eq(ES.Market:Stuck(999999).gone, nil, "sin datos: nil")
 end, { state = "scan" })

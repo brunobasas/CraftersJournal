@@ -213,7 +213,7 @@ end
 local GetItemInfoCompat = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 local GetItemInfoInstantCompat = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
 
--- Nombres de recetas y objetos de un idioma (Data/Names_esES.lua, _deDE, _frFR; los
+-- Nombres de recetas y objetos de un idioma (Data/Names_esES.lua, _deDE, _frFR, _ruRU; los
 -- genera tools/gen_names.py): { spells, items }, o nil (inglés: los de los datos).
 -- Cada archivo los deja como una sola cadena ("S<receta>=nombre" / "I<objeto>=nombre",
 -- una por línea), que ocupa ~3 veces menos que la tabla: se convierte en tabla la
@@ -570,11 +570,56 @@ function ES:GetOwnedReagents(data, foreign)
   Count(data.recipes)
   if foreign then Count(foreign.recipes) end
   -- Herramientas (bastones rúnicos)
+  for itemID, count in pairs(ES:CarriedTools()) do owned[itemID] = count end
+  return owned
+end
+
+-- Las herramientas que llevas (bastones rúnicos, martillo, llave...): { [itemID] = unidades }.
+-- La ruta las mira siempre, con o sin "usar lo de las bolsas": no se gastan y una vara
+-- mejor sirve de las inferiores (CurseForge: pedía el Runed Silver Rod llevando el de oro)
+function ES:CarriedTools()
+  local tools = {}
   for _, tool in pairs(ES.Data.Tools or {}) do
     local count = ES:ItemCount(tool.item)
-    if count and count > 0 then owned[tool.item] = count end
+    if count and count > 0 then tools[tool.item] = count end
   end
-  return owned
+  return tools
+end
+
+-- Familias de herramientas que piden las recetas de una profesión: { [familia] = true }
+local toolFamilies = {}
+local function ToolFamilies(profKey)
+  if toolFamilies[profKey] then return toolFamilies[profKey] end
+  local fams, tools = {}, ES.Data.Tools or {}
+  local data = ES.Data[profKey]
+  for _, r in pairs(data and data.recipes or {}) do
+    for _, t in ipairs({ r.tool, r.tool2 }) do
+      if tools[t] then fams[tools[t].family or "rod"] = true end
+    end
+  end
+  toolFamilies[profKey] = fams
+  return fams
+end
+
+-- La mejor herramienta de cada familia en `tools` (nil: las que llevas), para la clave
+-- de la ruta: "rod7,hammer4" (solo cambia si cambia lo que la ruta da por hecho). Con
+-- `profKey`, solo las familias que piden sus recetas: un martillo no cambia la ruta de
+-- Encantamiento, y Peletería (sin herramientas) no mira las bolsas
+function ES:ToolsStamp(tools, profKey)
+  local fams = profKey and ToolFamilies(profKey)
+  if fams and not next(fams) then return "" end
+  local best = {}
+  for _, tool in pairs(ES.Data.Tools or {}) do
+    local fam = tool.family or "rod"
+    if not fams or fams[fam] then
+      local have = tools and tools[tool.item] or (not tools and ES:ItemCount(tool.item)) or 0
+      if have > 0 and tool.mask > (best[fam] or 0) then best[fam] = tool.mask end
+    end
+  end
+  local parts = {}
+  for fam, mask in pairs(best) do parts[#parts + 1] = fam .. mask end
+  table.sort(parts)
+  return table.concat(parts, ",")
 end
 
 -- Recetas de otras profesiones (y de la fundición de Minería) que el personaje sabe y

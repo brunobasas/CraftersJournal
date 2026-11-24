@@ -105,6 +105,42 @@ test("recetas para aprender: solo las de tu especialización", function()
   expect(Offered(), "con Tribal Leatherworking no propone aprender Frostsaber Boots (la prueba no prueba nada)")
 end, { state = "full" })
 
+-- CurseForge: proponía aprender Mooncloth Shoulders por una sola subasta a 350g: con
+-- una o dos subastas no se sabe si ese es el precio ni si hay mercado
+test("recetas para aprender: con muy pocas subastas de lo fabricado no se proponen", function()
+  local r = ES.Data.Leatherworking.recipes[19066] -- Frostsaber Boots
+  SKILLS[ES.Data.Leatherworking.skillLine] = { 260, 300 }
+  KNOWN_SPELLS[10660] = true
+  for _, m in ipairs(r.r) do SetPrice(m[1], 1, 5000) end
+  SetPrice(r.scroll, 100, 1)
+  SetPrice(r.out[1], 500000, 40)
+  local function Find()
+    for _, idea in ipairs(Ideas().learnable) do
+      if idea.e.id == 19066 then return idea end
+    end
+  end
+  local items = ES.db.scans[ES:RealmKey()].items
+  items[r.out[1]].listings = ES.Earn.LEARN_MIN_LISTINGS
+  expect(Find(), "con %d subastas no propone aprender Frostsaber Boots (la prueba no prueba nada)", ES.Earn.LEARN_MIN_LISTINGS)
+  -- Una sola subasta (una unidad), cara
+  items[r.out[1]].listings, items[r.out[1]].quantity = 1, 1
+  items[r.out[1]].ladder = { 500000, 1 }
+  expect(not Find(), "con una sola subasta propone aprender Frostsaber Boots")
+  -- La fila dice cuántos hay a la venta
+  items[r.out[1]].listings, items[r.out[1]].quantity = 5, 40
+  items[r.out[1]].ladder = { 500000, 40 }
+  ES.Earn:Clear()
+  OpenPage("money")
+  local found
+  for _, row in ipairs(ES.earnPage.rows or {}) do
+    if row:IsShown() and row.item == r.out[1] then found = row end
+  end
+  expect(found, "no sale la fila de Frostsaber Boots en «Recetas que podrías aprender»")
+  local sub = tostring(found.sub:GetText())
+  local want = string.format(ES.L["AH %s/u (%d a la venta) · %s"], "", 40, ""):match("%((.-)%)")
+  expect(sub:find(want, 1, true), "la fila no dice cuántos hay a la venta: %s", sub)
+end, { state = "full" })
+
 -- Spec recipe-requirements: con el icono de misión de la profesión desactivado, no se
 -- propone aprender una receta que su instructor solo enseña tras una misión que no has
 -- hecho (Discolored Healing Potion: Odd Child / Apothecary Renferrel)
