@@ -4,7 +4,7 @@ Descarga SpellName e ItemSparse de wago.tools en cada idioma y los recorta a las
 recetas y objetos que usa el addon -> tools/wago/SpellName_forever_<idioma>.csv e
 ItemSparse_forever_<idioma>.csv (ID, nombre). Luego gen_names.py genera
 Data/Names_<idioma>.lua.
-Uso: python fetch_names_es.py [esES deDE frFR]   (por defecto, los tres; solo hace
+Uso: python fetch_names_es.py [esES deDE frFR ruRU]   (por defecto, todos; solo hace
 falta al cambiar de versión del cliente o al añadir un idioma)
 """
 import csv
@@ -18,7 +18,7 @@ WAGO = HERE / "wago"
 BUILD = "1.60.1.70862"
 
 
-LOCALES = ["esES", "deDE", "frFR"]
+LOCALES = ["esES", "deDE", "frFR", "ruRU"]
 
 
 def download(table, locale):

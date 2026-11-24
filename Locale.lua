@@ -14,10 +14,11 @@ ES.LANGS = {
   { key = "en", name = "English",  client = "enUS" },
   { key = "de", name = "Deutsch",  client = "deDE" },
   { key = "fr", name = "Français", client = "frFR" },
+  { key = "ru", name = "Русский",  client = "ruRU" },
 }
 ES.Locales = {}
 
-local CLIENT_LANG = { esES = "es", esMX = "es", deDE = "de", frFR = "fr" }
+local CLIENT_LANG = { esES = "es", esMX = "es", deDE = "de", frFR = "fr", ruRU = "ru" }
 function ES.DefaultLanguage()
   local loc = GetLocale and GetLocale() or "esES"
   return CLIENT_LANG[loc] or "en"

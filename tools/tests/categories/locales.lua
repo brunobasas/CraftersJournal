@@ -1,5 +1,5 @@
 -- Idiomas: el addon está escrito en español; cada texto se traduce por su clave
--- (el texto en español) en Locales/enUS.lua, deDE.lua y frFR.lua. Los nombres de
+-- (el texto en español) en Locales/enUS.lua, deDE.lua, frFR.lua y ruRU.lua. Los nombres de
 -- recetas y objetos de cada idioma, en Data/Names_*.lua (solo los que cambian
 -- respecto al inglés: un hueco quiere decir «igual que en inglés»).
 
@@ -43,6 +43,17 @@ end
 
 local function Sorted(t) table.sort(t) return t end
 
+-- Los idiomas de ES.LANGS (Locale.lua) menos los que se digan: así un idioma nuevo
+-- entra solo en las pruebas
+local function Langs(...)
+  local skip, out = {}, {}
+  for _, k in ipairs({ ... }) do skip[k] = true end
+  for _, l in ipairs(ES.LANGS) do
+    if not skip[l.key] then out[#out + 1] = l.key end
+  end
+  return out
+end
+
 test("cada texto que pide el código está traducido al inglés", function()
   local used, missing, n = UsedKeys(), {}, 0
   for key, where in pairs(used) do
@@ -55,8 +66,10 @@ test("cada texto que pide el código está traducido al inglés", function()
   expect(#missing == 0, "%d textos sin inglés (salen en español):\n    %s", #missing, table.concat(missing, "\n    "):sub(1, 1500))
 end, { boot = false })
 
-test("alemán y francés: las mismas claves y el mismo formato que el inglés", function()
-  for _, lang in ipairs({ "de", "fr" }) do
+test("cada idioma traducido: las mismas claves y el mismo formato que el inglés", function()
+  local langs = Langs("es", "en")
+  expect(#langs >= 3, "solo %d idiomas traducidos en ES.LANGS", #langs)
+  for _, lang in ipairs(langs) do
     local loc = expect(ES.Locales[lang], "falta ES.Locales.%s", lang)
     local missing, extra, bad = {}, {}, {}
     for key, en in pairs(ES.Locales.en) do
@@ -85,7 +98,7 @@ test("nombres de los datos: de recetas que existen y sin vacíos", function()
   for _, key in ipairs(ES:RecipeDataKeys()) do
     for id in pairs(ES.Data[key].recipes) do recipes[id] = true end
   end
-  for _, lang in ipairs({ "es", "de", "fr" }) do
+  for _, lang in ipairs(Langs("en")) do
     local set = expect(ES.NamesFor(lang), "sin nombres en %s", lang)
     local orphan, empty, ns, ni = {}, {}, 0, 0
     for id, name in pairs(set.spells or {}) do
@@ -118,10 +131,13 @@ local function NamesDigest(set)
 end
 
 test("nombres de cada idioma: los mismos que antes", function()
-  local out = {}
-  for _, lang in ipairs({ "es", "de", "fr" }) do out[lang] = NamesDigest(ES.NamesFor(lang)) end
+  local out, counts = {}, {}
+  for _, lang in ipairs(Langs("en")) do
+    out[lang] = NamesDigest(ES.NamesFor(lang))
+    counts[#counts + 1] = lang .. " " .. out[lang].n
+  end
   snapshot("nombres", out)
-  note("es %d, de %d, fr %d nombres", out.es.n, out.de.n, out.fr.n)
+  note("%s nombres", table.concat(counts, ", "))
   expect_eq(ES.NamesFor("es").spells[12720], 'Caja goblin "Bum"', "nombre con comillas")
   expect_eq(ES.NamesFor("de").spells[12720], 'Goblin-"Bumm"-Kasten', "nombre con comillas en alemán")
 end, { boot = false })
@@ -136,7 +152,7 @@ test("nombres: con el juego y el addon en inglés, los idiomas sin usar ocupan p
   GetLocale = function() return "enUS" end
   Boot({ lang = "en" })
   -- Al entrar no se ha convertido ninguno
-  for _, lang in ipairs({ "es", "de", "fr" }) do
+  for _, lang in ipairs(Langs("en")) do
     expect(ES.NamesExpanded and not ES.NamesExpanded(lang), "%s convertido sin usarse", lang)
   end
   -- Lo que ocupan sin convertir (cadenas) frente a lo que ocupan convertidos
@@ -145,7 +161,7 @@ test("nombres: con el juego y el addon en inglés, los idiomas sin usar ocupan p
     compact = compact + (type(v) == "string" and #v + 24 or math.huge)
   end
   local before = KB()
-  for _, lang in ipairs({ "es", "de", "fr" }) do ES.NamesFor(lang) end
+  for _, lang in ipairs(Langs("en")) do ES.NamesFor(lang) end
   local tables = KB() - before
   note("sin convertir %.2f MB; convertidos %.2f MB", compact / 1048576, tables / 1024)
   expect(compact <= 0.4 * tables * 1024, "sin convertir ocupan %.2f MB y convertidos %.2f MB (tope 40 %%)",
@@ -195,6 +211,38 @@ test("volver al idioma del cliente: se queda convertido y se suelta el otro", fu
   expect_eq(ES.Data.Leatherworking.recipes[2149].name, ES.NamesFor("es").spells[2149], "receta en español")
   expect(ES.NamesExpanded("es"), "el español (el del cliente) no está convertido")
   expect(not ES.NamesExpanded("de"), "el alemán sigue convertido tras dejarlo")
+end, { boot = false })
+
+-- Spec localized-names, «Nombres en ruso». (Sin cirílico escrito aquí: la prueba de
+-- glifos de test_ui.py solo lo deja en los archivos del ruso; se compara con los datos
+-- y se mira que sea cirílico: en UTF-8 empieza por el byte 208 o 209)
+local function Cyrillic(s) return type(s) == "string" and s:find("[\208\209][\128-\191]") ~= nil end
+
+test("cliente en ruso sin idioma elegido: el addon empieza en ruso, con sus textos y nombres", function()
+  GetLocale = function() return "ruRU" end
+  Boot({})
+  expect_eq(ES.lang, "ru", "idioma con el cliente en ruRU")
+  expect(Cyrillic(ES.L["Lista de compra"]), "«Lista de compra» no sale en ruso: %s", tostring(ES.L["Lista de compra"]))
+  local name = ES.Data.Leatherworking.recipes[2149].name
+  expect(Cyrillic(name) and name == ES.NamesFor("ru").spells[2149], "receta 2149 no en ruso: %s", tostring(name))
+  expect(ES.NamesExpanded("ru"), "el ruso (el del cliente y el del addon) no está convertido")
+end, { boot = false })
+
+test("ruso con el cliente en inglés: recetas y objetos con su nombre ruso de los datos", function()
+  GetLocale = function() return "enUS" end
+  Boot({ lang = "en" })
+  OpenMain()
+  ES:SetLanguage("ru")
+  RunTimers()
+  expect(ES:GetMainFrame():IsShown(), "al pasar a ruso la ventana se cerró")
+  local name = ES.Data.Leatherworking.recipes[2149].name
+  expect(Cyrillic(name) and name == ES.NamesFor("ru").spells[2149], "receta 2149 no en ruso: %s", tostring(name))
+  local item = ES:DataItemName(2589)
+  expect(Cyrillic(item) and item == ES.NamesFor("ru").items[2589], "objeto 2589 no en ruso: %s", tostring(item))
+  ES:SetLanguage("en")
+  RunTimers()
+  expect_eq(ES.Data.Leatherworking.recipes[2149].name, "Handstitched Leather Boots", "receta otra vez en inglés")
+  expect(not ES.NamesExpanded("ru"), "el ruso sigue convertido tras dejarlo")
 end, { boot = false })
 
 test("instructor en el idioma del cliente con el addon en otro: reconoce las recetas", function()

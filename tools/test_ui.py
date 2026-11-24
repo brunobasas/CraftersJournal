@@ -7462,16 +7462,26 @@ print(out)
 # que sí dibuja (…, comillas tipográficas, guiones largos y la œ de los nombres
 # franceses del juego, como "cœur"). Los comentarios no cuentan
 ALLOWED_EXTRA = set("…’‘“”–—€œŒ")
+# El cirílico (U+0400-U+04FF), solo en lo del ruso: sus textos y nombres, que se leen con
+# el cliente en ruRU (su fuente sí lo dibuja), y el nombre del idioma en Locale.lua
+CYRILLIC_FILES = {"Locales/ruRU.lua", "Data/Names_ruRU.lua", "Locale.lua"}
+
+
+def allowed(ch, rel):
+    return ch in ALLOWED_EXTRA or (rel in CYRILLIC_FILES and 0x0400 <= ord(ch) <= 0x04FF)
+
+
 TOKEN = re.compile(r'--\[(=*)\[.*?\]\1\]|--[^\n]*|\[(=*)\[.*?\]\2\]|"(?:[^"\\\n]|\\.)*"|\'(?:[^\'\\\n]|\\.)*\'', re.S)
 bad = []
 for f in sorted(ADDON.rglob("*.lua")):
     text = f.read_text(encoding="utf-8")
+    rel = f.relative_to(ADDON).as_posix()
     for m in TOKEN.finditer(text):
         tok = m.group(0)
         if tok.startswith("--"):
             continue
         for ch in tok:
-            if ord(ch) > 0xFF and ch not in ALLOWED_EXTRA:
+            if ord(ch) > 0xFF and not allowed(ch, rel):
                 line = text.count("\n", 0, m.start()) + 1
                 bad.append(f"{f.relative_to(ADDON)}:{line}: {ch!r} (U+{ord(ch):04X})")
                 break

@@ -1,4 +1,4 @@
-"""Genera Data/Names_<idioma>.lua (esES, deDE, frFR): nombres de las recetas y objetos
+"""Genera Data/Names_<idioma>.lua (esES, deDE, frFR, ruRU): nombres de las recetas y objetos
 del addon en cada idioma.
 
 Lee tools/wago/SpellName_forever_<idioma>.csv e ItemSparse_forever_<idioma>.csv (ver
@@ -58,7 +58,7 @@ def lua_names(lang, spells, items):
 
 
 # Idioma del cliente -> clave del addon (ES.LANGS en Locale.lua) y nombre para el comentario
-LOCALES = {"esES": ("es", "español"), "deDE": ("de", "alemán"), "frFR": ("fr", "francés")}
+LOCALES = {"esES": ("es", "español"), "deDE": ("de", "alemán"), "frFR": ("fr", "francés"), "ruRU": ("ru", "ruso")}
 
 
 def generate(locale, lang, label):
