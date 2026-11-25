@@ -7391,6 +7391,17 @@ step("navegación unificada: ventana y asistente marcan igual", function()
     A.Update()
     assert(#sp == before + 1, "debería marcar el destino aunque haya un noMark antiguo")
     ES.db.assistant.noMark = nil
+    -- Versiones nuevas de la API de Shortest Path Forever también valen (GitHub PR #5)
+    ShortestPathForever.API.version = 2
+    before = #sp
+    target = 7009
+    A.Update()
+    assert(#sp == before + 1 and st.pathHow == "shortestpath", "con la API versión 2 debería seguir marcando con Shortest Path")
+    -- Una versión que no es un número no se acepta
+    ShortestPathForever.API.version = "2"
+    before = #sp
+    WP.SetWaypoint(7101)
+    assert(#sp == before, "una versión que no es un número no debería usarse")
     -- Paso nuevo sin encontrar a dónde ir: el camino del paso anterior se quita (Discord:
     -- "Recoge el correo" y el camino seguía al subastador)
     ShortestPathForever = nil
