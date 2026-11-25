@@ -439,7 +439,7 @@ end
 
 local function ShortestPath()
   local api = ShortestPathForever and ShortestPathForever.API
-  return api and api.version == 1 and api or nil
+  return api and type(api.version) == "number" and api.version >= 1 and api or nil
 end
 
 local function PlayerMapPosition()
