@@ -87,6 +87,16 @@
   "Leatherworking": 55,
   "Tailoring": 36
  },
+ "pergaminos sin nombre en inglés, por profesión": {
+  "Alchemy": 4,
+  "Blacksmithing": 26,
+  "Cooking": 1,
+  "Enchanting": 3,
+  "Engineering": 5,
+  "FirstAid": 1,
+  "Leatherworking": 20,
+  "Tailoring": 10
+ },
  "recetas con los colores desordenados": [
   "Blacksmithing 2665 Coarse Sharpening Stone: t = {75, 40, 47, 55}",
   "Blacksmithing 2674 Heavy Sharpening Stone: t = {125, 100, 107, 115}"

@@ -200,6 +200,16 @@ function ES:WindowTip(kind)
 end
 function ES:CraftWindowOn() return not (self.db and self.db.noCraftWindow) end
 
+-- Duración fija de las subastas que anuncia el addon (ES.db.auctionHours: 2, 8 o 24), o
+-- nil si es automática (la de por defecto: el Inventario y la ventana de vender eligen
+-- 24 h o 8 h según las alertas; la ruta, 24 h). BulkPost (BulkMoney) va siempre a 2 h.
+-- CurseForge: querían anunciar siempre a 2 h en vez de 8
+local AUCTION_HOURS = { [2] = true, [8] = true, [24] = true }
+function ES:AuctionHours()
+  local h = self.db and self.db.auctionHours
+  return AUCTION_HOURS[h] and h or nil
+end
+
 -- Cambia una opción (on: la casilla marcada) y lo aplica al momento: la pestaña
 -- Inventario y las ventanas del vendedor y la AH, si están abiertos
 function ES:SetOption(key, on)
@@ -255,6 +265,12 @@ local OPTIONS = {
     desc = "Al abrir la AH: una ventana con lo de tus bolsas que se vende mejor en la AH. Clic en una fila para anunciarlo." },
   { key = "noPostConfirm", cat = "auction", label = "Confirmar antes de anunciar en la AH",
     desc = "Al anunciar más de una unidad de golpe (ventana de vender, Inventario, ruta), pregunta antes cuántas y a qué precio. Así un clic sin querer no anuncia un montón." },
+  -- Duración de las subastas (ES:AuctionHours): automática o fija; con ella se calculan
+  -- también el depósito y si compensa la AH (InventoryUI.lua)
+  { key = "auctionHours", cat = "auction", kind = "segmented", label = "Duración de las subastas",
+    desc = "Automática: 24 h lo que se vende bien y 8 h lo dudoso (si caduca, pierdes menos depósito). O la misma siempre: más corta, depósito más barato y vuelves a anunciar antes. Vale para la ventana de vender, el Inventario y la ruta.",
+    choices = { { value = "auto", text = "Automática" }, { value = 2, text = "2 h" }, { value = 8, text = "8 h" }, { value = 24, text = "24 h" } },
+    default = "auto", apply = function() ES:ApplyOptions("auctionHours") end },
   -- Vendedor
   { key = "noVendorWindow", cat = "vendor", label = "Ventana junto al vendedor",
     desc = "Al abrir un vendedor: lo que te falta de la lista de compra y lo que puedes venderle, con los botones Comprar todo y Vender todo." },

@@ -243,6 +243,13 @@ function SetGameMode(id)
   FireEvent("ACTIVE_GAME_MODE_UPDATED", id)
 end
 UnitFactionGroup = function(u) if u == "npc" then return NPC_FACTION end return FACTION end
+-- El mapa del jugador (C_Map.GetBestMapForUnit) solo para las pruebas que lo piden: sin
+-- llamar a esto no hay C_Map, como antes (Waypoints y Assistant se portan distinto con él)
+function SetPlayerMap(id)
+  C_Map = C_Map or {}
+  C_Map.GetBestMapForUnit = function(u) if u == "player" then return id end end
+  C_Map.GetPlayerMapPosition = C_Map.GetPlayerMapPosition or function() return nil end
+end
 UnitExists = function() return true end
 UnitName = function() return "Bruno" end
 UnitGUID = function(u) if u == "player" then return "Player-1-00000001" end end

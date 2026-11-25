@@ -57,6 +57,8 @@ end
 -- sí (en el diálogo o, sin confirmación, en el chat): anunciar todas pese a las alertas
 function Sell.Post(itemID, n, unit, hours, done, warn)
   if not n or n <= 0 then return end
+  -- (sin duración, la ruta: la de las opciones o 24 h)
+  hours = hours or ES:AuctionHours() or 24
   local function Post()
     ES.Ledger:PostOnAH(itemID, n, unit, hours)
     if done then done() end

@@ -1734,6 +1734,9 @@ function ES.UI.RenderLines(page, lines)
     if line.current and not currentY then currentY = y end
     y = y + height + ROW_GAP
     if line.item and not ES:GetItemData(line.item) then page.pendingItems, waiting[line.item] = true, true end
+    -- (un pergamino sin nombre en el juego ni en los datos: su fila dice el de la receta
+    -- hasta que el juego lo cargue, ver ScrollName)
+    if line.waitItem and not ES:GetItemData(line.waitItem) then page.pendingItems, waiting[line.waitItem] = true, true end
     row:Show()
   end
   for i = #lines + 1, #page.rows do
@@ -2724,13 +2727,38 @@ local function CostOrFree(copper)
   return GREEN .. L["gratis|r"]
 end
 
+-- El pergamino que enseña la receta `r`, por su nombre de objeto (spec recipe-scroll-names):
+-- no siempre es "Recipe: " + el de la receta (Recipe: Elixir of Detect Lesser Invisibility
+-- enseña Draught of Detect Lesser Invisibility; Carrie's Cookbook, sin prefijo). El del
+-- juego o, si no lo tiene, el de los datos en el idioma del addon; si tampoco, el de la
+-- receta. Devuelve el nombre en el color de su calidad, el nombre sin color y el
+-- pergamino al que esperar si faltaba (`waitItem` de la fila: repinta al cargarse)
+local function ScrollName(r)
+  local name = r.scroll and ES:ItemName(r.scroll)
+  if not name then return r.name, r.name, r.scroll end
+  local c = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[r.sq or 1]
+  return (c and c.hex) and (c.hex .. name .. "|r") or name, name, nil
+end
+ES.ScrollName = ScrollName -- (para pruebas)
+
+-- "enseña <receta>" si el pergamino, sin su prefijo ("Recipe: "...), se llama distinto
+-- que la receta; si no, nil (no se repite lo mismo)
+local function ScrollTeaches(r, plain)
+  local bare = plain:match("^[^:]+:%s*(.+)$") or plain
+  if not r.name or bare:lower() == r.name:lower() then return nil end
+  return string.format(L["enseña %s"], r.name)
+end
+ES.ScrollTeaches = ScrollTeaches -- (para pruebas)
+
 -- Prueba piloto: fila "Conseguir receta" con su mejor fuente (misión, vendedor
 -- o AH), el clic a quien da la misión o la vende, y todas las fuentes en el tooltip
 local function SourcedLearnLine(r, st, profName, plan)
   local src = WP.RecipeSource(r, plan.ctx.prices, plan.ctx.opts.noQuests, plan.ctx.opts.noLimited)
   local best = src and src.best
   if not best then return nil end
-  local title = L["Conseguir receta: "] .. r.name
+  local scrollName, scrollPlain, waitItem = ScrollName(r)
+  local teaches = not waitItem and ScrollTeaches(r, scrollPlain)
+  local title = string.format(L["Conseguir %s"], scrollName)
   local also = src.ah and best.kind ~= "ah" and (L[" · también en la AH: "] .. ES.Money(src.ah.price)) or ""
   -- Todos sus vendedores venden pocos y reponen con el tiempo (Data/Sources.lua, lim):
   -- puede no haber. Se avisa; quien no quiera esperar la quita con la ✕ (o, en las
@@ -2744,10 +2772,10 @@ local function SourcedLearnLine(r, st, profName, plan)
   -- Sin `pick`: el clic no lleva a ninguna parte (y el tooltip no lo promete)
   local bought = best.kind ~= "owned" and r.scroll and ES.Ledger and ES.Ledger.OnWay and ES.Ledger.OnWay(r.scroll) > 0
   if bought then
-    icon, title = RECIPE_ICON, L["Receta comprada: "] .. r.name
+    icon, title = RECIPE_ICON, string.format(L["Comprado: %s"], scrollName)
     sub = L["Comprada en la AH · apréndela antes de fabricar"]
   elseif best.kind == "owned" then
-    icon, title = RECIPE_ICON, L["Aprender receta: "] .. r.name
+    icon, title = RECIPE_ICON, string.format(L["Aprender %s"], scrollName)
     sub = string.format(L["La tienes en la bolsa%s · clic para aprenderla"], best.count > 1 and (" (" .. best.count .. ")") or "")
     useItem = r.scroll -- clic: usa el pergamino (botón seguro, ver WantsHover)
   elseif best.kind == "quest" then
@@ -2770,12 +2798,15 @@ local function SourcedLearnLine(r, st, profName, plan)
     sub = string.format(L["Casa de Subastas · la más barata ahora (%d a la venta)"], src.ah.listings)
     pick = WP.Target("auction")
   end
+  -- (qué receta enseña, delante de lo demás: es lo que une la fila con su paso de fabricar)
+  if teaches then sub = teaches .. ES.SEP .. (sub or "") end
 
   local function Tooltip(row)
     -- Lo de la X, solo donde la fila tiene X (en el asistente no: ahí no se quita nada)
     local withX = row and row.onSkip ~= nil
     GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-    GameTooltip:AddLine(L["Receta: "] .. r.name)
+    GameTooltip:AddLine(scrollName)
+    if teaches then GameTooltip:AddLine(teaches, 0.8, 0.8, 0.8) end
     GameTooltip:AddDoubleLine(L["Requiere "] .. profName, tostring(r.train or st.from), 0.8, 0.8, 0.8, 1, 1, 1)
     GameTooltip:AddLine(" ")
     local function Mark(kind) return best.kind == kind and ES.Market.ICON_OK or ES.Market.ICON_NONE end
@@ -2858,7 +2889,7 @@ local function SourcedLearnLine(r, st, profName, plan)
 
   return { icon = icon, title = title, sub = sub, value = CostOrFree(st.fee), go = pick, tooltip = Tooltip,
     ahItem = not bought and best.kind == "ah" and r.scroll or nil, useItem = useItem, recipeName = r.name,
-    bought = bought or nil }
+    scrollName = scrollPlain, waitItem = waitItem, bought = bought or nil }
 end
 ES.SourcedLearnLine = SourcedLearnLine -- para pruebas
 
@@ -3939,13 +3970,19 @@ local function RouteLines(plan, page, opts)
         elseif pr.scroll then
           pick, plabel = WP.Target("vendor", pr.scroll), L["Vendedor más cercano"]
         end
-        local ltitle = string.format("%s %s", trainer and L["Entrenar"] or L["Comprar receta:"], pr.name)
-        local lsub = (LEARN_WHERE[prep.source] or "?") .. ES.SEP .. string.format(L["para fabricar %s"], name)
+        -- (de pergamino: por su nombre de objeto, ver ScrollName)
+        local pName, pPlain, pWait
+        if not trainer and pr.scroll then pName, pPlain, pWait = ScrollName(pr) end
+        local pTeaches = pPlain and not pWait and ScrollTeaches(pr, pPlain)
+        local ltitle = pName and string.format(L["Comprar %s"], pName)
+          or string.format("%s %s", trainer and L["Entrenar"] or L["Comprar receta:"], pr.name)
+        local lsub = (pTeaches and (pTeaches .. ES.SEP) or "") .. (LEARN_WHERE[prep.source] or "?") .. ES.SEP
+          .. string.format(L["para fabricar %s"], name)
         local learnLine = {
           level = line.level, icon = trainer and TRAIN_ICON or RECIPE_ICON, title = ltitle, sub = lsub,
           value = prep.cost > 0 and Signed(prep.cost) or (GREY .. "?|r"), go = pick,
           current = line.current, prepLearn = recipeID, -- (para pruebas)
-          trainerLearn = trainer or nil, learnName = pr.name, learnAt = learnAt, learnID = recipeID,
+          trainerLearn = trainer or nil, learnName = pr.name, learnAt = learnAt, learnID = recipeID, waitItem = pWait,
           tooltip = pick and TravelTooltip(ltitle, string.format(L["%s · requiere %s (%d) · cuesta %s"], LEARN_WHERE[prep.source] or "?",
             profName, learnAt, prep.cost > 0 and ES.Money(prep.cost) or L["precio desconocido"]), plabel, pick) or nil,
         }
@@ -3967,14 +4004,16 @@ local function RouteLines(plan, page, opts)
       and SourcedLearnLine(r, st, profName, plan)
     if learnSource == "favor" then
       -- Merchant's Favor: en el campamento de tu bando, con fichas (no oro)
-      local title = L["Conseguir receta: "] .. r.name
+      local fName, fPlain, fWait = ScrollName(r)
+      local fTeaches = not fWait and ScrollTeaches(r, fPlain)
+      local title = string.format(L["Conseguir %s"], fName)
       local pick = WP.Target("vendor", r.scroll)
-      local sub = string.format(L["Merchant's Favor: %d fichas"], r.favor)
+      local sub = (fTeaches and (fTeaches .. ES.SEP) or "") .. string.format(L["Merchant's Favor: %d fichas"], r.favor)
         .. (r.favorRep and (ES.SEP .. string.format(L["pide %s con el campamento"], ES.StandingName(r.favorRep))) or "")
       lines[#lines + 1] = {
         level = tostring(st.from), -- cuándo toca en la ruta (la columna va en orden)
         icon = "Interface\\Icons\\INV_Misc_Coin_17", title = title, sub = sub,
-        value = string.format("|cff66bbff%d|r", r.favor), go = pick, onSkip = Skip(st.id), learnRow = true,
+        value = string.format("|cff66bbff%d|r", r.favor), go = pick, onSkip = Skip(st.id), learnRow = true, waitItem = fWait,
         tooltip = TravelTooltip(title, sub, L["Vendedor más cercano"], pick, { learn = true }),
       }
     elseif sourcedLine then
@@ -4014,14 +4053,20 @@ local function RouteLines(plan, page, opts)
       elseif r.scroll then
         pick, label = WP.Target("vendor", r.scroll), L["Vendedor más cercano"]
       end
-      local title = string.format("%s %s", trainer and L["Entrenar"] or L["Comprar receta:"], r.name)
+      -- (de pergamino: por su nombre de objeto, ver ScrollName)
+      local sName, sPlain, sWait
+      if not trainer and r.scroll then sName, sPlain, sWait = ScrollName(r) end
+      local sTeaches = sPlain and not sWait and ScrollTeaches(r, sPlain)
+      local title = sName and string.format(L["Comprar %s"], sName)
+        or string.format("%s %s", trainer and L["Entrenar"] or L["Comprar receta:"], r.name)
       local questText = questFirst and WP.QuestFirstText(questFirst)
       lines[#lines + 1] = {
         level = tostring(st.from), -- cuándo toca en la ruta (se puede aprender desde learnAt)
         icon = trainer and TRAIN_ICON or RECIPE_ICON,
-        title = title,
+        title = title, waitItem = sWait,
         sub = questText and (ORANGE .. questText .. "|r")
-          or upRank and L["Instructor del rango siguiente (el de su rango no la tiene)"] or LEARN_WHERE[st.learnSource] or "?",
+          or upRank and L["Instructor del rango siguiente (el de su rango no la tiene)"]
+          or ((sTeaches and (sTeaches .. ES.SEP) or "") .. (LEARN_WHERE[st.learnSource] or "?")),
         questFirst = questFirst or nil, -- (para pruebas y el asistente)
         -- "?": fuente desconocida, o instructor de una receta nueva de Forever (precio sin datos)
         value = (st.learnSource == "unknown" or (r.trainer and not fee)) and (GREY .. "?|r") or Signed(st.fee),
@@ -4337,13 +4382,14 @@ local function RouteLines(plan, page, opts)
         local names, recipes = {}, {}
         for j, l in ipairs(lines) do
           if j ~= i and l.ahItem and not l.done and l.recipeName then
-            names[#names + 1] = l.recipeName
+            -- (el pergamino por su nombre de objeto, sin color: va dentro del naranja)
+            names[#names + 1] = l.scrollName or l.recipeName
             recipes[#recipes + 1] = l
             l.buyNow = true -- (para pruebas)
           end
         end
         if #names > 0 then
-          local text = ORANGE .. string.format(L["compra también la receta: %s"], table.concat(names, ", ")) .. "|r"
+          local text = ORANGE .. string.format(L["compra también %s"], table.concat(names, ", ")) .. "|r"
           line.sub = (line.sub or "") .. ES.SEP .. text
           line.bannerSub = ((line.bannerSub and line.bannerSub ~= "") and (line.bannerSub .. ES.SEP) or "") .. text
           -- Y como pasos de esa misma parada: justo detrás de las compras de la AH (y antes

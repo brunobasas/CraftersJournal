@@ -223,6 +223,22 @@ ES.Data.ItemNames[255721] = "Leather Tourniquet"
 ES.Data.ItemNames[255722] = "Surgical Tourniquet"
 ES.Data.ItemNames[279940] = "Toxin Study"
 ES.Data.ItemNames[279968] = "First Aid Kit"
+-- Nombre de cada pergamino de receta (inglés, del cliente): no siempre es "Recipe: " + el de la receta
+ES.Data.ItemNames[6454] = "Manual: Strong Anti-Venom"
+ES.Data.ItemNames[16112] = "Manual: Heavy Silk Bandage"
+ES.Data.ItemNames[16113] = "Manual: Mageweave Bandage"
+ES.Data.ItemNames[19442] = "Formula: Powerful Anti-Venom"
+ES.Data.ItemNames[232434] = "Manual: Dense Runecloth Bandage"
+ES.Data.ItemNames[255723] = "Manual: Greater Healing Potion"
+ES.Data.ItemNames[255724] = "Manual: Clever Poultice"
+ES.Data.ItemNames[255725] = "Manual: Superior Healing Potion"
+ES.Data.ItemNames[255726] = "Manual: Leather Tourniquet"
+ES.Data.ItemNames[255727] = "Manual: Superior Poultice"
+ES.Data.ItemNames[255728] = "Manual: Potent Anti-Venom"
+ES.Data.ItemNames[255729] = "Manual: Major Healing Potion"
+ES.Data.ItemNames[255730] = "Manual: Surgical Tourniquet"
+ES.Data.ItemNames[255731] = "Manual: Powerful Poultice"
+ES.Data.ItemNames[273105] = "Blueprint: Toxin Study"
 
 -- Material -> profesión de recolección que lo consigue (393 Desuello, 182 Herboristería, 186 Minería).
 -- Sin uso por ahora: reservado para la vía "Vender en bruto" de Ganar dinero (docs/PLAN.md, G1).

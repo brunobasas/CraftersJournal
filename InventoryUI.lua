@@ -249,7 +249,8 @@ function Inventory:List()
           if verdict == "good" then verdict = "watch" end -- (unas pocas, con el riesgo del depósito)
         end
       end
-      e.hours = verdict == "good" and AH_HOURS_GOOD or AH_HOURS_RISKY
+      -- (o la fijada en las opciones: ES:AuctionHours; el depósito y el riesgo, con ella)
+      e.hours = ES:AuctionHours() or (verdict == "good" and AH_HOURS_GOOD or AH_HOURS_RISKY)
       local perUnit, cut = ES.Planner.AuctionCosts(vendor, { hours = e.hours, neutral = ES:IsNeutralAH() })
       local net = listPrice and listPrice * (1 - cut)
       e.fair, e.verdict, e.listPrice, e.ref = fair, verdict, listPrice, fair.ref
@@ -410,7 +411,7 @@ local function Tooltip(e, noActions)
         GameTooltip:AddLine(string.format(L["Precio del escaneo de la AH de %s."], ES.TimeAgo(scan.time)),
           old and 1 or 0.6, old and 0.6 or 0.6, old and 0.2 or 0.6, true)
       end
-      if e.hours == AH_HOURS_RISKY and e.depositRisk then
+      if e.hours < AH_HOURS_GOOD and e.depositRisk then
         GameTooltip:AddLine(string.format(L["Subasta de %d h: no se sabe si se vende y, si caduca, pierdes solo %s de depósito por subasta."],
           e.hours, ES.Money(e.depositRisk)), 0.6, 0.6, 0.6, true)
       end

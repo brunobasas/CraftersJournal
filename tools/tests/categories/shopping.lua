@@ -557,14 +557,17 @@ test("comprar el pergamino en la AH: la fila de compra queda hecha y la receta, 
     end
   end
   expect(InAH(), "la compra en la AH del tramo no lleva el pergamino de la Bolsa roja de lana")
-  local name = ES.Data.Tailoring.recipes[RED_BAG].name
+  -- (la fila nombra el pergamino por su objeto: spec recipe-scroll-names)
+  local name = ES:ItemName(RED_BAG_SCROLL)
+  local function Before(key) return (ES.L[key]:gsub("%%s.*$", "")) end
+  local GET, BOUGHT = Before("Conseguir %s"), Before("Comprado: %s")
   local function LearnTitle()
     for _, l in ipairs(ES:RouteLines("Tailoring")) do
       local t = tostring(l.title or "")
-      if t:find(name, 1, true) and (t:find(ES.L["Conseguir receta: "], 1, true) or t:find(ES.L["Receta comprada: "], 1, true)) then return t end
+      if t:find(name, 1, true) and (t:find(GET, 1, true) or t:find(BOUGHT, 1, true)) then return t end
     end
   end
-  expect(tostring(LearnTitle()):find(ES.L["Conseguir receta: "], 1, true), "sin comprar, la fila de la receta no dice «Conseguir receta»")
+  expect(tostring(LearnTitle()):find(GET, 1, true), "sin comprar, la fila de %s no dice «Conseguir»", name)
   AuctionFrame:Show()
   FireEvent("AUCTION_HOUSE_SHOW")
   RunTimers()
@@ -572,7 +575,89 @@ test("comprar el pergamino en la AH: la fila de compra queda hecha y la receta, 
   WinAuction(RED_BAG_SCROLL, 1)
   ES.Earn:Clear()
   expect_eq(InAH(), nil, "con el pergamino comprado, la compra en la AH lo sigue pidiendo")
-  expect(tostring(LearnTitle()):find(ES.L["Receta comprada: "], 1, true), "comprado, la fila dice «%s»", tostring(LearnTitle()))
+  expect(tostring(LearnTitle()):find(BOUGHT, 1, true), "comprado, la fila dice «%s»", tostring(LearnTitle()))
+end)
+
+-- Pergamino que no se llama "prefijo + receta" (spec recipe-scroll-names; Discord: la ruta
+-- pedía «Recipe: Draught of Detect Lesser Invisibility», que no existe, y el pergamino
+-- es «Recipe: Elixir of Detect Lesser Invisibility»). Aquí, el de la Bolsa roja de lana
+-- con otro nombre en el juego
+local RENAMED = "Pattern: Crimson Wool Sack"
+local function Plain(s) return (tostring(s or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
+local function ScrollRow(lines, scroll)
+  for _, l in ipairs(lines) do
+    if l.learnRow and (l.ahItem == scroll or Plain(l.title):find(ES.Data.Tailoring.recipes[RED_BAG].name, 1, true)
+      or (l.scrollName and l.scrollName == ES:ItemName(scroll))) then return l end
+  end
+end
+local function TooltipLines(fn, ...)
+  local lines = {}
+  local add, add2 = GameTooltip.AddLine, GameTooltip.AddDoubleLine
+  GameTooltip.AddLine = function(_, t) lines[#lines + 1] = tostring(t) end
+  GameTooltip.AddDoubleLine = function(_, a, b) lines[#lines + 1] = tostring(a) .. " | " .. tostring(b) end
+  local ok, err = pcall(fn, ...)
+  GameTooltip.AddLine, GameTooltip.AddDoubleLine = add, add2
+  if not ok then error(err, 0) end
+  return lines
+end
+
+test("pergamino con otro nombre: la fila y su tooltip dicen el del objeto y qué receta enseña", function()
+  ITEM_INFO[RED_BAG_SCROLL] = { name = RENAMED }
+  ScrollRoute(110)
+  local recipe = ES.Data.Tailoring.recipes[RED_BAG].name
+  local row = expect(ScrollRow(ES:RouteLines("Tailoring"), RED_BAG_SCROLL), "no hay fila de conseguir el pergamino de la Bolsa roja de lana")
+  local title = Plain(row.title)
+  expect_eq(title, string.format(ES.L["Conseguir %s"], RENAMED), "título de la fila")
+  expect(not title:find(recipe, 1, true), "el título usa el nombre de la receta: «%s»", title)
+  expect(Plain(row.sub):find(string.format(ES.L["enseña %s"], recipe), 1, true), "la línea de debajo no dice qué receta enseña: «%s»", Plain(row.sub))
+  local tip = TooltipLines(row.tooltip, CreateFrame("Frame"))
+  expect_eq(Plain(tip[1]), RENAMED, "primera línea del tooltip")
+  expect_eq(Plain(tip[2]), string.format(ES.L["enseña %s"], recipe), "segunda línea del tooltip")
+  for _, t in ipairs(tip) do
+    expect(not Plain(t):find(": " .. recipe, 1, true), "el tooltip nombra un pergamino que no existe: «%s»", Plain(t))
+  end
+end)
+
+test("ruta entera en la AH: «compra también» nombra los pergaminos por su objeto", function()
+  ITEM_INFO[AZURE_CLOAK_SCROLL] = { name = RENAMED }
+  -- (sabiendo las de instructor, desde 110 el paso actual es el pergamino de la Bolsa roja
+  -- de lana, en la AH: con la ruta entera, pide también el de la Capa de seda azur)
+  for id, r in pairs(ES.Data.Tailoring.recipes) do if r.fee then KNOWN_SPELLS[id] = true end end
+  BAGS[2997] = 500 -- (Bolt of Woolen Cloth: sin fabricarlo antes)
+  ScrollRoute(110, false)
+  AuctionFrame:Show()
+  FireEvent("AUCTION_HOUSE_SHOW")
+  RunTimers()
+  ES.ahOpen = true
+  local key = (ES.L["compra también %s"]:gsub("%%s.*$", ""))
+  local found
+  for _, l in ipairs(ES:RouteLines("Tailoring")) do
+    local sub = Plain(l.sub)
+    local at = sub:find(key, 1, true)
+    if l.current and at then found = sub:sub(at) end
+  end
+  found = expect(found, "la fila actual de la AH no dice «%s»", key)
+  expect(found:find(RENAMED, 1, true), "«compra también» no nombra el pergamino de la Capa de seda azur por su objeto: «%s»", found)
+  expect(not found:find(ES.Data.Tailoring.recipes[AZURE_CLOAK].name, 1, true), "«compra también» usa el nombre de la receta: «%s»", found)
+end)
+
+test("pergamino sin nombre al pintar la ruta: la fila se actualiza cuando el juego lo carga", function()
+  ES:SetLanguage("en") -- (con el addon en otro idioma que el cliente, el nombre sale de los datos)
+  local saved = ES.Data.ItemNames[RED_BAG_SCROLL]
+  ES.Data.ItemNames[RED_BAG_SCROLL] = nil
+  UNCACHED[RED_BAG_SCROLL] = true
+  local page = ScrollRoute(110) and ProfessionPage("Tailoring")
+  local recipe = ES.Data.Tailoring.recipes[RED_BAG].name
+  local row = expect(ScrollRow(page.lines, RED_BAG_SCROLL), "no hay fila del pergamino de la Bolsa roja de lana")
+  expect(Plain(row.title):find(recipe, 1, true), "sin nombre del pergamino, la fila no dice el de la receta: «%s»", Plain(row.title))
+  expect(page.pendingItemIDs and page.pendingItemIDs[RED_BAG_SCROLL], "la página no espera al pergamino")
+  -- (llega el objeto del juego)
+  ES.Data.ItemNames[RED_BAG_SCROLL] = saved
+  UNCACHED[RED_BAG_SCROLL] = nil
+  FireEvent("GET_ITEM_INFO_RECEIVED", RED_BAG_SCROLL, true)
+  RunTimers()
+  row = expect(ScrollRow(page.lines, RED_BAG_SCROLL), "tras cargarse, no hay fila del pergamino")
+  expect_eq(Plain(row.title), string.format(ES.L["Conseguir %s"], saved), "título tras cargarse el pergamino")
 end)
 
 test("las listas guardadas no llevan los pergaminos de la ruta", function()

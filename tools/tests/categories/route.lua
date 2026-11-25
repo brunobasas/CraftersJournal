@@ -1814,6 +1814,98 @@ test("icono de misión desactivado: sin la misión, la ruta no usa las Discolore
   for _, st in ipairs(done) do expect(st.questFirst == nil, "con la misión hecha, el paso de %s la pide", st.recipe.name) end
 end, { state = "scan" })
 
+---------------------------------------------------------------------------
+-- Pergaminos por su nombre de objeto (spec recipe-scroll-names). La ruta pedía «Recipe:
+-- Draught of Detect Lesser Invisibility», que no existe: el pergamino es «Recipe: Elixir
+-- of Detect Lesser Invisibility». (Cliente simulado en español: con el addon en otro
+-- idioma, el nombre sale de los datos, como en el juego)
+---------------------------------------------------------------------------
+local DRAUGHT, DRAUGHT_SCROLL = 3453, 3832 -- Draught of Detect Lesser Invisibility
+local BANQUET, RAGE = 1225763, 6617 -- Grand Lobster Banquet (Carrie's Cookbook) y Rage Potion
+
+test("pergaminos: con el addon en inglés y sin el objeto en el juego, su nombre de los datos", function()
+  ES:SetLanguage("en")
+  UNCACHED[DRAUGHT_SCROLL] = true
+  local draught = ES.Data.Alchemy.recipes[DRAUGHT]
+  local name, plain, wait = ES.ScrollName(draught)
+  expect_eq(plain, "Recipe: Elixir of Detect Lesser Invisibility", "pergamino de Draught of Detect Lesser Invisibility")
+  expect_eq(Plain(name), plain, "nombre con su color")
+  expect_eq(wait, nil, "espera al juego teniendo el nombre en los datos")
+  expect_eq(ES.ScrollTeaches(draught, plain), string.format(ES.L["enseña %s"], "Draught of Detect Lesser Invisibility"), "qué receta enseña")
+  -- (sin prefijo de profesión: tal cual)
+  expect_eq(select(2, ES.ScrollName(ES.Data.Cooking.recipes[BANQUET])), "Carrie's Cookbook", "pergamino de Grand Lobster Banquet")
+  -- (mismo nombre que la receta: no lo repite)
+  local rage = ES.Data.Alchemy.recipes[RAGE]
+  local ragePlain = select(2, ES.ScrollName(rage))
+  expect_eq(ragePlain, "Recipe: Rage Potion", "pergamino de Rage Potion")
+  expect_eq(ES.ScrollTeaches(rage, ragePlain), nil, "repite qué receta enseña con el mismo nombre")
+end)
+
+-- El caso del informe, con los datos reales y el addon en inglés: la fila de conseguir la
+-- receta, su tooltip, el clic de la AH y el nombre que usa «compra también»
+test("informe: la fila de Draught of Detect Lesser Invisibility pide «Recipe: Elixir of Detect Lesser Invisibility»", function()
+  ES:SetLanguage("en")
+  UNCACHED[DRAUGHT_SCROLL] = true -- (sin cargar en el juego: el nombre sale de los datos)
+  ES.db.scans[ES:RealmKey()].items[DRAUGHT_SCROLL] = { listings = 3, quantity = 3, minUnit = 500, avgUnit = 500, median = 500, ladder = { 500, 500 } }
+  local plan = PlanRoute("Alchemy", 215, 235)
+  local r = ES.Data.Alchemy.recipes[DRAUGHT]
+  local line = expect(ES.SourcedLearnLine(r, { id = DRAUGHT, recipe = r, from = 215, to = 235 }, "Alchemy", plan),
+    "sin fila de conseguir la receta")
+  local REAL, WRONG = "Recipe: Elixir of Detect Lesser Invisibility", "Recipe: Draught of Detect Lesser Invisibility"
+  expect_eq(Plain(line.title), "Get " .. REAL, "título de la fila")
+  expect(Plain(line.sub):find("teaches Draught of Detect Lesser Invisibility", 1, true), "la fila no dice qué receta enseña: «%s»", Plain(line.sub))
+  expect_eq(line.ahItem, DRAUGHT_SCROLL, "objeto que busca en la AH")
+  expect_eq(line.scrollName, REAL, "nombre para «compra también»")
+  local tip = TooltipLines(line.tooltip, CreateFrame("Frame"))
+  expect_eq(Plain(tip[1]), REAL, "primera línea del tooltip")
+  for _, t in ipairs({ Plain(line.title), Plain(line.sub), table.concat(tip, "\n") }) do
+    expect(not Plain(t):find(WRONG, 1, true), "dice «%s», que no existe: %s", WRONG, Plain(t))
+  end
+end, { state = "scan" })
+
+-- Todos los pergaminos de los datos, no solo el del informe: con el addon en inglés y sin
+-- cargar en el juego, la ruta dice el nombre de su objeto. Cuenta los que no son
+-- "prefijo + receta" (los que antes salían con un nombre inventado)
+test("pergaminos: todos se nombran por su objeto, también los que no se llaman como la receta", function()
+  ES:SetLanguage("en")
+  local renamed, bad = 0, {}
+  for _, prof in ipairs(ProfessionKeys()) do
+    for id, r in pairs(ES.Data[prof].recipes) do
+      local real = r.scroll and ES.Data.ItemNames[r.scroll]
+      if real then
+        UNCACHED[r.scroll] = true
+        local plain = select(2, ES.ScrollName(r))
+        if plain ~= real then bad[#bad + 1] = string.format("%s %d: «%s» en vez de «%s»", prof, id, tostring(plain), real) end
+        if ES.ScrollTeaches(r, real) then renamed = renamed + 1 end
+      end
+    end
+  end
+  expect(#bad == 0, "%d pergaminos con otro nombre: %s", #bad, table.concat(bad, "; "):sub(1, 600))
+  note("%d pergaminos no se llaman como su receta", renamed)
+  expect(renamed >= 30, "solo %d pergaminos se llaman distinto que su receta: ¿han cambiado los datos?", renamed)
+end)
+
+test("pergaminos: en español, sin el objeto en el juego, su nombre español de los datos", function()
+  ES:SetLanguage("es")
+  UNCACHED[DRAUGHT_SCROLL] = true
+  expect_eq(select(2, ES.ScrollName(ES.Data.Alchemy.recipes[DRAUGHT])), "Receta: elixir de detección de invisibilidad inferior",
+    "pergamino de Draught of Detect Lesser Invisibility")
+end)
+
+test("pergaminos: el nombre del juego manda; sin él ni datos, el de la receta y espera al juego", function()
+  ES:SetLanguage("es") -- (el del cliente: el nombre del juego vale tal cual)
+  ITEM_INFO[DRAUGHT_SCROLL] = { name = "Recipe: Something Forever Renamed" }
+  expect_eq(select(2, ES.ScrollName(ES.Data.Alchemy.recipes[DRAUGHT])), "Recipe: Something Forever Renamed", "nombre del juego")
+  UNCACHED[999991] = true
+  local _, plain, wait = ES.ScrollName({ name = "Made-up Recipe", scroll = 999991 })
+  expect_eq(plain, "Made-up Recipe", "sin nombre en el juego ni en los datos")
+  expect_eq(wait, 999991, "pergamino al que esperar")
+  -- (una receta sin pergamino, por si acaso: su nombre, sin esperar a nada)
+  local _, p2, w2 = ES.ScrollName({ name = "Trainer Recipe" })
+  expect_eq(p2, "Trainer Recipe", "receta sin pergamino")
+  expect_eq(w2, nil, "receta sin pergamino: espera a algo")
+end)
+
 test("sin la misión, el paso de aprender una Discolored la pide", function()
   FACTION = "Alliance"
   local steps = DiscoloredSteps(PlanRoute("Alchemy", 1, 300))

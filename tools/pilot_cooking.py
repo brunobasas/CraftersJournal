@@ -17,7 +17,7 @@ local function Route(label)
   for i = 1, #page.lines do
     local l = page.lines[i]
     out[#out+1] = string.format("   %-45s | %-70s | %s", clean(l.title):sub(1, 45), clean(l.sub):sub(1, 70), clean(l.value))
-    if l.title and l.title:find("Conseguir receta") then
+    if l.title and l.learnRow and l.title:find("^Conseguir ") then
       TOOLTIP = {}
       page.rows[i]._scripts.OnEnter(page.rows[i])
       for _, t in ipairs(TOOLTIP) do out[#out+1] = "        tooltip: " .. clean(t) end

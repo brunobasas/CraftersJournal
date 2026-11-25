@@ -167,15 +167,29 @@ end
 -- La clave de la AH de tu ruleset y bando (ES:RealmKey) y la del personaje
 -- (ES:CharKey): Keys.lua. La AH neutral no tiene soporte (ver DetectAuctionHouse)
 
--- Al abrir la AH: el subastador neutral (Bahía del Botín, Gadgetzan, Vista Eterna) no
--- es de ninguna de las dos facciones. La AH neutral no tiene soporte: el addon hace
--- como si no hubiera ninguna AH abierta (ni escanea, ni lee el escaneo de otro addon,
--- ni abre sus ventanas) y sigue con los precios de la de tu facción. Antes pasaba a
--- usar los de la neutral, casi nunca escaneada, y las rutas se quedaban sin precios
--- hasta volver a abrir la de tu facción. Devuelve true si es la neutral
+-- Los mapas de las tres AH neutrales: en Classic, Bahía del Botín, Gadgetzan y Vista
+-- Eterna no tienen mapa propio, el mapa es el de su zona
+local NEUTRAL_AH_MAPS = {
+  [1434] = true, -- Tuercespina (Bahía del Botín)
+  [1446] = true, -- Tanaris (Gadgetzan)
+  [1452] = true, -- Cuna del Invierno (Vista Eterna)
+}
+
+-- Al abrir la AH: es la neutral si el subastador no es de ninguna de las dos facciones
+-- y estás en una de las tres zonas de arriba. Un subastador sin facción en otra zona (el
+-- Skyborne de Valanaar, de WoW Forever) conecta con la AH de tu facción; también si el
+-- juego no dice en qué mapa estás (las tres ciudades goblin siempre lo dicen).
+-- La AH neutral no tiene soporte: el addon hace como si no hubiera ninguna AH abierta
+-- (ni escanea, ni lee el escaneo de otro addon, ni abre sus ventanas) y sigue con los
+-- precios de la de tu facción. Antes pasaba a usar los de la neutral, casi nunca
+-- escaneada, y las rutas se quedaban sin precios hasta volver a abrir la de tu facción.
+-- Devuelve true si es la neutral
 local function DetectAuctionHouse()
   local npcFaction = UnitFactionGroup("npc")
+  local map = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+  ES:ScanLog("mapa " .. tostring(map) .. ", subastador " .. tostring(npcFaction))
   local neutral = UnitExists("npc") and npcFaction ~= "Alliance" and npcFaction ~= "Horde"
+    and NEUTRAL_AH_MAPS[map] == true
   ES.neutralAH = neutral or nil
   if neutral and not ES.neutralWarned then
     ES.neutralWarned = true -- (una vez por sesión: no en cada visita)

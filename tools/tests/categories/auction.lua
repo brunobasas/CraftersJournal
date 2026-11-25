@@ -566,6 +566,24 @@ test("una compra en la AH cuenta para la lista de compra", function()
   expect_eq(ES:HaveForShopping(765), 21, "recogido: no cuenta dos veces")
 end, { state = "full" })
 
+-- Sin enlace y sin el objeto en el juego, el pergamino se reconoce por su nombre real
+-- (spec ah-purchase-tracking): «Recipe: Elixir of Detect Lesser Invisibility» enseña
+-- Draught of Detect Lesser Invisibility, y quitarle el prefijo y buscar la receta no lo
+-- encontraba. (Si cuenta de camino, la fila de la ruta pasa a comprada: Ledger.OnWay)
+test("compra de un pergamino sin enlace: se reconoce por su nombre aunque no sea el de la receta", function()
+  OpenAH()
+  ES.ahOpen = true
+  ERR_AUCTION_WON_S = "You won an auction for %s"
+  UNCACHED[3832], UNCACHED[5640] = true, true
+  local id, n = ES.Ledger.ParseAuctionWon("You won an auction for Recipe: Elixir of Detect Lesser Invisibility")
+  expect(id == 3832 and n == 1, "no reconoce el pergamino de Draught of Detect Lesser Invisibility: %s %s", tostring(id), tostring(n))
+  FireEvent("CHAT_MSG_SYSTEM", "You won an auction for Recipe: Elixir of Detect Lesser Invisibility")
+  expect_eq(ES.Ledger.OnWay(3832), 1, "pergamino de camino al buzón")
+  -- (el que se llama como la receta, como hasta ahora)
+  id, n = ES.Ledger.ParseAuctionWon("You won an auction for Recipe: Rage Potion")
+  expect(id == 5640 and n == 1, "no reconoce el pergamino de Rage Potion: %s %s", tostring(id), tostring(n))
+end, { state = "full" })
+
 test("dos compras iguales seguidas cuentan las dos", function()
   OpenAH()
   ES.ahOpen = true
@@ -1413,18 +1431,63 @@ test("ayudar al recolector: en combate espera a que acabe", function()
   expect(steps > 0, "al salir del combate no ayudó al recolector")
 end, { state = "empty" })
 
+-- (spec auction-house-detection) La neutral: subastador sin facción en una ciudad
+-- goblin (Gadgetzan en Tanaris, 1446; Bahía del Botín en Tuercespina, 1434)
 test("AH neutral: sin soporte, sin errores", function()
   NPC_FACTION = nil
+  SetPlayerMap(1446)
   OpenAH()
   expect(ES.neutralAH, "no detecta la neutral")
   expect(not ES.ahOpen, "la neutral cuenta como AH abierta")
   NPC_FACTION = "Alliance"
 end, { state = "scan" })
 
+test("AH neutral: también en Bahía del Botín (Tuercespina)", function()
+  NPC_FACTION = nil
+  SetPlayerMap(1434)
+  OpenAH()
+  expect(ES.neutralAH, "no detecta la neutral de Bahía del Botín")
+  expect(not ES.ahOpen, "la neutral cuenta como AH abierta")
+end, { state = "scan" })
+
+-- El subastador Skyborne de Valanaar (zona de WoW Forever) no tiene facción, pero
+-- conecta con la AH de tu facción: antes contaba como la neutral y el addon no escaneaba
+test("AH sin facción fuera de las ciudades goblin (Skyborne): es la de tu facción", function()
+  local text = ES.L["Crafter's Journal aún no funciona en la Casa de Subastas neutral. Aquí no escanea ni abre sus ventanas; tus rutas y precios siguen siendo los de la Casa de Subastas de tu facción."]
+  NPC_FACTION = nil
+  SetPlayerMap(9999) -- (un mapa que no es Tuercespina, Tanaris ni Cuna del Invierno)
+  OpenAH()
+  expect(not ES.neutralAH, "Skyborne cuenta como la neutral")
+  expect(ES.ahOpen, "Skyborne no cuenta como AH abierta")
+  expect(not ES:IsNeutralAH(), "Skyborne usa la comisión de la neutral")
+  local d = ES.ConfirmFrame and ES.ConfirmFrame()
+  expect(not (d and d:IsShown() and d.text._text == text), "sale el aviso de la neutral en Skyborne")
+end, { state = "scan" })
+
+test("AH sin facción y el juego no da el mapa: es la de tu facción", function()
+  NPC_FACTION = nil
+  SetPlayerMap(nil)
+  OpenAH()
+  expect(not ES.neutralAH, "sin mapa cuenta como la neutral")
+  expect(ES.ahOpen, "sin mapa no cuenta como AH abierta")
+end, { state = "scan" })
+
+-- El mapa queda en el diario del escaneo, para ver en el juego qué mapa da cada AH
+test("al abrir la AH, el diario del escaneo apunta el mapa", function()
+  SetPlayerMap(1453)
+  OpenAH()
+  local found
+  for _, line in ipairs(ES.db.scanLog or {}) do
+    if line:find("mapa 1453", 1, true) then found = true end
+  end
+  expect(found, "el diario no apunta el mapa: %s", table.concat(ES.db.scanLog or {}, " | "))
+end, { state = "scan" })
+
 -- Antes era una línea en el chat que pasaba desapercibida
 test("AH neutral: una ventana avisa de que aún no funciona (una vez por sesión, se puede apagar)", function()
   local text = ES.L["Crafter's Journal aún no funciona en la Casa de Subastas neutral. Aquí no escanea ni abre sus ventanas; tus rutas y precios siguen siendo los de la Casa de Subastas de tu facción."]
   NPC_FACTION = nil
+  SetPlayerMap(1446)
   OpenAH()
   local d = expect(ES.ConfirmFrame(), "no sale ninguna ventana")
   expect(d:IsShown(), "no sale la ventana del aviso")
@@ -1552,6 +1615,27 @@ test("anunciar con cobres: el panel de vender anuncia a 8s 99c, no a 8s", functi
     ES.Ledger:PostOnAH(POST_ITEM, 1, 12345, 2) -- (y el de BulkMoney, igual)
     call = expect(ah.calls[2], "no llama a la AH la segunda vez")
     expect_eq(call[5], 12345, "precio con cobres")
+  end)
+end, { state = "scan" })
+
+-- La duración de las opciones (ES.db.auctionHours) vale también para lo que anuncia la
+-- ruta (Sell.Post sin duración); sin fijar, 24 h. Y la pregunta dice esa duración
+test("duración de las opciones: lo que anuncia la ruta va con ella (sin fijar, 24 h)", function()
+  PostingAH({ commodity = true }, function(ah)
+    ES.db.noPostConfirm = nil
+    for i, case in ipairs({ { nil, 3, 24 }, { 2, 1, 2 }, { 8, 2, 8 }, { 24, 3, 24 } }) do
+      ES.db.auctionHours = case[1]
+      ES.Ledger.pendingPost = nil
+      ES.AuctionSell.Post(POST_ITEM, 2, 899, nil) -- (como la ruta: SaleAction, ProfessionUI.lua)
+      local d = expect(ES.ConfirmFrame(), "no sale la pregunta de anunciar")
+      local text = tostring(d.text:GetText())
+      expect(text:find("(" .. case[3] .. " h)", 1, true), "%s h: la pregunta no dice la duración: %s", tostring(case[1]), text)
+      d.pending.onYes()
+      local call = expect(ah.calls[i], "no llama a la AH")
+      expect_eq(call[3], case[2], tostring(case[1]) .. " h: índice de duración de la AH")
+      d:Hide()
+    end
+    ES.db.auctionHours = nil
   end)
 end, { state = "scan" })
 

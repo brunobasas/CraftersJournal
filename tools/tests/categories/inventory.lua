@@ -27,6 +27,36 @@ test("cada objeto: lo que se guarda y lo que se vende suman lo que llevas", func
   note("%d objetos en la lista", #list)
 end)
 
+-- CurseForge: querían anunciar siempre a 2 h en vez de 8. Automática (por defecto): 24 h
+-- lo que se vende bien y 8 h lo demás; fijada en las opciones, esa para todo, y el
+-- depósito con ella
+test("duración de las subastas: automática según las alertas, o la de las opciones", function()
+  BAGS[2589], BAGS[2318], BAGS[2592], BAGS[4306], BAGS[2934], BAGS[2320] = 40, 12, 20, 7, 30, 5
+  local function OnAH()
+    local out = {}
+    for _, e in ipairs(ES.Inventory:List()) do if e.hours then out[#out + 1] = e end end
+    return out
+  end
+  local auto = OnAH()
+  expect(#auto > 0, "ningún objeto tiene precio de la AH")
+  for _, e in ipairs(auto) do
+    expect_eq(e.hours, e.verdict == "good" and 24 or 8, "automática, objeto " .. e.itemID .. " (" .. tostring(e.verdict) .. ")")
+  end
+  for _, h in ipairs({ 2, 8, 24 }) do
+    ES.db.auctionHours = h
+    for _, e in ipairs(OnAH()) do
+      local where = h .. " h, objeto " .. e.itemID
+      expect_eq(e.hours, h, where)
+      local perUnit = ES.Planner.AuctionCosts(ES:VendorSellPrice(e.itemID) or 0, { hours = h, neutral = ES:IsNeutralAH() })
+      expect_near(e.depositUnit, perUnit, 0.001, where .. ": depósito")
+    end
+  end
+  ES.db.auctionHours = "x" -- (un valor que no es una duración: automática)
+  for _, e in ipairs(OnAH()) do expect_eq(e.hours, e.verdict == "good" and 24 or 8, "valor raro, objeto " .. e.itemID) end
+  ES.db.auctionHours = nil
+  note("%d objetos a la AH", #auto)
+end)
+
 test("lo que marcas para no vender nunca se guarda entero", function()
   BAGS[2318] = 12
   ES.Inventory.SetNeverSell(2318, true)

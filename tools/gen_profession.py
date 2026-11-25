@@ -756,6 +756,7 @@ def main():
     unlocks = quest_unlocks()
     favor = merchants_favor(prof)
     favor_found = set()
+    scroll_items = set()  # pergaminos que salen como `scroll = N`: llevan su nombre en ItemNames
     for sid in sorted(recipes, key=lambda s: (thresholds[s][0], s)):
         reagents, output = recipes[sid]
         t = thresholds[sid]
@@ -820,6 +821,7 @@ def main():
             req = c["item_skill"].get(scroll)
             train = req if req else forever_train(max(1, t[1] - 10 + shift.get(sid, 0)))
             parts.append(f"scroll = {scroll}, train = {train}")
+            scroll_items.add(scroll)
             if vendor_only_gone(scroll):
                 parts.append("gone = true")
             # Todo objeto trae precio de compra en el cliente, lo venda alguien o no: solo
@@ -912,6 +914,15 @@ def main():
     out.append("-- Nombre de cada objeto (inglés, del cliente): se muestra mientras el juego no lo ha cargado")
     out.append("ES.Data.ItemNames = ES.Data.ItemNames or {}")
     for i in sorted(items):
+        if i in item_info and item_info[i][0]:
+            iname = item_info[i][0].replace("\\", "\\\\").replace('"', '\\"')
+            out.append(f'ES.Data.ItemNames[{i}] = "{iname}"')
+    # Los pergaminos, aparte: no están en `items` porque ese conjunto también decide sus
+    # precios de vendedor y de venta. Su nombre no siempre es "Recipe: " + el de la
+    # receta (Recipe: Elixir of Detect Lesser Invisibility enseña Draught of Detect
+    # Lesser Invisibility; Carrie's Cookbook, sin prefijo): la ruta lo muestra tal cual
+    out.append("-- Nombre de cada pergamino de receta (inglés, del cliente): no siempre es \"Recipe: \" + el de la receta")
+    for i in sorted(scroll_items - items):
         if i in item_info and item_info[i][0]:
             iname = item_info[i][0].replace("\\", "\\\\").replace('"', '\\"')
             out.append(f'ES.Data.ItemNames[{i}] = "{iname}"')

@@ -327,6 +327,23 @@ test("los pergaminos de receta tienen de dónde salir", function()
   snapshot("pergaminos sin fuente, por profesión", byProf)
 end, { boot = false })
 
+-- Su nombre no siempre es "Recipe: " + el de la receta (spec recipe-scroll-names): la ruta
+-- lo muestra tal cual, y en inglés solo lo tiene ES.Data.ItemNames mientras el juego no lo
+-- carga. Los que faltan son los que el cliente de Forever no trae (ItemSparse)
+test("los pergaminos de receta tienen su nombre en inglés", function()
+  expect_eq(ES.Data.ItemNames[3832], "Recipe: Elixir of Detect Lesser Invisibility", "pergamino de Draught of Detect Lesser Invisibility")
+  expect_eq(ES.Data.ItemNames[239021], "Carrie's Cookbook", "pergamino de Grand Lobster Banquet")
+  local missing, n = {}, 0
+  Each(function(prof, id, r)
+    if r.scroll then
+      n = n + 1
+      if not ES.Data.ItemNames[r.scroll] then missing[prof] = (missing[prof] or 0) + 1 end
+    end
+  end)
+  note("%d pergaminos", n)
+  snapshot("pergaminos sin nombre en inglés, por profesión", missing)
+end, { boot = false })
+
 test("cajas de Merchant's Favor: rellenos con objeto, cantidad y nombre", function()
   local bad = {}
   expect(#ES.Data.Crates > 0, "sin cajas")
