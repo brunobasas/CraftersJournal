@@ -533,6 +533,28 @@ test("escaneo de Auctionator a medio leer al cerrar la AH: lo dice en el chat y 
     "la cabecera dice «%s» y no que se canceló", tostring(ES:GetMainFrame().lastScan:GetText()))
 end, { state = "scan" })
 
+-- Con Auctionator y el botón Escanear oculto, la cabecera solo decía «Último escaneo» o
+-- «Cancelado»: no se veía que escaneaba. Ahora dice el % como el botón de encima de la AH
+test("botón Escanear oculto: la cabecera dice que escanea y el %", function()
+  InstallAuctionator()
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  ES:SetOption("noScanButtons", false) -- (oculto en las opciones)
+  local main = OpenMain()
+  OpenAH()
+  expect(not main.scanButton:IsShown(), "el botón de la cabecera se ve: la prueba no prueba nada")
+  local scanning = ES.L["Escaneando la AH... %d%%"]:match("^(.-)%%")
+  QueryAuctionItems("", nil, nil, 0, nil, nil, true, false, nil) -- (el escaneo de Auctionator)
+  ES.Scanner:OnForeignScan("legacy")
+  RunTimers(2)
+  expect(ES.Scanner:IsBusy(), "ya no escanea: la prueba llega tarde")
+  local text = main.lastScan:GetText() or ""
+  expect(text:find(scanning, 1, true) and text:find("%d+%%"), "mientras escanea, la cabecera dice «%s»", text)
+  RunTimers(10)
+  expect(not ES.Scanner:IsBusy(), "el escaneo no acaba")
+  text = main.lastScan:GetText() or ""
+  expect(text:find(ES.L["Último escaneo: "], 1, true), "al acabar, la cabecera dice «%s»", text)
+end, { state = "scan" })
+
 -- Tras un /reload justo después de escanear, al abrir la AH Auctionator (u otro addon)
 -- pide su escaneo automático: dentro del límite de 15 min el servidor no responde. El
 -- addon se quedaba "escaneando" 2 min y reiniciaba la cuenta atrás desde esa petición

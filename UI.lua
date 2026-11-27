@@ -953,7 +953,15 @@ function ES:UpdateLastScan()
   local key = self:RealmKey()
   local scan = self.db.scans and self.db.scans[key]
   local fail = self:LastScanFail()
-  if fail then
+  -- Sin el botón Escanear (oculto en las opciones, escanea Auctionator), el progreso
+  -- sale aquí, como en el botón de encima de la AH: si no, no se veía que escaneaba
+  if self.Scanner:IsBusy() and not self:ScanButtonsOn() then
+    local text = string.format(L["Escaneando la AH... %d%%"], math.floor((self.Scanner.progress or 0) * 100))
+    if self.Scanner.state == "waiting" and (self.Scanner.waited or 0) > 0 then
+      text = text .. string.format(ES.SEP .. "%ds", self.Scanner.waited) -- esperando al servidor
+    end
+    main.lastScan:SetText("|cffffd100" .. text .. "|r")
+  elseif fail then
     -- El último intento no acabó: que "hace 2 días" no parezca un escaneo perdido
     main.lastScan:SetText("|cffff9933" .. L["Cancelado · último: "] .. (scan and TimeAgo(scan.time) or L["nunca"]) .. "|r")
   else
