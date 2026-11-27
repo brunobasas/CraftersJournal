@@ -2416,6 +2416,7 @@ step("cabecera: título, escanear e idioma", function()
   ES:OnScanProgress()
   assert(f.scanButton._text == "5%", "progreso inicial: " .. tostring(f.scanButton._text))
   ES.Scanner.progress = 0.537
+  ES.progressAt = nil -- (el progreso se repinta como mucho cada 0,25 s: pasado ese rato)
   ES:OnScanProgress()
   log[#log+1] = "     botón durante el escaneo: " .. tostring(f.scanButton._text)
   assert(f.scanButton._text == "53%", "progreso: " .. tostring(f.scanButton._text))

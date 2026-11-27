@@ -278,13 +278,26 @@ local function AppendDay(s, today, p)
   return s
 end
 
--- Apunta los precios de un escaneo (al acabar: ES:OnScanComplete)
+-- Apunta los precios de un escaneo
 function Invest.RecordScan(scan)
-  if type(scan) ~= "table" or type(scan.items) ~= "table" then return end
-  local root = Table(Table(ES.db, "investPrices"), ES:RealmKey())
+  Invest.CommitScan(Invest.PrepareScan(scan))
+end
+
+-- Los precios de un escaneo, sin apuntarlos todavía: { [itemID] = días empaquetados },
+-- o nil. Al guardar un escaneo (Scanner:WriteScan) se calcula repartido entre
+-- fotogramas y se apunta con el resto de una vez (Invest.CommitScan): si el guardado se
+-- corta a medias, no queda nada a medio escribir
+function Invest.PrepareScan(scan)
+  if type(scan) ~= "table" or type(scan.items) ~= "table" then return nil end
+  local prices = ES.db.investPrices
+  local root = prices and prices[ES:RealmKey()] or {}
   local today = Invest.Day(scan.time)
   local History = ES.History
+  -- (al guardar un escaneo, cede el fotograma si se ha acabado: Scanner:Save)
+  local Yield = ES.ScanYield or function() end
+  local out = {}
   for id, entry in pairs(scan.items) do
+    Yield()
     if History:IsTracked(id) then
       local p = Invest.ScanPrice(entry)
       if p and p > 0 then
@@ -297,10 +310,18 @@ function Invest.RecordScan(scan)
           map[today] = p
           s = PackDays(map, today)
         end
-        root[id] = s
+        out[id] = s
       end
     end
   end
+  return out
+end
+
+-- Apunta lo que calculó Invest.PrepareScan
+function Invest.CommitScan(days)
+  if not days then return end
+  local root = Table(Table(ES.db, "investPrices"), ES:RealmKey())
+  for id, s in pairs(days) do root[id] = s end
   if ES.PriceHistory then ES.PriceHistory.Clear() end
   if ES.RenderInvest then ES:RenderInvest() ES:RenderInvestItem() end -- (si se ven)
 end

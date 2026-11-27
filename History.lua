@@ -112,9 +112,15 @@ end
 -- 999.999.999.999 (AddAuction). Por bloques y sin una cadena "firma=número" por
 -- subasta: con una tabla de todas, juntarla dejaba varias veces su tamaño en basura
 local PACK_BLOCK = 512
+-- (ES.ScanYield en los bucles largos: al guardar un escaneo, cede el fotograma si se ha
+-- acabado, Scanner:Save; fuera de eso no hace nada)
+local function NoYield() end
+local function ScanYield() return ES.ScanYield or NoYield end
 function History.Pack(sigs)
+  local Yield = ScanYield()
   local parts, blocks, n = {}, {}, 0
   for sig, packed in pairs(sigs) do
+    Yield()
     parts[n + 1], parts[n + 2], parts[n + 3], parts[n + 4] = ";", sig, "=", packed
     n = n + 4
     if n >= PACK_BLOCK then
@@ -142,16 +148,19 @@ end
 -- `mins`: { [itemID] = precio por unidad más bajo } si ya se sabe (el escaneo lo lleva:
 -- el mismo número que saldría de las firmas); si no, se calcula de las firmas
 function History.NearMin(sigs, mins)
+  local Yield = ScanYield()
   local min = mins
   if not min then
     min = {}
     for sig in pairs(sigs) do
+      Yield()
       local item, count, buyout = SigPrice(sig)
       if item and (not min[item] or buyout / count < min[item]) then min[item] = buyout / count end
     end
   end
   local out = {}
   for sig, packed in pairs(sigs) do
+    Yield()
     local item, count, buyout = SigPrice(sig)
     if item and min[item] and buyout / count <= min[item] * STUCK_BAND then out[sig] = packed end
   end
@@ -163,11 +172,14 @@ end
 -- subastas más caras que eso y que tampoco pueden quedar cerca del mínimo nuevo no
 -- necesitan firma (Scanner:Process)
 function History.PrevReach(track)
+  local Yield = ScanYield()
   local min, reach = {}, {}
   History.EachPrice(track, function(item, count, buyout)
+    Yield()
     if buyout > 0 and count > 0 and (not min[item] or buyout / count < min[item]) then min[item] = buyout / count end
   end)
   History.EachPrice(track, function(item, count, buyout)
+    Yield()
     if buyout > 0 and count > 0 then
       local unit = buyout / count
       if unit <= min[item] * STUCK_BAND and (not reach[item] or unit > reach[item]) then reach[item] = unit end
@@ -240,12 +252,18 @@ end
 -- escaneo anterior si se pudo comparar, o nil. `mins` (opcional): el precio por unidad
 -- más bajo de cada objeto en este escaneo (History.NearMin)
 function History:Record(key, sigs, snap, now, mins)
-  ES.db.track = ES.db.track or {}
-  local history = self:Entries(key)
-  local prev = ES.db.track[key]
+  return self:Commit(self:Prepare(key, sigs, snap, now, mins))
+end
+
+-- Lo que Record guarda, calculado sin escribir nada (puede ceder el fotograma:
+-- Scanner:WriteScan). Si el guardado se corta a medias (cambio de modo de escaneo,
+-- /reload), no queda nada escrito; History:Commit lo escribe todo de una vez
+function History:Prepare(key, sigs, snap, now, mins)
+  local Yield = ScanYield()
+  local prev = ES.db.track and ES.db.track[key]
   -- (empaquetadas en una cadena: una tabla con una clave por firma ocupaba ~5 MB; y
   -- solo las cercanas al mínimo, las únicas que se leen: History.NearMin)
-  ES.db.track[key] = { time = now, packed = History.Pack(History.NearMin(sigs, mins)), v = 3 }
+  local track = { time = now, packed = History.Pack(History.NearMin(sigs, mins)), v = 3 }
   if prev and prev.v ~= 2 and prev.v ~= 3 then prev = nil end -- formato antiguo: no comparable
 
   local entry = { time = now, elapsed = 0, snap = snap }
@@ -254,6 +272,7 @@ function History:Record(key, sigs, snap, now, mins)
     -- Precio por unidad más barato de cada objeto en el escaneo anterior
     local minUnit = {}
     History.EachSig(prev, function(sig)
+      Yield()
       local item, count, buyout = sig:match("^(%d+):(%d+):(%d+):")
       count, buyout = tonumber(count), tonumber(buyout)
       if buyout > 0 and count > 0 and (not minUnit[item] or buyout / count < minUnit[item]) then
@@ -264,6 +283,7 @@ function History:Record(key, sigs, snap, now, mins)
     -- que faltan pudieron venderse, caducar o retirarse (no se cuentan como nada)
     local rem, tot = {}, {}
     History.EachSig(prev, function(sig, packed)
+      Yield()
       local item, count, buyout = sig:match("^(%d+):(%d+):(%d+):")
       count, buyout = tonumber(count), tonumber(buyout)
       if buyout > 0 and count > 0 and buyout / count <= minUnit[item] * STUCK_BAND then
@@ -281,14 +301,25 @@ function History:Record(key, sigs, snap, now, mins)
       end
     end)
     local parts = {}
-    for item, n in pairs(tot) do parts[#parts + 1] = item .. ":" .. rem[item] .. ":" .. n end
+    for item, n in pairs(tot) do
+      Yield()
+      parts[#parts + 1] = item .. ":" .. rem[item] .. ":" .. n
+    end
     entry.stuck = ";" .. table.concat(parts, ";")
     entry.elapsed = elapsed
   end
+  return { key = key, track = track, entry = entry, elapsed = elapsed }
+end
 
-  history[#history + 1] = entry
-  Prune(history, now)
-  return entry.elapsed > 0 and elapsed or nil
+-- Escribe lo que preparó History:Prepare: el escaneo para la comparación siguiente
+-- (ES.db.track) y su entrada del historial
+function History:Commit(rec)
+  ES.db.track = ES.db.track or {}
+  ES.db.track[rec.key] = rec.track
+  local history = self:Entries(rec.key)
+  history[#history + 1] = rec.entry
+  Prune(history, rec.entry.time)
+  return rec.entry.elapsed > 0 and rec.elapsed or nil
 end
 
 -- Escaneos guardados, comparaciones hechas y hora del primero

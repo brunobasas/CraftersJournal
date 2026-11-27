@@ -1758,6 +1758,500 @@ test("track: con precios realistas, lo guardado ocupa 1/4 o menos que todas las 
 end, { state = "empty" })
 
 ---------------------------------------------------------------------------
+-- (spec ah-scan-performance) Leer, resumir y guardar sin hacer perder fluidez al juego
+---------------------------------------------------------------------------
+test("tope por fotograma: el 25 % del fotograma, entre 2 y 6 ms, y 4 ms sin los fps", function()
+  local S = ES.Scanner
+  FRAMERATE = 60
+  expect_near(S.FrameBudget(), 250 / 60, 1e-9, "a 60 fps")
+  FRAMERATE = 144
+  expect_eq(S.FrameBudget(), 2, "a 144 fps (el mínimo)")
+  FRAMERATE = 20
+  expect_eq(S.FrameBudget(), 6, "a 20 fps (el máximo)")
+  FRAMERATE = 0
+  expect_eq(S.FrameBudget(), 4, "con 0 fps")
+  FRAMERATE = 0 / 0
+  expect_eq(S.FrameBudget(), 4, "con fps que no son un número")
+  local saved = GetFramerate
+  GetFramerate = nil
+  local b = S.FrameBudget()
+  GetFramerate = saved
+  expect_eq(b, 4, "sin GetFramerate")
+end, { state = "empty" })
+
+-- De qué fase del escaneo es cada fotograma (MeasureTimers: el que empieza la lectura,
+-- el de esperar las subastas, cuenta en ella)
+local function ScanPhase() return ES.Scanner.phase end
+
+-- Ningún paso de esas fases pasa del tope del fotograma más 1 ms, y cada una se repartió.
+-- (Ruido del sistema: las pruebas corren en paralelo, y si el sistema para el proceso a
+-- mitad de un paso, ese paso dura más sin que el addon haga más. Se tolera un paso suelto
+-- por encima de cada 50, nunca más del doble del tope: un paso que no corta a tiempo se
+-- pasa en todos los escaneos y por mucho, como el guardado de golpe de antes)
+-- (Con todas las pruebas a la vez el ruido sube: se mide otra vez con otro escaneo,
+-- hasta TRIES veces, y vale con una limpia. Un paso que no corta a tiempo se pasa en
+-- todas)
+local function WithinBudget(steps, phases)
+  local budget = ES.Scanner.FrameBudget()
+  local limit = budget + 1
+  local lines, problem = {}, nil
+  for _, p in ipairs(phases) do
+    local s = steps[p] or { n = 0, worst = 0, total = 0, list = {} }
+    local over = 0
+    for _, ms in ipairs(s.list) do if ms > limit then over = over + 1 end end
+    lines[#lines + 1] = string.format("%s: %d fotogramas, %.0f ms en total, el más largo %.2f ms (tope %.2f + 1), %d por encima",
+      p, s.n, s.total, s.worst, budget, over)
+    if not problem then
+      if s.n <= 1 then
+        problem = string.format("%s: no se repartió entre fotogramas (%d)", p, s.n)
+      elseif s.worst > 2 * budget + 1 then
+        problem = string.format("%s: un fotograma de %.2f ms (tope %.2f + 1 ms)", p, s.worst, budget)
+      elseif over > math.max(1, math.floor(s.n / 50)) then
+        problem = string.format("%s: %d fotogramas de %d por encima de %.2f ms (el más largo %.2f)", p, over, s.n, limit, s.worst)
+      end
+    end
+  end
+  return problem, lines
+end
+
+local TRIES = 3
+-- Mide escaneos seguidos (nextScan() da las subastas de cada uno) hasta uno limpio
+local function ExpectScansWithinBudget(nextScan, phases)
+  local problem, lines
+  for try = 1, TRIES do
+    local auctions = nextScan()
+    collectgarbage("collect")
+    problem, lines = WithinBudget(MeasureTimers(function() DoScan(auctions) end, ScanPhase), phases)
+    if not problem then
+      for _, l in ipairs(lines) do note("%s", l) end
+      if try > 1 then note("(limpio al %d.º intento)", try) end
+      return
+    end
+  end
+  for _, l in ipairs(lines) do note("%s", l) end
+  error(string.format("%s (en los %d intentos)", problem, TRIES), 0)
+end
+
+test("escaneo grande a 60 fps: ningún paso de la lectura ni del resumen pasa del tope más 1 ms", function()
+  InstallAuctionator()
+  FRAMERATE = 60
+  local prev
+  ExpectScansWithinBudget(function()
+    prev = Fixtures.RealisticAuctions(BIG_SCAN, prev)
+    return prev
+  end, { "leer", "resumir" })
+end, { state = "empty" })
+
+test("segundo escaneo grande: ningún paso del guardado pasa del tope más 1 ms", function()
+  InstallAuctionator()
+  FRAMERATE = 60
+  local prev = Fixtures.RealisticAuctions(BIG_SCAN)
+  DoScan(prev)
+  ExpectScansWithinBudget(function()
+    prev = Fixtures.RealisticAuctions(BIG_SCAN, prev)
+    return prev
+  end, { "leer", "resumir", "guardar" })
+  local entry = ES.History:Entries()[#ES.History:Entries()]
+  expect(entry.stuck and #entry.stuck > 100, "el escaneo no se comparó con el anterior")
+end, { state = "empty" })
+
+-- Un reloj que avanza 1 ms cada vez que el escaneo lo mira: así cada fase se reparte en
+-- muchos fotogramas aunque el escaneo sea pequeño. Fuera del escaneo, parado
+local function WithTickingClock(fn)
+  local saved, clock = debugprofilestop, 0
+  debugprofilestop = function()
+    if ES.Scanner.phase then clock = clock + 1 end
+    return clock
+  end
+  local ok, err = pcall(fn)
+  debugprofilestop = saved
+  if not ok then error(err, 0) end
+end
+
+-- Los temporizadores de uno en uno hasta que se cumpla `cond`
+local function RunUntil(cond, what)
+  for _ = 1, 5000 do
+    if cond() then return end
+    table.sort(TIMERS, function(a, b) return a.at < b.at end)
+    local t = table.remove(TIMERS, 1)
+    if not t then break end
+    if t.at > NOW then NOW = t.at end
+    t.f()
+  end
+  expect(cond(), "no se llegó a: %s", what)
+end
+
+local function Copy(v)
+  if type(v) ~= "table" then return v end
+  local t = {}
+  for k, x in pairs(v) do t[k] = Copy(x) end
+  return t
+end
+
+-- Lo guardado de un reino, para ver si algo cambió (las tablas, no copias; Inversiones,
+-- una copia: se escribe en la misma tabla)
+local function Written()
+  local key = ES:RealmKey()
+  return { scan = ES.db.scans[key], track = ES.db.track and ES.db.track[key],
+    entries = #ES.History:Entries(key), invest = ES.db.investPrices and Copy(ES.db.investPrices[key]) }
+end
+-- A medio guardar no se ha escrito nada: se escribe todo de una vez al final. Si no, un
+-- guardado cortado (cambio de modo, /reload) dejaba el escaneo sin su entrada del
+-- historial, o los precios de un escaneo que el chat dice que no se guarda
+local function ExpectUnwritten(before, when)
+  local now = Written()
+  expect(now.scan == before.scan, "%s: el escaneo ya está en ES.db.scans", when)
+  expect(now.track == before.track, "%s: ES.db.track ya tiene el escaneo nuevo", when)
+  expect_eq(now.entries, before.entries, when .. ": entradas del historial")
+  SameDeep(now.invest, before.invest, when .. ": precios de Inversiones")
+end
+
+-- El temporizador siguiente (un fotograma)
+local function NextTimer()
+  table.sort(TIMERS, function(a, b) return a.at < b.at end)
+  local t = expect(table.remove(TIMERS, 1), "no quedan temporizadores")
+  if t.at > NOW then NOW = t.at end
+  t.f()
+end
+
+-- Un segundo escaneo pedido con Escanear, parado a medio guardar: unos fotogramas
+-- después de empezar, aún calculando. Devuelve lo que había guardado antes
+local MID_SAVE_STEPS = 5
+local function ScanToMidSave(first, second)
+  DoScan(first)
+  local before = Written()
+  expect(before.invest and next(before.invest), "sin precios de Inversiones: la prueba no los comprueba")
+  AUCTIONS = second
+  NOW = NOW + 16 * 60
+  OpenAH()
+  ES.Scanner:Start()
+  RunUntil(function() return ES.Scanner.phase == "guardar" end, "a guardar el segundo escaneo")
+  for _ = 1, MID_SAVE_STEPS do NextTimer() end
+  expect_eq(ES.Scanner.phase, "guardar", "el guardado acabó en " .. MID_SAVE_STEPS .. " fotogramas: no se para a medias")
+  ExpectUnwritten(before, "a medio guardar")
+  return before.entries, before
+end
+
+test("cerrar la AH mientras se guarda: el escaneo se guarda entero y las vistas se ponen al día al acabar", function()
+  InstallAuctionator()
+  local first = Fixtures.RealisticAuctions(3000)
+  local second = Fixtures.RealisticAuctions(3000, first)
+  WithTickingClock(function()
+    local entries = ScanToMidSave(first, second)
+    local refreshed = 0
+    local refresh = ES.RefreshAllViews
+    ES.RefreshAllViews = function(...) refreshed = refreshed + 1 return refresh(...) end
+    AuctionFrame:Hide()
+    FireEvent("AUCTION_HOUSE_CLOSED")
+    expect(ES.Scanner:IsBusy(), "cerrar la AH canceló el guardado")
+    expect_eq(refreshed, 0, "las vistas se repintaron a medio guardar")
+    RunTimers()
+    ES.RefreshAllViews = refresh
+    expect(not ES.Scanner:IsBusy(), "el guardado no termina")
+    expect_eq(#ES.History:Entries(), entries + 1, "entradas del historial")
+    local entry = ES.History:Entries()[entries + 1]
+    expect(entry.stuck and #entry.stuck > 10, "el segundo escaneo no se comparó con el primero")
+    expect(refreshed > 0, "las vistas no se pusieron al día al acabar")
+    expect(not (ES.db.lastScanFail and ES.db.lastScanFail[ES:RealmKey()]), "se apuntó como un escaneo fallido")
+  end)
+end, { state = "empty" })
+
+test("mientras se guarda, el escaneo sigue ocupado: Escanear en gris con el %% y sin anunciar", function()
+  InstallAuctionator()
+  local first = Fixtures.RealisticAuctions(3000)
+  local second = Fixtures.RealisticAuctions(3000, first)
+  OpenMain()
+  WithTickingClock(function()
+    ScanToMidSave(first, second)
+    expect(ES.Scanner:IsBusy(), "a medio guardar no está ocupado")
+    ES:RefreshScanButtons()
+    local button = ES:GetMainFrame().scanButton
+    expect(not button:IsEnabled(), "Escanear se puede pulsar a medio guardar")
+    expect(button:GetText():find("%d+%%"), "Escanear no muestra el progreso: %s", button:GetText())
+    expect_eq(ES.postBusy, true, "el panel de vender anunciaría con los precios de antes")
+    RunTimers()
+    expect(not ES.Scanner:IsBusy(), "el guardado no termina")
+    expect(not button:GetText():find("%d+%%"), "al acabar sigue el progreso: %s", button:GetText())
+  end)
+end, { state = "empty" })
+
+test("en cada fotograma del guardado repartido no hay nada escrito: todo va de una vez al final", function()
+  InstallAuctionator()
+  local first = Fixtures.RealisticAuctions(3000)
+  local second = Fixtures.RealisticAuctions(3000, first)
+  local steps = 0
+  WithTickingClock(function()
+    DoScan(first)
+    local before = Written()
+    expect(before.invest and next(before.invest), "sin precios de Inversiones: la prueba no los comprueba")
+    AUCTIONS = second
+    NOW = NOW + 16 * 60
+    OpenAH()
+    ES.Scanner:Start()
+    RunUntil(function() return ES.Scanner.phase == "guardar" end, "a guardar el segundo escaneo")
+    while ES.Scanner.phase == "guardar" do
+      ExpectUnwritten(before, "tras " .. steps .. " fotogramas del guardado")
+      NextTimer()
+      steps = steps + 1
+    end
+    local after = Written()
+    expect(after.scan ~= before.scan and after.track ~= before.track, "al acabar no se escribió el escaneo")
+    expect_eq(after.entries, before.entries + 1, "entradas del historial al acabar")
+    RunTimers()
+  end)
+  expect(steps > MID_SAVE_STEPS + 1, "el guardado duró %d fotogramas: las pruebas que lo paran a medias no paran a medias", steps)
+  note("guardado en %d fotogramas, sin nada escrito hasta el último", steps)
+end, { state = "empty" })
+
+test("cambiar de modo a mitad del guardado repartido: no queda nada escrito del escaneo", function()
+  InstallAuctionator()
+  local first = Fixtures.RealisticAuctions(3000)
+  local second = Fixtures.RealisticAuctions(3000, first)
+  WithTickingClock(function()
+    local _, before = ScanToMidSave(first, second)
+    expect_eq(ES.Scanner.source, "auctionator", "de quién es el escaneo")
+    ES:SetOption("noAuctionator", false)
+    expect(not ES.Scanner:IsBusy(), "sigue guardando el escaneo de Auctionator en modo Crafter's Journal")
+    RunTimers()
+    ExpectUnwritten(before, "tras cambiar de modo")
+  end)
+end, { state = "empty" })
+
+test("botones al leer: como mucho 4 veces por segundo por el progreso, y en cada cambio de fase", function()
+  OpenMain()
+  local S, calls = ES.Scanner, 0
+  local refresh = ES.RefreshScanButtons
+  ES.RefreshScanButtons = function(...) calls = calls + 1 return refresh(...) end
+  local savedState = S.state
+  local ok, err = pcall(function()
+    -- Una lectura de 10 s a 60 fps: el progreso cambia en cada fotograma
+    S.state = "processing"
+    for f = 1, 600 do
+      NOW = NOW + 1 / 60
+      S.progress = f / 600
+      ES:OnScanProgress()
+    end
+    expect(calls <= 41, "%d repintados por el progreso en 10 s (tope 40 y el del cambio de fase)", calls)
+    expect(calls >= 30, "solo %d repintados en 10 s: el %% no avanza", calls)
+    local before = calls
+    S.state = "saving"
+    ES:OnScanProgress()
+    expect_eq(calls, before + 1, "repintados al pasar a guardar (cambio de fase)")
+  end)
+  S.state = savedState
+  ES.RefreshScanButtons = refresh
+  if not ok then error(err, 0) end
+  note("%d repintados en una lectura de 10 s", calls)
+end, { state = "empty" })
+
+test("al terminar el escaneo, el botón y la cabecera dejan de mostrar el %% enseguida", function()
+  InstallAuctionator()
+  OpenMain()
+  local auctions = Fixtures.RealisticAuctions(3000)
+  WithTickingClock(function()
+    AUCTIONS = auctions
+    NOW = NOW + 16 * 60
+    OpenAH()
+    ES.Scanner:Start()
+    RunUntil(function() return ES.Scanner.state == "processing" end, "a leer")
+    RunUntil(function() return not ES.Scanner:IsBusy() end, "al final del escaneo")
+    local main = ES:GetMainFrame()
+    expect(not main.scanButton:GetText():find("%d+%%"), "el botón sigue con el %%: %s", main.scanButton:GetText())
+    expect(not main.lastScan:GetText():find("%d+%%"), "la cabecera sigue con el %%: %s", main.lastScan:GetText())
+    RunTimers()
+  end)
+end, { state = "empty" })
+
+-- El índice de mercado (Market.lua) se vuelve a construir justo al acabar cada escaneo,
+-- repartido entre fotogramas. Con 3 ms fijos, a 144 fps era casi la mitad de cada uno:
+-- ahora, el tope del escaneo (FrameBudget) y nunca más de esos 3 ms. Con un reloj que
+-- avanza 0,05 ms cada vez que se mira
+test("índice de mercado: en cada fotograma, el tope según los fps y nunca más de 3 ms", function()
+  InstallAuctionator()
+  local saved = debugprofilestop
+  debugprofilestop = nil -- (los escaneos, de golpe)
+  local ok, err = pcall(function()
+    local prev
+    for _ = 1, 3 do
+      prev = Fixtures.RealisticAuctions(20000, prev)
+      DoScan(prev)
+    end
+  end)
+  debugprofilestop = saved
+  if not ok then error(err, 0) end
+  local track = ES.db.track[ES:RealmKey()]
+  for _, case in ipairs({ { fps = 144, budget = 2 }, { fps = 60, budget = 3 } }) do
+    FRAMERATE = case.fps
+    track.time = track.time + 1 -- (otro índice: se vuelve a construir)
+    local clock, steps, worst = 0, 0, 0
+    local probe = TIMER_PROBE
+    debugprofilestop = function() clock = clock + 0.05 return clock end
+    TIMER_PROBE = function(f)
+      local c = clock
+      f()
+      steps = steps + 1
+      if clock - c > worst then worst = clock - c end
+    end
+    ok, err = pcall(function()
+      ES.Market:Index()
+      RunTimers()
+    end)
+    TIMER_PROBE, debugprofilestop = probe, saved
+    if not ok then error(err, 0) end
+    expect(not ES.Market:Index().empty, "a %d fps el índice no se construyó", case.fps)
+    expect(steps > 5, "a %d fps el índice no se repartió (%d fotogramas)", case.fps, steps)
+    expect(worst <= case.budget + 0.2, "a %d fps, un fotograma de %.2f ms (tope %d)", case.fps, worst, case.budget)
+    note("a %d fps: %d fotogramas, el más largo %.2f ms", case.fps, steps, worst)
+  end
+end, { state = "empty" })
+
+test("un error a mitad del guardado se apunta y se puede volver a escanear", function()
+  InstallAuctionator()
+  local first = Fixtures.RealisticAuctions(3000)
+  DoScan(first)
+  local prepare = ES.History.Prepare
+  ES.History.Prepare = function() error("historial roto") end
+  local ok, err = pcall(DoScan, Fixtures.RealisticAuctions(3000, first))
+  ES.History.Prepare = prepare
+  if not ok then error(err, 0) end
+  expect(not ES.Scanner:IsBusy(), "el escaneo se quedó ocupado tras el error")
+  local found = false
+  for i = #RECORDED_ERRORS, 1, -1 do
+    if RECORDED_ERRORS[i]:find("historial roto", 1, true) then found = true table.remove(RECORDED_ERRORS, i) end
+  end
+  expect(found, "no se apuntó el error del guardado")
+  -- (cuando el servidor lo permita: DoScan espera los 15 min)
+  local entries = #ES.History:Entries()
+  DoScan(Fixtures.RealisticAuctions(3000))
+  expect_eq(#ES.History:Entries(), entries + 1, "el escaneo siguiente no se guardó")
+end, { state = "empty" })
+
+test("un error en los precios de Inversiones no tira el guardado del escaneo", function()
+  InstallAuctionator()
+  local prepare = ES.Invest.PrepareScan
+  ES.Invest.PrepareScan = function() error("inversiones rotas") end
+  local ok, err = pcall(DoScan, Fixtures.RealisticAuctions(3000))
+  ES.Invest.PrepareScan = prepare
+  if not ok then error(err, 0) end
+  local found = false
+  for i = #RECORDED_ERRORS, 1, -1 do
+    if RECORDED_ERRORS[i]:find("invest: ", 1, true) and RECORDED_ERRORS[i]:find("inversiones rotas", 1, true) then
+      found = true
+      table.remove(RECORDED_ERRORS, i)
+    end
+  end
+  expect(found, "no se apuntó el error de Inversiones")
+  expect_eq(#ES.History:Entries(), 1, "el escaneo no se guardó")
+end, { state = "empty" })
+
+-- Las líneas del registro de escaneos que casan con `pattern`
+local function LogLines(pattern)
+  local out = {}
+  for _, line in ipairs(ES.db.scanLog or {}) do
+    if line:find(pattern) then out[#out + 1] = line end
+  end
+  return out
+end
+
+-- Una línea de cada fase, con sus medidas: "leer: 3000 subastas, 12 fotogramas, 48 ms de
+-- CPU, el más largo 4.0 ms, 0.0 s de reloj, ? fps (al empezar 60)"
+local PHASE_LINE = ": %d+ fotogramas, %d+ ms de CPU, el más largo [%d.]+ ms, [%d.]+ s de reloj, [%d?]+ fps %(al empezar 60%)"
+local function ExpectPhaseLines()
+  local log = table.concat(ES.db.scanLog or {}, "\n")
+  -- (lo que va entre el nombre de la fase y sus medidas: qué se ha leído o resumido)
+  for _, p in ipairs({ { "leer", " %d+ subastas," }, { "resumir", " %d+ objetos," }, { "guardar", "" } }) do
+    local head = " " .. p[1] .. ":" .. p[2]
+    expect(log:find(head .. PHASE_LINE:sub(2)), "%s sin sus medidas:\n%s", p[1], log)
+    expect_eq(#LogLines(" " .. p[1] .. ": "), 1, "líneas de " .. p[1])
+  end
+end
+
+test("registro de escaneos: una línea de llegada y una por fase, con fotogramas, CPU y fps", function()
+  InstallAuctionator()
+  local auctions = Fixtures.RealisticAuctions(3000)
+  WithTickingClock(function() DoScan(auctions) end)
+  local arrival = LogLines(" llegada: ")
+  expect_eq(#arrival, 1, "líneas de llegada")
+  expect(arrival[1]:find("llegada: 3000 subastas en %d+ s %(con evento%), 60 fps"), "llegada: %s", arrival[1])
+  ExpectPhaseLines()
+end, { state = "empty" })
+
+test("registro de escaneos: un escaneo que tarda 25 s en llegar ocupa una sola línea", function()
+  InstallAuctionator()
+  local all = Fixtures.RealisticAuctions(2500)
+  AUCTIONS = {}
+  NOW = NOW + 16 * 60
+  OpenAH()
+  -- (llegan 100 cada segundo durante 25 s)
+  for k = 1, 25 do
+    C_Timer.After(k, function()
+      for i = (k - 1) * 100 + 1, k * 100 do AUCTIONS[#AUCTIONS + 1] = all[i] end
+    end)
+  end
+  WithTickingClock(function()
+    ES.Scanner:Start()
+    RunTimers(60)
+  end)
+  expect(not ES.Scanner:IsBusy(), "el escaneo no termina")
+  expect_eq(ES.db.scans[ES:RealmKey()].total, 2500, "subastas guardadas")
+  local arrival = LogLines(" llegada: ")
+  expect_eq(#arrival, 1, "líneas de llegada")
+  local secs = tonumber(arrival[1]:match("llegada: 2500 subastas en (%d+) s"))
+  expect(secs and secs >= 25, "llegada: %s", arrival[1])
+  expect_eq(#LogLines("llegando"), 0, "líneas de «llegando» (una por segundo)")
+  expect(#ES.db.scanLog <= 40, "el registro tiene %d líneas", #ES.db.scanLog)
+  ExpectPhaseLines()
+end, { state = "empty" })
+
+-- Lo guardado tras un escaneo (copia), para comparar dos formas de guardarlo
+local function SavedState()
+  local key = ES:RealmKey()
+  local h = ES.History:Entries(key)
+  local entry = h[#h]
+  return Copy({ scan = ES.db.scans[key], snap = entry and entry.snap, stuck = entry and entry.stuck,
+    track = ES.db.track and ES.db.track[key], invest = ES.db.investPrices and ES.db.investPrices[key] })
+end
+
+test("repartido entre fotogramas, lo guardado es idéntico a guardarlo todo de golpe", function()
+  InstallAuctionator()
+  local scans = { Fixtures.RealisticAuctions(30000) }
+  scans[2] = Fixtures.RealisticAuctions(30000, scans[1])
+  local start = NOW
+  -- Repartido: cada fase en muchos fotogramas
+  local split, frames = {}, 0
+  WithTickingClock(function()
+    for i, auctions in ipairs(scans) do
+      local probe = TIMER_PROBE
+      TIMER_PROBE = function(f) if ES.Scanner.phase == "guardar" then frames = frames + 1 end f() end
+      NOW = start + (i - 1) * 3600 -- (la misma hora en las dos formas)
+      DoScan(auctions)
+      TIMER_PROBE = probe
+      split[i] = SavedState()
+    end
+  end)
+  expect(frames > 20, "el guardado no se repartió (%d fotogramas)", frames)
+  -- De golpe (sin debugprofilestop), desde lo mismo que había antes
+  ES.db.scans, ES.db.track, ES.db.history, ES.db.investPrices = {}, nil, {}, nil
+  ES.db.lastFullScan = {}
+  Auctionator.SavedState.TimeOfLastReplicateScan = nil
+  NOW = start
+  local saved = debugprofilestop
+  debugprofilestop = nil
+  local ok, err = pcall(function()
+    for i, auctions in ipairs(scans) do
+      NOW = start + (i - 1) * 3600
+      DoScan(auctions)
+      SameDeep(SavedState(), split[i], "escaneo " .. i)
+    end
+  end)
+  debugprofilestop = saved
+  if not ok then error(err, 0) end
+  local s = split[2]
+  expect(s.stuck and #s.stuck > 100 and s.invest and next(s.invest), "lo comparado está vacío: la prueba no comprueba nada")
+  note("guardado de los dos escaneos en %d fotogramas: igual que de golpe", frames)
+end, { state = "empty" })
+
+---------------------------------------------------------------------------
 -- Tras un escaneo, el addon ayuda al recolector de basura (Jobs.CollectGarbage)
 ---------------------------------------------------------------------------
 test("tras un escaneo grande, la basura se recoge en segundos", function()

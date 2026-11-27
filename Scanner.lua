@@ -14,7 +14,18 @@ local Scanner = { state = "idle" }
 ES.Scanner = Scanner
 
 local BATCH_SIZE = 300   -- sin debugprofilestop: subastas por fotograma
-local FRAME_BUDGET = 12  -- ms por fotograma procesando (~60 fps se mantiene jugable)
+
+-- ms por fotograma que gasta el escaneo al leer, resumir y guardar: el 25 % de lo que
+-- dura un fotograma (GetFramerate), entre 2 y 6 ms; 4 ms si el juego no da los fps.
+-- Antes eran 12 ms fijos, pensados para cuando el addon era el único que procesaba el
+-- escaneo: con Auctionator y otros addons leyéndolo a la vez, el juego perdía fluidez
+-- (a 144 fps, un fotograma de 7 ms pasaba a 19)
+local BUDGET_SHARE, BUDGET_MIN, BUDGET_MAX, BUDGET_DEFAULT = 0.25, 2, 6, 4
+function Scanner.FrameBudget()
+  local fps = GetFramerate and GetFramerate()
+  if type(fps) ~= "number" or fps ~= fps or fps <= 0 or fps == math.huge then return BUDGET_DEFAULT end
+  return math.max(BUDGET_MIN, math.min(BUDGET_MAX, BUDGET_SHARE * 1000 / fps))
+end
 -- s esperando al servidor; si no responde, se abandona. Con 60 s, en los días de
 -- lanzamiento (reinos llenos) se abandonaban escaneos que el servidor sí iba a mandar
 local TIMEOUT = 120
@@ -311,6 +322,122 @@ local function Guarded(fn, what)
 end
 Scanner.Guarded = Guarded -- (pruebas)
 
+-- Medidas de cada fase de un escaneo ya llegado (leer, resumir, guardar), para el
+-- registro de escaneos (/cj, Informar de un error): fotogramas, la CPU del addon (lo que
+-- duran sus pasos), el paso más largo, los segundos de reloj y los fps. Si los fps caen
+-- mucho más de lo que explica la CPU del addon, el bajón es de otro (Auctionator, otros
+-- addons que leen el mismo escaneo)
+local meter -- la de la fase en curso
+local function Fps()
+  local f = GetFramerate and GetFramerate()
+  if type(f) == "number" and f == f and f > 0 and f < math.huge then return f end
+end
+local function MeterStart(name, what)
+  meter = { name = name, what = what, frames = 0, cpu = 0, worst = 0, t0 = GetTime(), fps0 = Fps() }
+end
+local function MeterLog(m)
+  local wall = GetTime() - m.t0
+  local cpu = debugprofilestop and string.format("%.0f ms de CPU, el más largo %.1f ms, ", m.cpu, m.worst) or ""
+  ES:ScanLog(string.format("%s: %s%d fotogramas, %s%.1f s de reloj, %s fps (al empezar %s)",
+    m.name, m.what and (m.what .. ", ") or "", m.frames, cpu, wall,
+    wall > 0 and string.format("%.0f", m.frames / wall) or "?", m.fps0 and string.format("%.0f", m.fps0) or "?"))
+end
+-- Un paso (un fotograma) de una fase: lo que dura cuenta en su medida. El paso que la
+-- acaba (meter.done) apunta la línea
+local function Metered(fn)
+  return function()
+    local m = meter
+    local t = debugprofilestop and debugprofilestop()
+    fn()
+    if not m then return end
+    if t then
+      local ms = debugprofilestop() - t
+      m.cpu = m.cpu + ms
+      if ms > m.worst then m.worst = ms end
+    end
+    m.frames = m.frames + 1
+    if m.done then
+      if meter == m then meter = nil end
+      MeterLog(m)
+    end
+  end
+end
+
+---------------------------------------------------------------------------
+-- Trabajo largo repartido entre fotogramas (Scanner:Sliced): antes de leer, mirar el
+-- escaneo anterior (History.PrevReach, ~40 ms con uno grande) y guardar (la foto del
+-- historial, History:Record con el escaneo anterior e Invest.RecordScan: ~0,2-0,4 s).
+-- De golpe, cada uno era un tirón. Van en una corrutina que se reanuda cada fotograma
+-- con el mismo tope que la lectura (FrameBudget), y esas funciones llaman a
+-- ES.ScanYield dentro de sus bucles largos: cede si el fotograma se ha acabado. Siguen
+-- siendo funciones normales: fuera de Sliced, ScanYield no hace nada
+---------------------------------------------------------------------------
+local yieldCo                  -- la corrutina que puede ceder ahora
+local stepStart, stepBudget = 0, BUDGET_DEFAULT
+local YIELD_EVERY = 16         -- el reloj, una de cada 16 llamadas (como ES.Yield)
+local yieldCalls = 0
+function ES.ScanYield()
+  if not yieldCo then return end
+  yieldCalls = yieldCalls + 1
+  if yieldCalls < YIELD_EVERY then return end
+  yieldCalls = 0
+  if debugprofilestop() - stepStart > stepBudget and coroutine.running() == yieldCo then coroutine.yield() end
+end
+
+-- Cede hasta el fotograma siguiente (dentro de Sliced; fuera, nada)
+local function ScanPause()
+  if yieldCo and coroutine.running() == yieldCo then coroutine.yield() end
+end
+
+-- Como pcall, pero `fn` puede ceder con ES.ScanYield (desde dentro de un pcall no se
+-- puede ceder en Lua 5.1): va en su propia corrutina, y cuando cede, cede también la de
+-- Sliced. Fuera de Sliced, la llama sin más
+local function Protected(fn, ...)
+  local outer = yieldCo
+  if not outer then return pcall(fn, ...) end
+  local co = coroutine.create(fn)
+  yieldCo = co
+  local ok, err = coroutine.resume(co, ...)
+  while ok and coroutine.status(co) ~= "dead" do
+    yieldCo = outer
+    coroutine.yield()
+    yieldCo = co
+    ok, err = coroutine.resume(co)
+  end
+  yieldCo = outer
+  return ok, err
+end
+
+-- fn() repartida entre fotogramas; al acabar, done(lo que devuelve fn). Devuelve el
+-- primer paso, para llamarlo o programarlo; los siguientes van solos, un fotograma cada
+-- uno, y cuentan en la medida de la fase (Metered). Un error se trata como en Guarded
+-- (`what`). Si se cancela el escaneo entre medias (scanID), se deja. Sin
+-- debugprofilestop (fuera del juego), todo de golpe
+function Scanner:Sliced(what, fn, done)
+  local id = self.scanID
+  if not (debugprofilestop and coroutine) then
+    return Guarded(function() done(fn()) end, what)
+  end
+  local co = coroutine.create(fn)
+  local SafeStep
+  local function Step()
+    if self.scanID ~= id then return end
+    stepStart, stepBudget, yieldCalls = debugprofilestop(), Scanner.FrameBudget(), 0
+    yieldCo = co
+    local ok, res = coroutine.resume(co)
+    yieldCo = nil
+    if not ok then error(res, 0) end
+    if coroutine.status(co) ~= "dead" then
+      C_Timer.After(0, SafeStep)
+    elseif self.scanID == id then
+      done(res)
+    end
+  end
+  local GuardedStep = Guarded(Step, what)
+  SafeStep = Metered(GuardedStep)
+  return GuardedStep
+end
+
 -- Empieza a esperar los datos de un escaneo completo para leerlos cuando lleguen.
 -- Sin `own`, lo acaba de pedir Auctionator u otro addon (ver OnForeignScan): no se pide
 -- nada ni se silencia a nadie, ese addon necesita su evento. Con `own` (modo Crafter's
@@ -391,6 +518,7 @@ function Scanner:Begin(api, before, own)
     if elapsed >= TIMEOUT and not arriving then
       -- Sin respuesta (p. ej. otro addon escaneó hace poco): se abandona y la
       -- cuenta atrás de 15 min ya corre desde esta petición
+      ES:ScanLog(string.format("sin respuesta del servidor en %d s (%d subastas)", elapsed, count))
       self:Abort(L["El servidor no respondió: solo permite un escaneo completo cada 15 min."])
       return
     end
@@ -403,11 +531,15 @@ function Scanner:Begin(api, before, own)
       if count == lastCount then
         stableTicks = stableTicks + 1
         if stableTicks >= STABLE_SECONDS then
+          -- (la llegada, en una sola línea: antes una por segundo, ~23 en un escaneo
+          -- grande, y el registro de 40 perdía las medidas de las fases)
+          local fps = Fps()
+          ES:ScanLog(string.format("llegada: %d subastas en %d s (%s), %s fps", count, elapsed,
+            self.gotEvent and "con evento" or "sin evento", fps and string.format("%.0f", fps) or "?"))
           self:Process()
           return
         end
       else
-        ES:ScanLog(string.format("llegando: %d subastas", count))
         stableTicks = 0
       end
     end
@@ -438,7 +570,8 @@ function Scanner:Abort(reason, closedAH)
   local arrived = self.arrived or self.state == "processing"
   frame:UnregisterAllEvents()
   self:UnmuteOthers()
-  self.state = "idle"
+  self.state, self.phase = "idle", nil
+  meter = nil
   self.arrived = nil
   self.scanID = (self.scanID or 0) + 1 -- invalida lotes pendientes
   if self.follow and not self.viaAuctionator and closedAH and arrived then
@@ -487,7 +620,8 @@ function Scanner:OnModeChanged()
   ES:ScanLog("cambio de modo de escaneo: se cancela el escaneo en curso (" .. tostring(self.source) .. ")")
   frame:UnregisterAllEvents()
   self:UnmuteOthers()
-  self.state = "idle"
+  self.state, self.phase = "idle", nil
+  meter = nil
   self.arrived = nil
   self.scanID = (self.scanID or 0) + 1 -- invalida lotes pendientes (también los de guardar)
   self.follow, self.viaAuctionator, self.mine, self.source = nil, nil, nil, nil
@@ -516,9 +650,13 @@ function Scanner:ReadTimeLeft(index)
   return 0
 end
 
+-- La fase en curso de un escaneo ya llegado ("leer", "resumir", "guardar" y, al acabar,
+-- "avisar"; nil si no hay): para el registro y las pruebas. Cada fase empieza en su
+-- propio fotograma (C_Timer.After(0)), sin sumarse al último paso de la anterior
 function Scanner:Process()
   frame:UnregisterEvent(self.event)
   self.state = "processing"
+  self.phase = "leer"
 
   local total, first
   if self.api == "legacy" then
@@ -529,7 +667,7 @@ function Scanner:Process()
     first = 0
   end
   local last = first + total - 1
-  ES:ScanLog(string.format("procesando %d subastas (%s)", total, self.gotEvent and "con evento" or "sin evento"))
+  MeterStart("leer")
 
   local items = {}
   local sigs = {}
@@ -542,20 +680,25 @@ function Scanner:Process()
   -- `reach` de su objeto). Las de solo puja no las mira nadie
   local History = ES.History
   local band = History.STUCK_BAND
-  local reach = History.PrevReach(ES.db.track and ES.db.track[self.key or ES:RealmKey()])
+  local reach -- (PrevReach, al empezar: ver abajo)
 
   local SafeStep
   local function Step()
     if self.scanID ~= id then return end
 
-    -- Por tiempo y no por número: procesa todo lo que quepa en FRAME_BUDGET ms
-    -- por fotograma (en un PC rápido son miles de subastas, no 300)
+    -- Por tiempo y no por número: procesa todo lo que quepa en el tope del fotograma
+    -- (FrameBudget; en un PC rápido son miles de subastas, no 300)
     local started = debugprofilestop and debugprofilestop()
+    local budget = Scanner.FrameBudget()
+    -- El progreso de lo leído hasta ahora, al empezar el paso: así lo que cuesta repintar
+    -- los botones (ES:OnScanProgress) cuenta dentro del tope del fotograma
+    SetStatus(string.format(L["Procesando subastas... %d / %d"], index - first, total))
+    SetProgress(WAIT_PROGRESS + (1 - WAIT_PROGRESS) * (index - first) / math.max(1, total))
     local stop = last
     if not started then stop = math.min(index + BATCH_SIZE - 1, last) end
     local i = index
     while i <= stop do
-      if started and (i - index) % 100 == 99 and debugprofilestop() - started > FRAME_BUDGET then
+      if started and (i - index) % 50 == 49 and debugprofilestop() - started > budget then
         stop = i
       end
       -- name, texture, count, quality, canUse, level, levelType, minBid,
@@ -601,8 +744,6 @@ function Scanner:Process()
     end
 
     index = stop + 1
-    SetStatus(string.format(L["Procesando subastas... %d / %d"], index - first, total))
-    SetProgress(WAIT_PROGRESS + (1 - WAIT_PROGRESS) * (index - first) / math.max(1, total))
 
     if index > last then
       -- Si mientras se procesaba llegó otra tanda, se lee también
@@ -616,12 +757,20 @@ function Scanner:Process()
     if index <= last then
       C_Timer.After(0, SafeStep)
     else
+      if meter then meter.what, meter.done = total .. " subastas", true end
       self:Finish(items, sigs, total)
     end
   end
 
-  SafeStep = Guarded(Step, "leyendo")
-  SafeStep()
+  SafeStep = Metered(Guarded(Step, "leyendo"))
+  -- Antes de leer, hasta qué precio mirar las subastas de cada objeto: PrevReach recorre
+  -- el escaneo anterior guardado (~40 ms de golpe con uno grande), repartido
+  C_Timer.After(0, Metered(self:Sliced("leyendo", function()
+    return History.PrevReach(ES.db.track and ES.db.track[self.key or ES:RealmKey()])
+  end, function(r)
+    reach = r
+    C_Timer.After(0, SafeStep)
+  end)))
 end
 
 -- { [precio] = cantidad } -> { p1, q1, p2, q2, ... } ordenado de más barato a más
@@ -677,7 +826,8 @@ function Scanner:Finish(items, sigs, total)
   -- Un escaneo vacío es un fallo del servidor: guardarlo borraría los precios
   -- buenos y haría creer que todo se ha vendido
   if total == 0 then
-    self.state = "idle"
+    self.state, self.phase = "idle", nil
+    meter = nil
     self.follow, self.viaAuctionator, self.mine, self.source = nil, nil, nil, nil
     local msg = L["El servidor devolvió 0 subastas; no se guarda este escaneo. Inténtalo más tarde."]
     ES:Print(msg)
@@ -687,6 +837,7 @@ function Scanner:Finish(items, sigs, total)
   end
 
   self.state = "saving"
+  self.phase = "resumir"
   local id = self.scanID
   local ids = {}
   for itemID in pairs(items) do ids[#ids + 1] = itemID end
@@ -694,14 +845,18 @@ function Scanner:Finish(items, sigs, total)
   -- (el mínimo sin redondear de cada objeto con firmas: History:Record lo usa para
   -- quedarse con las cercanas, el mismo que saldría de las firmas)
   local mins = {}
-  local t0 = debugprofilestop and debugprofilestop()
-  local frames = 0
+  MeterStart("resumir", #ids .. " objetos")
 
   local SafeStep
   local function Step()
     if self.scanID ~= id then return end
-    frames = frames + 1
     local started = debugprofilestop and debugprofilestop()
+    local budget = Scanner.FrameBudget()
+    if i == 1 then
+      -- Todo leído (con el cambio de fase, los botones se repintan: dentro del tope)
+      SetStatus(string.format(L["Procesando subastas... %d / %d"], total, total))
+      SetProgress(1)
+    end
     local stop = started and #ids or math.min(i + BATCH_SIZE - 1, #ids)
     while i <= stop do
       local itemID = ids[i]
@@ -727,35 +882,58 @@ function Scanner:Finish(items, sigs, total)
         median = median,
       }
       i = i + 1
-      if started and i % 50 == 0 and debugprofilestop() - started > FRAME_BUDGET then break end
+      if started and i % 10 == 0 and debugprofilestop() - started > budget then break end
     end
     if i <= #ids then
       C_Timer.After(0, SafeStep)
       return
     end
-    if t0 then
-      ES:ScanLog(string.format("resumen: %d objetos en %d fotogramas, %.0f ms", #ids, frames, debugprofilestop() - t0))
-    end
-    self:Save(saved, #ids, knownOwners, sigs, total, mins)
+    -- (el guardado, en el fotograma siguiente: ver Save)
+    if meter then meter.done = true end
+    self.phase = "guardar"
+    MeterStart("guardar")
+    C_Timer.After(0, Metered(Guarded(function()
+      if self.scanID == id then self:Save(saved, #ids, knownOwners, sigs, total, mins) end
+    end, "guardando")))
   end
-  SafeStep = Guarded(Step, "resumiendo")
-  SafeStep()
+  SafeStep = Metered(Guarded(Step, "resumiendo"))
+  C_Timer.After(0, SafeStep)
 end
 
--- Guarda el escaneo resumido (ver Finish) y avisa a las vistas
+-- Guarda el escaneo resumido (ver Finish) y avisa a las vistas. Mientras, el estado
+-- sigue en "saving": ocupado (no se escanea ni se anuncia con los precios de antes) y
+-- cerrar la AH no lo cancela. Primero se calcula todo, repartido (la foto, lo de
+-- History:Record con el escaneo anterior y los precios de Inversiones), y luego se
+-- escribe de una vez (WriteScan); en el fotograma siguiente, el mensaje y
+-- ES:OnScanComplete. Sin debugprofilestop (fuera del juego), todo de golpe
 function Scanner:Save(saved, unique, knownOwners, sigs, total, mins)
-  self.state = "idle"
+  self.phase = "guardar"
+  -- (el primer paso, en este mismo fotograma: ya cuenta en la medida de quien llama, Finish)
+  self:Sliced("guardando", function()
+    local scan = self:WriteScan(saved, unique, knownOwners, sigs, total, mins)
+    -- (el aviso a las vistas, en su propio fotograma: ya no cuenta en el guardado)
+    if meter then meter.done = true end
+    self.phase = "avisar"
+    ScanPause()
+    return scan
+  end, function(scan) self:Saved(scan, unique, total) end)()
+end
+
+-- Lo que se escribe al guardar (Save), calculado repartido y escrito de una vez al
+-- final: devuelve el escaneo guardado
+function Scanner:WriteScan(saved, unique, knownOwners, sigs, total, mins)
   local now = time()
   local key = self.key or ES:RealmKey()
   local scan = { time = now, total = total, unique = unique, items = saved,
     ownerPct = total > 0 and math.floor(knownOwners / total * 100 + 0.5) or 0 }
-  ES.db.scans[key] = scan
 
   -- Foto compacta de los objetos de profesiones para el historial:
   -- ";itemID:mínimo:subastas:mediana:unidades a la venta;..." (por bloques y sin una
   -- cadena por objeto, como History.Pack: menos basura al acabar el escaneo)
+  local Yield = ES.ScanYield
   local parts, blocks, n = {}, {}, 0
   for itemID, e in pairs(saved) do
+    Yield()
     if e.minUnit and ES.History:IsTracked(itemID) then
       parts[n + 1], parts[n + 2], parts[n + 3], parts[n + 4], parts[n + 5] = ";", itemID, ":", e.minUnit, ":"
       parts[n + 6], parts[n + 7], parts[n + 8], parts[n + 9], parts[n + 10] = e.listings, ":", e.median or e.minUnit, ":", e.quantity
@@ -765,7 +943,36 @@ function Scanner:Save(saved, unique, knownOwners, sigs, total, mins)
   end
   if n > 0 then blocks[#blocks + 1] = table.concat(parts, "", 1, n) end
   local snap = #blocks > 0 and table.concat(blocks) or ";"
-  ES.History:Record(key, sigs, snap, now, mins)
+  local rec = ES.History:Prepare(key, sigs, snap, now, mins)
+  -- Precio del día de lo que tienes en la cartera de inversiones (Invest.lua). Un error
+  -- aquí no tira el escaneo: se apunta y se sigue
+  local days, investErr
+  if ES.Invest then
+    local ok, res = Protected(ES.Invest.PrepareScan, scan)
+    if ok then days = res else investErr = res end
+  end
+
+  -- Todo calculado: se escribe de una vez, en este mismo fotograma y sin ceder. Si el
+  -- guardado se corta antes (cambio de modo de escaneo, /reload, desconexión), no queda
+  -- nada a medias: ni el escaneo sin su entrada del historial ni precios de Inversiones
+  -- de un escaneo que no se guardó
+  local co = yieldCo
+  yieldCo = nil
+  ES.db.scans[key] = scan
+  ES.History:Commit(rec)
+  if investErr then
+    ES:RecordError("invest", investErr)
+  elseif ES.Invest then
+    local ok, err = pcall(ES.Invest.CommitScan, days)
+    if not ok then ES:RecordError("invest", err) end
+  end
+  yieldCo = co
+  return scan
+end
+
+-- Guardado el escaneo: el mensaje, los botones y las vistas (ES:OnScanComplete)
+function Scanner:Saved(scan, unique, total)
+  self.state, self.phase = "idle", nil
   local scans = ES.History:Summary()
 
   local msg = string.format(L["Escaneo completado: %d subastas, %d objetos distintos."], total, unique)

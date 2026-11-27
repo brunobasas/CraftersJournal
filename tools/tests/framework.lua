@@ -75,6 +75,38 @@ function budget(key, value, tolerance, slack)
   SNAPSHOTS[#SNAPSHOTS + 1] = { key = key, value = value, kind = "budget", tolerance = tolerance or 0.2, slack = slack or 0 }
 end
 
+-- Lo que dura de verdad cada fotograma del addon: corre fn con debugprofilestop de reloj
+-- real (PRECISE_CLOCK, el de Python: os.clock en Windows va de ms en ms) y mide cada llamada de C_Timer que ejecuta RunTimers.
+-- label(): de qué paso es cada llamada, mirado justo antes de hacerla (si da nil, justo
+-- después: la llamada que empieza una fase cuenta en ella; si no, "?"). Devuelve
+-- { [etiqueta] = { n = llamadas, worst = ms de la más larga, total = ms, list = ms de
+-- cada una } }. El
+-- recolector de basura se para mientras: se mide lo que tarda el addon, no él
+function MeasureTimers(fn, label)
+  local savedClock, savedProbe = debugprofilestop, TIMER_PROBE
+  local steps = {}
+  local clock = PRECISE_CLOCK or os.clock
+  debugprofilestop = function() return clock() * 1000 end
+  TIMER_PROBE = function(f)
+    local what = label and label()
+    local t = clock()
+    f()
+    local ms = (clock() - t) * 1000
+    what = what or (label and label()) or "?"
+    local s = steps[what]
+    if not s then s = { n = 0, worst = 0, total = 0, list = {} } steps[what] = s end
+    s.n, s.total = s.n + 1, s.total + ms
+    s.list[s.n] = ms
+    if ms > s.worst then s.worst = ms end
+  end
+  collectgarbage("stop")
+  local ok, err = pcall(fn)
+  collectgarbage("restart")
+  debugprofilestop, TIMER_PROBE = savedClock, savedProbe
+  if not ok then error(err, 0) end
+  return steps
+end
+
 -- Arranque: lo guardado (una tabla, o el nombre de un estado de Fixtures) y los
 -- eventos de inicio, como el juego al entrar
 function Boot(db)

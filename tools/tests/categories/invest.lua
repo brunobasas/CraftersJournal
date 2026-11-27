@@ -29,6 +29,13 @@ local function ScanWith(id, ladder, when)
   return scan
 end
 
+-- Lo que hace el addon al guardar un escaneo: los precios del día de Inversiones
+-- (Scanner:WriteScan) y, al acabar, el aviso a las vistas (ES:OnScanComplete)
+local function ScanDone(scan)
+  ES.Invest.RecordScan(scan)
+  ES:OnScanComplete(scan, true)
+end
+
 ---------------------------------------------------------------------------
 -- Historial de Auctionator
 ---------------------------------------------------------------------------
@@ -555,7 +562,7 @@ test("tus escaneos: el precio del día no cuenta una subasta suelta y se guarda 
   expect(ES.History:IsTracked(900500), "lo de la cartera no se sigue en el escaneo")
   Buy(LOTUS, 2, 9 * G)
   -- Una suelta a 5g y 30 a 10g: cuenta la de 10g (hacen falta 2 unidades)
-  ES:OnScanComplete(ScanWith(LOTUS, { 5 * G, 1, 10 * G, 30 }), true)
+  ScanDone(ScanWith(LOTUS, { 5 * G, 1, 10 * G, 30 }))
   RunTimers()
   expect(type(ES.db.investPrices[ES:RealmKey()][LOTUS]) == "string", "no se guarda el precio del día")
   local h = expect(ES.PriceHistory:Get(LOTUS), "sin precio tras escanear")
@@ -706,7 +713,7 @@ end, { state = "empty" })
 test("tus escaneos: con Auctionator también se apuntan, para cuando lo desinstales", function()
   local LEATHER = 2318
   InstallAuctionator()
-  ES:OnScanComplete(ScanWith(LEATHER, { 25, 50 }), true)
+  ScanDone(ScanWith(LEATHER, { 25, 50 }))
   RunTimers()
   -- Con Auctionator, la ficha no usa tus días (solo su historial)...
   expect_eq(ES.PriceHistory:Get(LEATHER), nil, "con Auctionator se usan tus escaneos")
@@ -783,13 +790,13 @@ test("escanear con el addon: con Auctionator no cambia los precios; sin él, los
   Buy(LOTUS, 1, 9 * G)
   -- Sin Auctionator: tu escaneo pone el precio al momento
   OpenPage("invest")
-  ES:OnScanComplete(ScanWith(LOTUS, { 14 * G, 50 }), true)
+  ScanDone(ScanWith(LOTUS, { 14 * G, 50 }))
   RunTimers()
   expect(CardOf(LOTUS).price:GetText():find(ES.Money(14 * G), 1, true), "sin Auctionator, tras escanear: %s", CardOf(LOTUS).price:GetText())
   -- Con Auctionator: manda su historial
   InstallAuctionator()
   Days(LOTUS, { [1] = 12 * G })
-  ES:OnScanComplete(ScanWith(LOTUS, { 15 * G, 50 }), true)
+  ScanDone(ScanWith(LOTUS, { 15 * G, 50 }))
   RunTimers()
   expect(CardOf(LOTUS).price:GetText():find(ES.Money(12 * G), 1, true), "con Auctionator, el de su historial: %s", CardOf(LOTUS).price:GetText())
 end)

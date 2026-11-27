@@ -8,6 +8,9 @@ NOW = 2000000 -- hora fija: las pruebas dan lo mismo cada vez
 time = function() return math.floor(NOW) end
 GetTime = function() return NOW end
 debugprofilestop = function() return 0 end
+-- Los fps del juego (GetFramerate): una prueba puede cambiarlos, o quitar la función
+FRAMERATE = 60
+GetFramerate = function() return FRAMERATE end
 
 bit = bit or { band = function(a, b) local r, p = 0, 1 while a > 0 and b > 0 do if a % 2 == 1 and b % 2 == 1 then r = r + p end a, b, p = math.floor(a / 2), math.floor(b / 2), p * 2 end return r end }
 
@@ -193,6 +196,9 @@ end
 -- defecto) avanzando la hora, como dejar pasar ese rato en el juego. Lo de más tarde
 -- (una cuenta atrás de 15 min...) se queda en la cola
 TIMERS = {}
+-- TIMER_PROBE(f): si está, RunTimers llama así a cada temporizador (MeasureTimers lo usa
+-- para medir lo que dura cada uno)
+TIMER_PROBE = nil
 C_Timer = {
   After = function(d, f) TIMERS[#TIMERS + 1] = { at = NOW + (d or 0), f = f } end,
   NewTicker = function(d, f, n)
@@ -219,7 +225,7 @@ function RunTimers(seconds)
     if TIMERS[1].at > limit then break end
     local t = table.remove(TIMERS, 1)
     if t.at > NOW then NOW = t.at end
-    t.f()
+    if TIMER_PROBE then TIMER_PROBE(t.f) else t.f() end
     n = n + 1
   end
   return n

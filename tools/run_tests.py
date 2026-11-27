@@ -86,6 +86,8 @@ class Runtime:
             sys.path.insert(0, _eslua)
         from lupa import lua51
         self.lua = lua = lua51.LuaRuntime(unpack_returned_tuples=True)
+        # Reloj fino en segundos (os.clock en Windows va de ms en ms): MeasureTimers
+        lua.globals().PRECISE_CLOCK = time.perf_counter
         run = lua.eval("function(src, name) return assert(loadstring(src, name))() end")
         run(read(TESTS / "wow.lua"), "=tests/wow.lua")
         # Globales escritas desde los archivos del addon (las pruebas no cuentan: su

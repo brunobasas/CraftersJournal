@@ -68,7 +68,16 @@ local I_WALL_MIN, I_WALL_LISTINGS, I_WALL_UNITS = 17, 18, 19      -- competencia
 local function NewItem()
   return { 0, 0, 0, 0, 0, 0, false, false, false, false, false, false, false, false, false, false, false, 0, 0 }
 end
-local BUILD_BUDGET = 3 -- ms por fotograma
+-- ms por fotograma: como mucho 3, y menos si el juego va a muchos fps (el tope del
+-- escaneo, Scanner.FrameBudget: el 25 % del fotograma, 2 ms a 144 fps). Se construye
+-- justo al acabar cada escaneo: con 3 ms fijos, a 144 fps era casi la mitad de cada
+-- fotograma durante unos 20
+local BUILD_BUDGET = 3
+local function BuildBudget()
+  local S = ES.Scanner
+  return S and S.FrameBudget and math.min(BUILD_BUDGET, S.FrameBudget()) or BUILD_BUDGET
+end
+local budget = BUILD_BUDGET -- (el de este fotograma: Step)
 local building       -- { stamp, co } mientras se construye
 local servedStale    -- se dio un índice viejo (o vacío) mientras se construía el nuevo
 local whenReady = {} -- lo que espera al índice nuevo (Market.WhenReady)
@@ -221,6 +230,7 @@ local Step
 function Step()
   local b = building
   if not b then return end
+  budget = BuildBudget()
   local start = debugprofilestop()
   local ok, res = coroutine.resume(b.co, start)
   if not ok then
@@ -245,7 +255,7 @@ local function StartBuild(stamp, history, track)
   building.co = coroutine.create(function(start)
     frameStart = start
     return Build(stamp, history, track, function()
-      if debugprofilestop() - frameStart > BUILD_BUDGET then frameStart = coroutine.yield() end
+      if debugprofilestop() - frameStart > budget then frameStart = coroutine.yield() end
     end)
   end)
   C_Timer.After(0, Step)

@@ -806,12 +806,8 @@ end
 -- abrías la AH. Con el escaneo que pides tú (botón Escanear), sí, para ver el resultado
 -- Cada parte en su fotograma (todo junto era un tirón al acabar el escaneo), y lo que
 -- tarda cada una al registro de escaneos (/cj, Informar de un error)
+-- (los precios del día de Inversiones ya se apuntaron al guardar: Scanner:WriteScan)
 function ES:OnScanComplete(scan, followed)
-  -- Precio del día de lo que tienes en la cartera de inversiones (Invest.lua)
-  if self.Invest then
-    local ok, err = pcall(self.Invest.RecordScan, scan)
-    if not ok then self:RecordError("invest", err) end
-  end
   if not followed then self:ShowMainFrame() end
   local function Timed(label, f)
     local t = debugprofilestop and debugprofilestop()
@@ -923,7 +919,18 @@ function ES:RefreshScanButtons()
   end
 end
 
+-- El % del escaneo cambia en cada fotograma mientras se lee: repintar los botones cada
+-- vez (SetText, AuctionatorProblem, UpdatePostStatus...) gastaba en cada fotograma más
+-- que la propia lectura. Como mucho cada PROGRESS_EVERY s, y siempre que cambia la fase
+-- (Scanner.state). Al acabar o cancelarse, el Scanner los repinta enseguida
+local PROGRESS_EVERY = 0.25
 function ES:OnScanProgress()
+  local now, state = GetTime(), self.Scanner.state
+  if state == self.progressState and self.progressAt and now - self.progressAt < PROGRESS_EVERY
+    and now >= self.progressAt then
+    return
+  end
+  self.progressState, self.progressAt = state, now
   self:RefreshScanButtons()
 end
 
