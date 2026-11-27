@@ -4496,10 +4496,11 @@ step("novedades: una vez por versión, y en vista de desarrollo cuando quieras",
   -- (la versión de las últimas notas, para no tocar la prueba en cada versión; y otras
   -- derivadas de ella: la anterior, un parche sin notas y una futura)
   local latest = ES.WHATS_NEW[1].version
-  local ma, mi = latest:match("^(%d+)%.(%d+)")
-  ma, mi = tonumber(ma), tonumber(mi)
-  local previous, patch = ma .. "." .. (mi - 1) .. ".0", ma .. "." .. mi .. ".1"
-  local midway, future = ma .. "." .. mi .. ".5", ma .. "." .. (mi + 1) .. ".0"
+  -- (la de las notas puede ser un parche: 0.72.2; el parche siguiente, sin notas, 0.72.3)
+  local ma, mi, pa = latest:match("^(%d+)%.(%d+)%.?(%d*)")
+  ma, mi, pa = tonumber(ma), tonumber(mi), tonumber(pa) or 0
+  local previous, patch = ma .. "." .. (mi - 1) .. ".0", ma .. "." .. mi .. "." .. (pa + 1)
+  local midway, future = ma .. "." .. mi .. "." .. (pa + 3), ma .. "." .. (mi + 1) .. ".0"
   local version = latest
   GetAddOnMetadata = function(_, field) if field == "Version" then return version end end
   local function Shown() local f = ES.WhatsNewFrame() return f and f._shown end
