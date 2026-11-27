@@ -106,6 +106,8 @@ Comparado con los datos anteriores:
 - [ ] **Guardar también las búsquedas sueltas** en la AH en el historial (pendiente de decidir).
 - [x] **Auctionator como respaldo opcional del historial:** hecho en 0.66.0 para la pestaña Inversiones (su historial de precios por día y su API pública para el último mínimo).
 - [x] **Escanear con Auctionator (0.66.0):** el addon ya no pide su propio escaneo completo. Escanear lanza el de Auctionator y el addon lee esas subastas para todas las pestañas; sin Auctionator el botón sale en gris. Los escaneos que pida cualquier addon se leen siempre (fuera la opción de no leerlos). Change de OpenSpec `scan-only-with-auctionator`.
+  - **Cambiado en 0.72.1:** Auctionator vuelve a ser opcional (dependencia opcional en CurseForge). Dos modos, cada uno con una sola fuente: con Auctionator, su escaneo y su historial; sin él, o con la opción «Escanear con Auctionator» desactivada, el addon pide su escaneo y la gráfica de Inversiones sale de 21 días que apunta él. Change de OpenSpec `optional-auctionator-scan`.
+- [x] **Historial diario de 21 días** para Inversiones (los precios del día de los objetos de profesiones y de cartera, 0.72.1): resuelve en parte el de 30 días de arriba.
 
 ## F. La 1.0 (actualizado el 2026-10-15, versión 0.34.0)
 

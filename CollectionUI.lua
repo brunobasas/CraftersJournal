@@ -636,14 +636,25 @@ function ES:RenderCollectionDetail(frame)
     local sell
     local vendorOnly = Settings().vendorProfit
     local qty = e.qty or 1
+    -- Precio inflado (quedan pocas y la más barata ha saltado): se cuenta al de los
+    -- últimos días, y se dice, con la más barata de ahora debajo (si no, parecía
+    -- que el addon leía mal la AH: Robe of Winter Night, 40g25 frente a 53g99)
+    local fair = e.sellWhere == "ah" and e.ahPrice and not vendorOnly and e.fair
+    local inflated = fair and fair.inflated
     if e.sellWhere == "ah" and e.ahPrice and not vendorOnly then
       sell = ES.Money(e.ahPrice * qty) .. GREY .. (qty > 1
         and " (" .. string.format(L["AH %s/u"], ES.Money(e.ahPrice)) .. ")" or L[" (AH)"]) .. "|r"
+        .. (inflated and (ORANGE .. L[" · ahora inflado"] .. "|r") or "")
     elseif e.vendor and e.vendor > 0 then
       sell = ES.Money(e.vendor * qty) .. GREY .. (qty > 1
         and " (" .. string.format(L["vendedor %s/u"], ES.Money(e.vendor)) .. ")" or L[" (vendedor)"]) .. "|r"
     else sell = GREY .. (scanned and L["no hay ninguno"] or L["sin escanear"]) .. "|r" end
     KV(d, (e.qty or 1) > 1 and string.format(L["Vender lo fabricado (%s uds)"], ES.Num(e.qty)) or L["Vender lo fabricado"], sell, { item = e.itemID })
+    if inflated then
+      KV(d, GREY .. "   " .. L["La más barata en la AH"] .. "|r", ES.Money(fair.current), { hint = string.format(
+        L["Precio inflado: ahora la más barata está a %s, pero los últimos días se vendía a ~%s (quedan pocas). Se cuenta a %s: más caro no lo compra quien mire el historial."],
+        ES.Money(fair.current), ES.Money(fair.ref), ES.Money(fair.price)) })
+    end
     if r.bop then KV(d, ORANGE .. L["Se liga al recogerlo: no se puede vender en la AH"] .. "|r") end
     local profit = Profit(e)
     if profit then KV(d, L["Beneficio por fabricación"], ES.UI.Signed(-profit)) end

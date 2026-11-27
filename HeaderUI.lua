@@ -263,23 +263,23 @@ function ES:CreateHeader(f)
       GameTooltip:AddLine(lock, 1, 0.6, 0.2, true)
     elseif ES.Scanner:IsBusy() then
       GameTooltip:AddLine(L["Escaneo en curso."], 0.8, 0.8, 0.8, true)
-    elseif type(Auctionator) ~= "table" then
-      -- (sin Auctionator no se escanea: lo primero, aunque la AH esté cerrada)
-      GameTooltip:AddLine(ES.Scanner.AuctionatorProblem(), 1, 0.6, 0.2, true)
     elseif wait > 0 then
       GameTooltip:AddLine(string.format(L["El servidor solo permite un escaneo completo cada 15 min: podrás volver a escanear en %s."],
         ES.Countdown(wait)), 1, 0.6, 0.2, true)
     elseif not ES:IsAuctionHouseOpen() then
       GameTooltip:AddLine(L["Abre la Casa de Subastas para poder escanearla."], 1, 0.6, 0.2, true)
     elseif ES.Scanner.AuctionatorProblem() then
-      -- (sin Auctionator, que lo instale; o que espere a que esté listo)
+      -- (con Auctionator, que espere a que esté listo o a su cuenta atrás; sin él no hay)
       GameTooltip:AddLine(ES.Scanner.AuctionatorProblem(), 1, 0.6, 0.2, true)
     else
       GameTooltip:AddLine(L["Descarga todas las subastas y actualiza precios, rutas y alertas."], 0.8, 0.8, 0.8, true)
     end
-    -- El escaneo lo hace Auctionator (y el addon lee esos datos)
-    if type(Auctionator) == "table" then
+    -- Quién hace el escaneo, según el «Modo de escaneo»: Auctionator (y el addon lee esos
+    -- datos) o el propio addon
+    if ES.Scanner.UsesAuctionator() then
       GameTooltip:AddLine(L["Con Auctionator: el escaneo lo hace Auctionator (así guarda su historial de precios) y el addon lee esos mismos datos para todas las pestañas."], 0.5, 0.8, 1, true)
+    else
+      GameTooltip:AddLine(L["El escaneo lo pide Crafter's Journal."], 0.5, 0.8, 1, true)
     end
     -- Su botón Escanear hace un resumen que el addon no usa (Scanner.AuctionatorSummaryMode)
     -- (en gris ya lo dice arriba, sin el "usa este botón")

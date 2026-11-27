@@ -169,6 +169,38 @@ test("un material con enfriamiento (Mooncloth) se compra en la AH, no se fabrica
   expect_eq(cost, 2 * 4694, "sin Mooncloth en la AH: fabricada")
 end)
 
+-- Robe of Winter Night (Discord 2026-11-27): la ficha decía «Vender lo fabricado 40g25 (AH)»
+-- con la más barata a 53g99. Era el precio inflado (referencia 35g × 1,15), pero no lo decía
+test("Recetas: un precio inflado lo dice, con la más barata de ahora", function()
+  local ROBE, RECIPE, NOW, REF = 14136, 18436, 539968, 350000
+  SKILLS[ES.Data.Tailoring.skillLine] = { 245, 300 }
+  for _, rg in ipairs(ES.Data.Tailoring.recipes[RECIPE].r) do SetPrice(rg[1], 100) end
+  SetPrice(ROBE, NOW)
+  local ref = ES.Market.ReferencePrice
+  ES.Market.ReferencePrice = function(self, id)
+    if id == ROBE then return REF, 3, 0 end
+    return ref(self, id)
+  end
+  OpenPage("patterns")
+  ES:SelectPage("pattern:Tailoring")
+  RunTimers()
+  local frame = ES:GetMainFrame().pages["pattern:Tailoring"].collectionFrame
+  expect(frame and frame.data, "la colección de Sastrería no se ha pintado")
+  local e
+  for _, x in ipairs(frame.data.entries) do if x.id == RECIPE then e = x end end
+  e = expect(e, "Robe of Winter Night no está en la colección")
+  expect(e.fair and e.fair.inflated, "el precio de la AH no sale inflado: la prueba no prueba nada")
+  expect_eq(e.sellWhere, "ah", "dónde se vende")
+  ES:SelectCollectionEntry(frame, e)
+  RunTimers()
+  ES.Market.ReferencePrice = ref
+  local text = AllText()
+  expect(text:find(ES.L[" · ahora inflado"], 1, true), "la ficha no dice que está inflado")
+  expect(text:find(ES.L["La más barata en la AH"], 1, true), "la ficha no dice la más barata de ahora")
+  expect(text:find(ES.Money(NOW), 1, true), "la ficha no dice el precio de ahora (%s)", ES.Money(NOW))
+  expect(text:find(ES.Money(402500), 1, true), "la ficha no cuenta al precio de los últimos días × 1,15 (40g 25s)")
+end)
+
 test("las recetas sabidas se guardan por personaje", function()
   SKILLS[ES.Data.Cooking.skillLine] = { 50, 75 }
   for id in pairs(ES.Data.Cooking.recipes) do KNOWN_SPELLS[id] = true break end

@@ -24,17 +24,30 @@ local L = ES.L
 -- pasar; y solo salen esas (las demás, no). Su `text` no se ve en la página (sí si
 -- algún día se quita la imagen y sale como fila). { file, w, h }: la textura de
 -- Media/WhatsNew/ (lienzo de 2048x1024) y el tamaño útil dentro de él. Se generan con
--- tools/gen_whatsnew_images.py desde los PNG de tools/whatsnew/ (que imprime w y h)
+-- tools/gen_whatsnew_images.py desde los PNG de tools/whatsnew/ (que imprime w y h).
+-- Ahora ninguna lleva imagen: las de la 0.66.0 (Inversiones y Pestañas) se quitaron del
+-- addon (12 MB); sus PNG siguen en tools/whatsnew/
+-- `choice`: la clave de una opción de varias casillas de ES.OPTIONS (kind = "radio",
+-- Options.lua) para elegirla ahí mismo. Una novedad con elección es lo único que sale en
+-- la ventana (ver WhatsNewItems): una diapositiva pequeña con su título y, debajo, una
+-- casilla grande por opción, una al lado de otra, con la lógica de /cj opciones (una sola
+-- marcada, las que no se pueden en gris con su offDesc). Su `text` no se ve
 local SHOTS = "Interface\\AddOns\\CraftersJournal\\Media\\WhatsNew\\"
+ES.WHATS_NEW_SHOTS = SHOTS -- (las pruebas montan una versión con imágenes)
 ES.WHATS_NEW = {
+  {
+    version = "0.72.1",
+    items = {
+      { top = true, title = "Ahora puedes escoger el modo de escaneo para Crafter's Journal",
+        choice = "noAuctionator" },
+    },
+  },
   {
     version = "0.66.0",
     items = {
       { icon = ES.Invest.ICON, top = true, title = "Nueva pestaña: Inversiones",
-        image = { file = SHOTS .. "Investments", w = 1531, h = 1024 },
         text = "Apunta lo que compras para revender (cantidad y precio, por unidad o total) y te dice tu precio medio y cuánto ganas o pierdes, neto de la comisión de la AH (5%)." },
       { icon = "Interface\\Icons\\INV_Misc_Book_09", title = "Ordena y oculta las pestañas",
-        image = { file = SHOTS .. "Tabs", w = 1531, h = 1024 },
         text = "En opciones, Pestañas: arrastra las pestañas para ordenarlas y oculta las que no uses. El addon se abre en la de arriba." },
     },
   },
@@ -194,15 +207,19 @@ function ES:WhatsNewSince(seen, current)
   return out
 end
 
--- Las novedades que enseña la ventana, en su orden. Si alguna tiene imagen, solo las
--- que tienen imagen (en grande; las demás, aunque sean de versiones que te saltaste,
--- no salen: que lo grande no quede pequeño ni enterrado). Si no, las destacadas
--- (top = true: una pestaña nueva...) y luego el resto. En cada grupo, de la versión
--- más nueva a la más antigua, y como mucho WHATS_NEW_MAX_ITEMS en total
+-- Las novedades que enseña la ventana, en su orden. Si alguna pide elegir algo (choice),
+-- solo esa: su diapositiva, sola (la de la versión más nueva). Si alguna tiene imagen,
+-- solo las que tienen imagen (en grande; las demás, aunque sean de versiones que te
+-- saltaste, no salen: que lo grande no quede pequeño ni enterrado). Si no, las
+-- destacadas (top = true: una pestaña nueva...) y luego el resto. En cada grupo, de la
+-- versión más nueva a la más antigua, y como mucho WHATS_NEW_MAX_ITEMS en total
 function ES.WhatsNewItems(notes)
   local items, withImage = {}, false
   for _, v in ipairs(notes or {}) do
-    for _, it in ipairs(v.items) do if it.image then withImage = true end end
+    for _, it in ipairs(v.items) do
+      if it.choice then return { it } end
+      if it.image then withImage = true end
+    end
   end
   local function Group(it)
     if withImage then return it.image and 1 or nil end
@@ -231,7 +248,8 @@ local frame
 -- cualquier pantalla (la interfaz mide al menos 768 de alto).
 -- Medidas de la lista: arriba la cabecera (30 + 70 + 8), abajo el pie (52), y 10 de
 -- margen del scroll arriba y abajo
-local SIZES = { rows = { w = 540, h = 500 }, pages = { w = 900, h = 660 } }
+-- (choice: la diapositiva de una novedad con elección, más pequeña que la lista)
+local SIZES = { rows = { w = 540, h = 500 }, pages = { w = 900, h = 660 }, choice = { w = 520, h = 330 } }
 for _, s in pairs(SIZES) do
   s.content = s.w - 28 - 24
   s.visible = s.h - 108 - 52 - 20
@@ -254,6 +272,108 @@ function ES.WhatsNewPageLayout(image, size)
   if w > size.w - 2 * PAGE_SIDE then w = size.w - 2 * PAGE_SIDE; h = w / ratio end
   w, h = math.floor(w + 0.5), math.floor(h + 0.5)
   return { img = { x = math.floor((size.w - w) / 2), y = PAGE_TOP, w = w, h = h } }
+end
+
+-- La opción de ES.OPTIONS con esa clave (Options.lua)
+local function OptionByKey(key)
+  for _, o in ipairs(ES.OPTIONS or {}) do if o.key == key then return o end end
+end
+
+-- Diapositiva de una novedad con elección (it.choice): el título y, debajo, una ficha
+-- por opción, una al lado de otra, con una casilla grande, el nombre y una línea corta
+-- (su `short`). Como en /cj opciones (CreateRadio): una sola marcada, pulsar la marcada
+-- no la quita y la que no se puede (Auctionator sin instalar) sale en gris con su
+-- offDesc en lugar de la línea. Clic en la ficha o en la casilla: la elige al momento
+local TILE_W, TILE_H, TILE_GAP = 210, 100, 20
+local function CreateChoiceView(f)
+  local UI = ES.UI
+  local v = CreateFrame("Frame", nil, f)
+  v:SetAllPoints()
+  v:Hide()
+  -- El fondo de las pestañas del addon: el panel marrón (BROWN.group) con su margen,
+  -- sobre el fondo oscuro de la ventana; bajo la X de cerrar y encima de los botones
+  v.panel = UI.Panel(v, UI.BROWN.group[1], UI.BROWN.group[2], UI.BROWN.group[3], UI.BROWN.group[4])
+  v.panel:SetPoint("TOPLEFT", 14, -30)
+  v.panel:SetPoint("BOTTOMRIGHT", -14, 52)
+  v.title = UI.Label(v.panel, "", "GameFontNormalHuge")
+  v.title:SetPoint("TOP", 0, -22)
+  v.title:SetWidth(SIZES.choice.w - 80)
+  v.title:SetJustifyH("CENTER")
+  v.title:SetTextColor(GOLD[1], GOLD[2], GOLD[3])
+  v.hint = UI.Label(v.panel, "", "GameFontDisableSmall")
+  v.hint:SetPoint("BOTTOM", 0, 12)
+  v.hint:SetWidth(SIZES.choice.w - 60)
+  v.hint:SetJustifyH("CENTER")
+  v.tiles = {}
+
+  local function Pick(tile)
+    local o, c = v.option, tile.choice
+    if o and c and (not c.enabled or c.enabled()) and o.value() ~= c.on then ES:SetOption(o.key, c.on) end
+    v:Refresh() -- (y vuelve a marcar la suya)
+  end
+  for i = 1, 2 do
+    local t = CreateFrame("Button", nil, v.panel, "BackdropTemplate")
+    t:SetSize(TILE_W, TILE_H)
+    UI.RowStyle(t)
+    t.cb = CreateFrame("CheckButton", nil, t, "UICheckButtonTemplate")
+    t.cb:SetSize(40, 40)
+    t.cb:SetPoint("TOPLEFT", 10, -10)
+    t.name = UI.Label(t, "", "GameFontNormalLarge")
+    t.name:SetPoint("LEFT", t.cb, "RIGHT", 4, 1)
+    t.name:SetPoint("RIGHT", -8, 0)
+    t.name:SetJustifyH("LEFT")
+    t.name:SetWordWrap(false)
+    t.off = UI.Label(t, "", "GameFontHighlightSmall")
+    t.off:SetPoint("TOPLEFT", t.cb, "BOTTOMLEFT", 4, -2)
+    t.off:SetPoint("RIGHT", -8, 0)
+    t.off:SetJustifyH("LEFT")
+    t:SetScript("OnClick", Pick)
+    t.cb:SetScript("OnClick", function() Pick(t) end)
+    t:SetScript("OnEnter", function(self)
+      if self.can then self:SetBackdropBorderColor(unpack(UI.ROW_BORDER_HOVER)) end
+    end)
+    t:SetScript("OnLeave", function(self) self:SetBackdropBorderColor(unpack(UI.ROW_BORDER)) end)
+    v.tiles[i] = t
+  end
+
+  -- Rellena con la novedad `it` (su opción) y lo guardado
+  function v:Fill(it)
+    self.option = OptionByKey(it.choice)
+    self.title:SetText(L[it.title])
+    self.hint:SetText(L["Se cambia cuando quieras en /cj opciones, General."])
+    self:Refresh()
+  end
+  function v:Refresh()
+    local o = self.option
+    local choices = o and o.choices or {}
+    local current = o and o.value()
+    local n = math.min(#choices, #self.tiles)
+    local left = -((n * TILE_W + (n - 1) * TILE_GAP) / 2)
+    for i, t in ipairs(self.tiles) do
+      local c = choices[i]
+      t.choice = i <= n and c or nil
+      if t.choice then
+        local can = not c.enabled or c.enabled()
+        t.can = can
+        t:ClearAllPoints()
+        t:SetPoint("TOPLEFT", self.panel, "TOP", left + (i - 1) * (TILE_W + TILE_GAP), -96)
+        t.cb:SetChecked(c.on == current)
+        t.cb:SetEnabled(can)
+        t:SetEnabled(can)
+        t.name:SetText(c.text) -- (nombres de addons: no se traducen)
+        if can then t.name:SetTextColor(1, 1, 1) else t.name:SetTextColor(0.5, 0.5, 0.5) end
+        -- (debajo: qué hace; en gris, por qué no se puede)
+        local line = (not can and c.offDesc) or c.short
+        t.off:SetText(line and L[line] or "")
+        if can then t.off:SetTextColor(0.78, 0.74, 0.66) else t.off:SetTextColor(0.5, 0.5, 0.5) end
+        t:SetAlpha(can and 1 or 0.75)
+        t:Show()
+      else
+        t:Hide()
+      end
+    end
+  end
+  return v
 end
 
 local function CreateWindow()
@@ -350,6 +470,8 @@ local function CreateWindow()
   page.next = Arrow(1)
   page.next:SetPoint("LEFT", page.label, "RIGHT", 10, 0)
   f.page = page
+  -- La diapositiva de una novedad con elección (it.choice)
+  f.choiceView = CreateChoiceView(f)
 
   -- ¡Entendido! (en las páginas, Siguiente hasta la última)
   f.ok = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
@@ -453,9 +575,30 @@ function ES:ShowWhatsNew(notes, dev)
   f.title:SetText(L["Novedades"])
   f.sub:SetText(string.format(L["Crafter's Journal %s: esto es lo nuevo desde la última vez."], notes[1].version))
 
+  -- Una novedad con elección: su diapositiva sola, en una ventana pequeña (sin cabecera,
+  -- lista ni páginas)
+  f.choiceView:Hide()
+  if items[1] and items[1].choice then
+    f.pages, f.pageIndex = nil, nil
+    f.size = SIZES.choice
+    f:SetSize(SIZES.choice.w, SIZES.choice.h)
+    f.head:Hide()
+    f.list:Hide()
+    f.page:Hide()
+    f.ok:SetPoint("BOTTOMRIGHT", -16, 16)
+    f.ok:SetText(L["¡Entendido!"])
+    f.devTag:SetPoint("TOPLEFT", 16, -12)
+    f.choiceView:Fill(items[1])
+    f.choiceView:Show()
+    f:Show()
+    return
+  end
+
   -- Con novedades con imagen: páginas, en una ventana grande (la imagen ya dice qué es
   -- y de qué versión: sin cabecera, lista ni texto)
-  if items[1] and items[1].image then
+  local paged = false
+  for _, it in ipairs(items) do if it.image then paged = true end end
+  if paged then
     f.size = SIZES.pages
     f:SetSize(SIZES.pages.w, SIZES.pages.h)
     f.head:Hide()

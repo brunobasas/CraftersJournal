@@ -199,12 +199,12 @@ local function DetectAuctionHouse()
 end
 
 -- Aviso en una ventana (antes, una línea en el chat que pasaba desapercibida): en la
--- neutral el addon aún no funciona. Su casilla "No volver a mostrar este aviso" lo
--- apaga (ES.db.noNeutralAHNotice); se vuelve a encender en /cj opciones
+-- neutral el addon aún no funciona. Sale una vez por sesión, sin casilla para apagarlo
+-- ni opción (antes, ES.db.noNeutralAHNotice: se borra al cargar)
 function ES:NeutralAHNotice()
   if not self.Confirm then return end
   self:Confirm({
-    key = "noNeutralAHNotice", single = true, extra = 32,
+    noCheck = true, single = true, extra = 32,
     title = L["Casa de Subastas neutral"],
     text = L["Crafter's Journal aún no funciona en la Casa de Subastas neutral. Aquí no escanea ni abre sus ventanas; tus rutas y precios siguen siendo los de la Casa de Subastas de tu facción."],
     yes = L["Aceptar"], closeOn = "AUCTION_HOUSE_CLOSED",
@@ -1007,9 +1007,13 @@ events:SetScript("OnEvent", function(_, event, arg1)
     -- Precios de vendedor "aprendidos" de tus ventas: ya no se usan (Ledger.lua; dos
     -- ventas cobradas juntas dejaban el doble). Fuera, con lo que se hubiera apuntado mal
     ES.db.sellSeen, ES.db.sellSeenCleaned = nil, nil
-    -- (opción "Leer los escaneos de otros addons": ahora se leen siempre, el addon ya no
-    -- escanea por su cuenta, ver Scanner.lua)
+    -- (opción "Leer los escaneos de otros addons": ahora se leen siempre, ver Scanner.lua)
     ES.db.noForeignScans = nil
+    -- (la X del consejo de instalar Auctionator en Inversiones: ya no hay consejo, sin
+    -- Auctionator escanea el addon)
+    ES.db.investNoAuctionatorTip = nil
+    -- (opción del aviso de la AH neutral: ya no es una opción, sale una vez por sesión)
+    ES.db.noNeutralAHNotice = nil
     -- (opciones de Inversiones de versiones de desarrollo: la cartera es siempre de la
     -- cuenta, y el precio se elige con investPriceMode)
     ES.db.investPerChar, ES.db.investPriceTotal = nil, nil

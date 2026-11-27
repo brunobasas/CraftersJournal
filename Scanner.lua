@@ -1,9 +1,11 @@
 local _, ES = ...
 local L = ES.L
 
--- Escaneo completo de la AH. El addon no lo pide: lo pide Auctionator (el botón
--- Escanear lanza el suyo) u otro addon, y el addon lee esas mismas subastas cuando
--- llegan, con cualquiera de las dos APIs:
+-- Escaneo completo de la AH. Dos modos (la opción «Modo de escaneo», UsesAuctionator): en
+-- el modo Auctionator, el botón Escanear lanza el suyo y el addon lee esas subastas; en
+-- modo Crafter's Journal (también sin Auctionator), lo pide el propio addon y el de
+-- Auctionator no se lee. En los dos se leen los escaneos completos que pida otro addon
+-- que no sea Auctionator. Con cualquiera de las dos APIs:
 --  * Clásica: QueryAuctionItems(getAll) + AUCTION_ITEM_LIST_UPDATE
 --  * Moderna: C_AuctionHouse.ReplicateItems + REPLICATE_ITEM_LIST_UPDATE
 -- Ambas devuelven los mismos campos en el mismo orden por subasta.
@@ -53,9 +55,24 @@ end
 
 local frame = CreateFrame("Frame")
 
--- (qué API seguir si no hay ganchos, ver StartWithAuctionator)
+-- (qué API pedir en modo Crafter's Journal, y cuál seguir si no hay ganchos: StartWithAuctionator)
 local function UseLegacyAPI()
   return QueryAuctionItems ~= nil
+end
+
+-- ¿Está Auctionator cargado? (desactivado en la lista de addons no está cargado: cuenta
+-- como sin él). Solo para la opción y la cuenta de 15 min de Auctionator: de dónde salen
+-- los datos lo dice UsesAuctionator
+function Scanner.HasAuctionator()
+  return type(Auctionator) == "table"
+end
+
+-- ¿Se usa Auctionator? Cargado y con «Auctionator» elegido en el «Modo de escaneo» (ES.db.noAuctionator
+-- sin marcar). Dos modos, cada uno con una sola fuente: con Auctionator, su escaneo y su
+-- historial de precios; si no («solo Crafter's Journal»), el escaneo del addon y sus días
+-- apuntados, y nada leído de Auctionator (PriceHistory, Market:AddonPrice, InvestUI)
+function Scanner.UsesAuctionator()
+  return Scanner.HasAuctionator() and not (ES.db and ES.db.noAuctionator)
 end
 
 local function SetStatus(text)
@@ -96,17 +113,79 @@ function Scanner:Start()
     return
   end
 
-  -- El escaneo lo pide Auctionator y el addon lee esos mismos datos: un solo escaneo
-  -- para los dos (el servidor solo deja uno cada 15 min, y si escanean los dos uno se
-  -- queda sin respuesta), y Auctionator guarda su historial de precios, el que usa la
-  -- pestaña Inversiones. Sin Auctionator no se escanea (el addon ya no pide el suyo)
-  local problem = Scanner.AuctionatorProblem()
-  if problem then
-    ES:Print(problem)
-    SetStatus(problem)
+  -- En el modo Auctionator, el escaneo lo pide Auctionator y el addon lee esos mismos
+  -- datos: un solo escaneo para los dos (el servidor solo deja uno cada 15 min, y el de
+  -- Auctionator solo escucha lo que pide él: si pidiera el addon, su botón se quedaría sin
+  -- respuesta), y Auctionator guarda su historial de precios, el que usa la pestaña
+  -- Inversiones. En ese modo nunca se pide uno propio, tampoco si aún no deja escanear
+  if Scanner.UsesAuctionator() then
+    local problem = Scanner.AuctionatorProblem()
+    if problem then
+      ES:Print(problem)
+      SetStatus(problem)
+      return
+    end
+    self:StartWithAuctionator(Scanner.AuctionatorFrame())
     return
   end
-  self:StartWithAuctionator(Scanner.AuctionatorFrame())
+  self:StartOwn()
+end
+
+-- En modo Crafter's Journal (con Auctionator o sin él), el escaneo lo pide el addon (con
+-- la API que tenga el cliente)
+function Scanner:StartOwn()
+  local api
+  if UseLegacyAPI() then
+    local _, canGetAll = CanSendAuctionQuery()
+    if not canGetAll then
+      local msg = L["El servidor aún no permite un escaneo completo (quizá otro addon escaneó hace poco). Inténtalo más tarde."]
+      ES:Print(msg)
+      SetStatus(msg)
+      return
+    end
+    api = "legacy"
+  elseif C_AuctionHouse and C_AuctionHouse.ReplicateItems then
+    api = "modern"
+  else
+    ES:Print(L["No se encontró ninguna API de subastas compatible en este cliente."])
+    return
+  end
+  ES:ScanLog("escaneo propio (modo Crafter's Journal)")
+  self:Begin(api, nil, true)
+end
+
+-- Con Auctionator cargado pero en modo Crafter's Journal, el escaneo propio
+-- también gasta el suyo: su escaneo completo no escucha un ReplicateItems que no pidió y
+-- lleva su propia cuenta de 15 min (SavedState.TimeOfLastReplicateScan, en sus
+-- SavedVariables). Se apunta ahí la hora, la misma que pone él al lanzar el suyo: así su
+-- botón de escaneo completo dice cuánto falta y su autoscan espera, en vez de pedir uno al
+-- que el servidor no contestará
+function Scanner.TellAuctionator(t)
+  if not Scanner.HasAuctionator() then return end
+  pcall(function()
+    local state = Auctionator.SavedState
+    if type(state) == "table" then state.TimeOfLastReplicateScan = t end
+  end)
+end
+
+-- Silencia a otros marcos (la UI de Blizzard, otros addons) mientras llega el escaneo
+-- propio: intentar pintar decenas de miles de subastas congela el juego. Siguiendo el
+-- escaneo de otro addon no se silencia a nadie: ese addon necesita su evento
+function Scanner:MuteOthers(event)
+  if not GetFramesRegisteredForEvent then return end
+  self.muted = { GetFramesRegisteredForEvent(event) }
+  self.mutedEvent = event
+  for _, f in ipairs(self.muted) do
+    if f ~= frame then f:UnregisterEvent(event) end
+  end
+end
+
+function Scanner:UnmuteOthers()
+  if not self.muted then return end
+  for _, f in ipairs(self.muted) do
+    if f ~= frame then f:RegisterEvent(self.mutedEvent) end
+  end
+  self.muted, self.mutedEvent = nil, nil
 end
 
 ---------------------------------------------------------------------------
@@ -121,6 +200,15 @@ function Scanner.AuctionatorFrame()
   if type(f) == "table" and type(f.InitiateScan) == "function" then return f end
 end
 
+-- ¿El escaneo completo que se acaba de pedir es el de Auctionator? Su marco se marca «en
+-- curso» (inProgress) justo antes de pedirlo, con la AH moderna y con la clásica, y así
+-- sigue hasta acabar o cerrar la AH (OnForeignScan: en modo «solo Crafter's Journal» no
+-- se lee)
+function Scanner.AuctionatorScanning()
+  local f = Scanner.AuctionatorFrame()
+  return f ~= nil and f.inProgress == true
+end
+
 -- ¿Auctionator aún no deja otro escaneo? (su propia cuenta atrás, o ya escaneando)
 function Scanner.AuctionatorWaits()
   local f = Scanner.AuctionatorFrame()
@@ -129,11 +217,11 @@ function Scanner.AuctionatorWaits()
   return ok and not can
 end
 
--- ¿Qué falta en Auctionator para poder escanear? nil si nada (la AH abierta y el
--- límite de 15 min se miran aparte)
+-- ¿Qué falta en Auctionator para poder escanear? nil si nada, o si no se usa (entonces
+-- escanea el addon). La AH abierta y el límite de 15 min se miran aparte
 function Scanner.AuctionatorProblem()
-  if type(Auctionator) ~= "table" then
-    return L["Instala Auctionator para escanear la AH: el addon lee su escaneo completo."]
+  if not Scanner.UsesAuctionator() then
+    return nil
   elseif not Scanner.AuctionatorFrame() then
     -- (su marco de escaneo lo crea al abrirse la AH)
     return L["Auctionator aún no está listo para escanear: espera un momento o vuelve a abrir la AH."]
@@ -147,9 +235,10 @@ end
 -- defecto, hace un resumen (C_AuctionHouse.SendBrowseQuery: solo el mínimo y las
 -- unidades de cada objeto) y no el completo (ReplicateItems), y el addon solo usa
 -- escaneos completos. Con la AH clásica siempre hace el completo. Si falta algo de su
--- configuración o da error: falso, como antes de mirarlo
+-- configuración o da error: falso, como antes de mirarlo. En modo Crafter's Journal,
+-- también falso: su botón no es el del addon y no hay nada que avisar
 function Scanner.AuctionatorSummaryMode()
-  if type(Auctionator) ~= "table" then return false end
+  if not Scanner.UsesAuctionator() then return false end
   local inc, cfg = Auctionator.IncrementalScan, Auctionator.Config
   -- (Events solo lo define Auctionator con la AH moderna)
   if type(inc) ~= "table" or type(inc.Events) ~= "table" then return false end
@@ -173,7 +262,8 @@ end
 -- Se dice en el chat una vez por sesión, con cómo tener uno completo
 function Scanner:OnAuctionatorSummaryScan()
   ES:ScanLog("Auctionator empezó un escaneo en modo resumen (no se usa)")
-  if self.summaryWarned then return end
+  -- (en modo Crafter's Journal, el addon escanea solo: nada que avisar)
+  if self.summaryWarned or not Scanner.UsesAuctionator() then return end
   self.summaryWarned = true
   -- (con los botones escondidos, en gris: lo que falta, sin "pulsa Escanear")
   local lock = ES.ScanButtonsLock and ES:ScanButtonsLock()
@@ -221,17 +311,29 @@ local function Guarded(fn, what)
 end
 Scanner.Guarded = Guarded -- (pruebas)
 
--- Empieza a esperar los datos del escaneo completo que acaba de pedir Auctionator u
--- otro addon, para leerlos cuando lleguen (ver OnForeignScan). No pide nada ni silencia
--- a nadie: ese addon necesita su evento. `before`: las subastas que había cuando lo pidió
-function Scanner:Begin(api, before)
+-- Empieza a esperar los datos de un escaneo completo para leerlos cuando lleguen.
+-- Sin `own`, lo acaba de pedir Auctionator u otro addon (ver OnForeignScan): no se pide
+-- nada ni se silencia a nadie, ese addon necesita su evento. Con `own` (modo Crafter's
+-- Journal), lo pide el addon: apunta la petición para el límite de 15 min, silencia a los demás
+-- marcos mientras llega (MuteOthers) y lo pide al servidor.
+-- `before`: las subastas que había cuando se pidió
+function Scanner:Begin(api, before, own)
   self.api = api
   self.event = api == "legacy" and "AUCTION_ITEM_LIST_UPDATE" or "REPLICATE_ITEM_LIST_UPDATE"
-  self.follow = true
-  -- (el escaneo de Auctionator que pediste con Escanear: es tu escaneo)
-  self.viaAuctionator = self.launchingAuctionator or nil
+  self.follow = not own or nil
+  -- (el escaneo de Auctionator que pediste con Escanear)
+  self.viaAuctionator = not own and self.launchingAuctionator or nil
+  -- Tu escaneo: el que pediste con Escanear, en cualquiera de los dos modos (mensajes en
+  -- el chat y aviso de fallo junto al último escaneo)
+  self.mine = own or self.viaAuctionator or nil
+  -- De quién es: "own" (lo pidió el addon), "auctionator" (lo pidió Auctionator: con
+  -- Escanear o por su cuenta) u "other" (otro addon). Al cambiar de modo, el del otro
+  -- modo se cancela (OnModeChanged)
+  self.source = own and "own"
+    or (self.viaAuctionator or (Scanner.HasAuctionator() and Scanner.AuctionatorScanning())) and "auctionator"
+    or "other"
 
-  ES:ScanLog((self.viaAuctionator and "leyendo el escaneo de Auctionator, API "
+  ES:ScanLog((own and "pedido por el addon, API " or self.source == "auctionator" and "leyendo el escaneo de Auctionator, API "
     or "leyendo el escaneo de otro addon, API ") .. self.api)
   self.state = "waiting"
   self.scanID = (self.scanID or 0) + 1
@@ -240,11 +342,32 @@ function Scanner:Begin(api, before)
   self.waited = 0
   self.gotEvent = false
   self.arrived = nil
+  if own then
+    -- La barrera cuenta desde la petición: el servidor la cuenta aunque no responda
+    -- (la de otro addon ya la anotó OnForeignScan)
+    LastFullScan()[ES:CharKey()] = self.requestTime
+    Scanner.TellAuctionator(self.requestTime)
+    self:MuteOthers(self.event)
+  end
   ES.SafeRegister(frame, self.event) -- si no existe, el sondeo de cada segundo detecta los datos igual
   ES:RefreshScanButtons()
   SetProgress(WAIT_PROGRESS)
 
   before = before or self:CountResults()
+
+  if own then
+    self.ownRequest = true -- para que el gancho no lo tome por otro addon
+    if self.api == "legacy" then
+      -- Evita un error conocido de la UI clásica con calidad -1
+      if ITEM_QUALITY_COLORS and not ITEM_QUALITY_COLORS[-1] then
+        ITEM_QUALITY_COLORS[-1] = { r = 0, g = 0, b = 0 }
+      end
+      pcall(QueryAuctionItems, "", nil, nil, 0, nil, nil, true, false, nil)
+    else
+      pcall(C_AuctionHouse.ReplicateItems)
+    end
+    self.ownRequest = nil
+  end
 
   -- Contador visible + sondeo por si el evento no llega
   local id = self.scanID
@@ -290,7 +413,8 @@ function Scanner:Begin(api, before)
     end
     lastCount = count
 
-    SetStatus(self.viaAuctionator and string.format(L["Escaneando con Auctionator... %d s"], elapsed)
+    SetStatus(self.source == "auctionator" and string.format(L["Escaneando con Auctionator... %d s"], elapsed)
+      or not self.follow and string.format(L["Pidiendo los datos de la AH al servidor... %d s"], elapsed)
       or string.format(L["Leyendo el escaneo que pidió otro addon... %d s"], elapsed))
     C_Timer.After(1, SafeTick)
   end
@@ -313,6 +437,7 @@ function Scanner:Abort(reason, closedAH)
   -- (las subastas del otro addon ya llegaban o se estaban leyendo)
   local arrived = self.arrived or self.state == "processing"
   frame:UnregisterAllEvents()
+  self:UnmuteOthers()
   self.state = "idle"
   self.arrived = nil
   self.scanID = (self.scanID or 0) + 1 -- invalida lotes pendientes
@@ -327,9 +452,11 @@ function Scanner:Abort(reason, closedAH)
     -- Leyendo el escaneo de otro addon, que aún no había llegado (el servidor no
     -- respondió, o cerraste la AH antes): no lo pediste tú, así que ni aviso en el chat
     -- ni "Cancelado" junto al último escaneo; solo el estado y el registro
-    self.follow = nil
-    ES:ScanLog("no se pudo leer el escaneo de otro addon: " .. tostring(reason))
-    SetStatus(L["No se pudo leer el escaneo de otro addon. Puedes escanear tú cuando el botón lo permita."])
+    local fromAuctionator = self.source == "auctionator"
+    self.follow, self.source = nil, nil
+    ES:ScanLog("no se pudo leer el escaneo de " .. (fromAuctionator and "Auctionator" or "otro addon") .. ": " .. tostring(reason))
+    SetStatus(fromAuctionator and L["No se pudo leer el escaneo de Auctionator. Puedes escanear tú cuando el botón lo permita."]
+      or L["No se pudo leer el escaneo de otro addon. Puedes escanear tú cuando el botón lo permita."])
     ES:RefreshScanButtons()
     return
   end
@@ -339,13 +466,34 @@ function Scanner:Abort(reason, closedAH)
   -- ahora, y la de entonces se quedaba parada ("en 14:53")
   if type(ES.db.lastScanFail) ~= "table" then ES.db.lastScanFail = {} end
   ES.db.lastScanFail[self.key or ES:RealmKey()] = { time = time(), reason = reason }
-  self.follow, self.viaAuctionator = nil, nil
+  self.follow, self.viaAuctionator, self.mine, self.source = nil, nil, nil, nil
   if reason then
     -- En el chat, sí: es de ese momento y no cambia
     local wait = self:SecondsUntilNextScan()
     ES:Print(wait > 0 and (reason .. " " .. string.format(L["Podrás volver a escanear en %s."], ES.Countdown(wait))) or reason)
     SetStatus(reason)
   end
+  ES:RefreshScanButtons()
+end
+
+-- Cambió el modo de escaneo (la opción noAuctionator, Options.lua): un escaneo en curso
+-- que es del otro modo se cancela, también si ya se estaba guardando. Si no, se guardaría
+-- en el modo nuevo lo que no es suyo: el de Auctionator en modo «solo Crafter's Journal»
+-- o el propio en modo Auctionator. El de otro addon se lee en los dos modos: sigue
+function Scanner:OnModeChanged()
+  if not self:IsBusy() then return end
+  local uses = Scanner.UsesAuctionator()
+  if not ((uses and self.source == "own") or (not uses and self.source == "auctionator")) then return end
+  ES:ScanLog("cambio de modo de escaneo: se cancela el escaneo en curso (" .. tostring(self.source) .. ")")
+  frame:UnregisterAllEvents()
+  self:UnmuteOthers()
+  self.state = "idle"
+  self.arrived = nil
+  self.scanID = (self.scanID or 0) + 1 -- invalida lotes pendientes (también los de guardar)
+  self.follow, self.viaAuctionator, self.mine, self.source = nil, nil, nil, nil
+  local msg = L["Has cambiado el modo de escaneo: el escaneo en curso no se guarda."]
+  ES:Print(msg)
+  SetStatus(msg)
   ES:RefreshScanButtons()
 end
 
@@ -524,10 +672,13 @@ end
 -- escanea ni se anuncia con los precios de antes) pero cerrar la AH no lo cancela,
 -- los datos ya están leídos
 function Scanner:Finish(items, sigs, total)
+  -- (ya está todo leído: los marcos silenciados por el escaneo propio vuelven a oírlo)
+  self:UnmuteOthers()
   -- Un escaneo vacío es un fallo del servidor: guardarlo borraría los precios
   -- buenos y haría creer que todo se ha vendido
   if total == 0 then
     self.state = "idle"
+    self.follow, self.viaAuctionator, self.mine, self.source = nil, nil, nil, nil
     local msg = L["El servidor devolvió 0 subastas; no se guarda este escaneo. Inténtalo más tarde."]
     ES:Print(msg)
     SetStatus(msg)
@@ -619,32 +770,35 @@ function Scanner:Save(saved, unique, knownOwners, sigs, total, mins)
 
   local msg = string.format(L["Escaneo completado: %d subastas, %d objetos distintos."], total, unique)
   local followed = self.follow
-  local viaAuctionator = self.viaAuctionator
-  if viaAuctionator then
+  local mine, source = self.mine, self.source
+  if source == "auctionator" then
     msg = msg .. L[" (con el escaneo de Auctionator)"]
+  elseif mine then
+    msg = msg .. L[" (con el escaneo de Crafter's Journal)"]
   elseif followed then
     msg = msg .. L[" (con el escaneo que pidió otro addon)"]
   end
-  self.follow, self.viaAuctionator = nil, nil
-  if scans < 3 and viaAuctionator then
+  self.follow, self.viaAuctionator, self.mine, self.source = nil, nil, nil, nil
+  if scans < 3 and mine then
     msg = msg .. L[" Las alertas de mercado necesitan unos días de escaneos: con 1-2 al día basta."]
   end
   -- El escaneo de otro addon (el automático de Auctionator o de ForeverForge, cada vez
   -- que abres la AH) no escribe en el chat: se repetía en cada visita. Se ve en "Último
-  -- escaneo: hace 0 min" y el estado. El de Auctionator que pediste con Escanear, sí
-  if viaAuctionator then ES:Print(msg) end
+  -- escaneo: hace 0 min" y el estado. El que pediste con Escanear (con Auctionator o
+  -- sin él), sí
+  if mine then ES:Print(msg) end
   SetStatus(msg)
   ES:RefreshScanButtons()
   ES:OnScanComplete(scan, followed)
 end
 
 -- Auctionator (con su botón, el de Crafter's Journal o su escaneo automático),
--- ForeverForge_Auction, TSM... piden un escaneo completo: gasta los 15 min de la
--- cuenta. Se anota la barrera (el botón muestra la cuenta atrás real) y se leen esos
--- mismos datos cuando lleguen (Begin): es la única forma de tener los precios de la
--- AH, Crafter's Journal nunca pide un escaneo por su cuenta
+-- ForeverForge_Auction... piden un escaneo completo: gasta los 15 min de la cuenta. Se
+-- anota la barrera (el botón muestra la cuenta atrás real) y se leen esos mismos datos
+-- cuando lleguen (Begin). El que pide el propio addon en modo Crafter's Journal
+-- (ownRequest) no es de otro addon: lo sigue su Begin
 function Scanner:OnForeignScan(api)
-  if not ES.db then return end
+  if self.ownRequest or not ES.db then return end
   -- Dentro del límite del servidor (la petición anterior fue hace menos de 15 min) no
   -- va a responder: no se espera nada ni se mueve la cuenta atrás. Pasaba tras un
   -- /reload justo después de escanear: al abrir la AH, el escaneo automático de
@@ -659,6 +813,18 @@ function Scanner:OnForeignScan(api)
     return
   end
   LastFullScan()[OTHER_ADDON] = time()
+  -- En modo «solo Crafter's Journal» con Auctionator cargado, el
+  -- escaneo que pida Auctionator por su cuenta (su botón o su autoscan) no se lee: o todo
+  -- de Auctionator o todo de Crafter's Journal. Solo cuenta para los 15 min del servidor
+  if not Scanner.UsesAuctionator() and Scanner.HasAuctionator() and Scanner.AuctionatorScanning() then
+    ES:ScanLog("Auctionator pidió su escaneo completo (API " .. api .. "): en modo solo Crafter's Journal no se lee")
+    if not self:IsBusy() then
+      SetStatus(string.format(L["Auctionator acaba de pedir un escaneo completo: el servidor no permitirá otro hasta dentro de %s."],
+        ES.Countdown(self:SecondsUntilNextScan())))
+    end
+    ES:RefreshScanButtons()
+    return
+  end
   ES:ScanLog("otro addon pidió un escaneo completo (API " .. api .. ")")
   if not self:IsBusy() then
     -- Lo que hay ahora, antes de que lleguen los datos nuevos (para no tomar por

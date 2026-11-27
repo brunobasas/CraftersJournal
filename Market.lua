@@ -630,7 +630,8 @@ local ADDON_PRICE_MAX_DAYS = 3 -- Auctionator: más viejo que esto no se usa
 -- { price, source = "Auctionator" | "TSM", age (días, si se sabe) } o nil
 function Market:AddonPrice(itemID)
   if not itemID or (ES.db and ES.db.noAddonPrices) then return nil end
-  local atr = Auctionator and Auctionator.API and Auctionator.API.v1
+  -- (en modo Crafter's Journal, nada de Auctionator: ES.Scanner.UsesAuctionator)
+  local atr = ES.Scanner.UsesAuctionator() and Auctionator and Auctionator.API and Auctionator.API.v1
   if atr and atr.GetAuctionPriceByItemID then
     local ok, price = pcall(atr.GetAuctionPriceByItemID, CALLER, itemID)
     if ok and type(price) == "number" and price > 0 then

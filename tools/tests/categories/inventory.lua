@@ -81,6 +81,17 @@ test("sin precio de la AH: al vendedor, y lo dice", function()
   expect_eq(e.vendorN, 7, "al vendedor")
 end)
 
+test("precio de respaldo de Auctionator: solo en el modo de escaneo Auctionator", function()
+  ES.db.scans[ES:RealmKey()].items[4306] = nil -- (tu escaneo no lo tiene)
+  InstallAuctionator()
+  AUCTIONATOR_LATEST = { [4306] = { price = 500, age = 0 } }
+  local p = expect(ES.Market:AddonPrice(4306), "con Auctionator, sin su precio de respaldo")
+  expect_eq(p.source, "Auctionator", "fuente")
+  expect_eq(p.price, 500, "precio")
+  ES:SetOption("noAuctionator", false)
+  expect_eq(ES.Market:AddonPrice(4306), nil, "con la opción desactivada, se usa el precio de Auctionator")
+end)
+
 test("lo que pide tu ruta empezada se guarda", function()
   local page, plan = StartRoute("Tailoring", 1, 75)
   local need = ES.Planner.RouteNeed("Tailoring", plan, 1, { keep = true })

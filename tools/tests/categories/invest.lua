@@ -104,6 +104,25 @@ test("historial: la bajada del último día se usa sin confirmar", function()
   expect(h.now.unconfirmed, "no marca la bajada sin confirmar")
 end)
 
+-- Elemental Fire (Discord 2026-11-27): de ~48s a 1g 50s con 344 a la venta. Salía «precio
+-- de ahora 48s 49c» (subida sin confirmar) cuando ninguna estaba por debajo de 1g 50s
+test("historial: una subida con muchas unidades a la venta es el precio de ahora", function()
+  local FIRE = 7068
+  InstallAuctionator()
+  AUCTIONATOR_DAYS[FIRE] = { { ago = 2, min = 4700, avail = 300 }, { ago = 1, min = 4849, avail = 280 },
+    { ago = 0, min = 15047, avail = 344 } }
+  ES.PriceHistory.Clear()
+  local h = expect(ES.PriceHistory:Get(FIRE), "sin historial")
+  expect_eq(h.now.price, 15047, "precio de ahora: el de la AH, con 344 a la venta")
+  expect(not h.days[#h.days].spike, "hoy sale como subida sin confirmar")
+  -- La misma subida con solo 3 a la venta: un pico, sigue sin contar
+  AUCTIONATOR_DAYS[FIRE][3].avail = 3
+  ES.PriceHistory.Clear()
+  h = ES.PriceHistory:Get(FIRE)
+  expect_eq(h.now.price, 4849, "con 3 a la venta: el último día bueno")
+  expect(h.days[#h.days].spike, "con 3 a la venta no sale como subida sin confirmar")
+end)
+
 test("historial: precio viejo y cambio de los últimos 4 días", function()
   InstallAuctionator()
   Days(LOTUS, { [5] = 10 * G })
@@ -274,24 +293,26 @@ for _, state in ipairs({ "empty", "scan", "full" }) do
   end, { state = state })
 end
 
-local TIP = "Precios de tus últimos escaneos. Instala Auctionator para volver a escanear y tener el historial de precios."
+local SOURCE_SCANS = "Precios de tus escaneos con Crafter's Journal: se ponen al día cada vez que escaneas."
 
-test("pestaña: sin Auctionator, sin escaneos, aconseja Auctionator y enseña lo que no depende del precio", function()
+test("pestaña: sin Auctionator, sin escaneos, dice de dónde salen los precios y enseña lo que no depende del precio", function()
   Buy(SILK, 20, 2 * S)
+  Buy(LOTUS, 1, 9 * G)
   OpenPage("invest")
-  expect(Page().status:GetText():find(L[TIP], 1, true), "sin Auctionator no sale el consejo: %s", Page().status:GetText())
-  expect(Page().tipClose:IsShown(), "el consejo sin su X")
+  local status = Page().status:GetText()
+  expect(status:find(L[SOURCE_SCANS], 1, true), "la línea no dice que los precios son de tus escaneos: %s", status)
+  expect(status:find(string.format(L["%d sin precio: no cuentan en Vale hoy."], 2), 1, true), "la línea no dice cuántos no tienen precio: %s", status)
+  expect(not status:find("Auctionator", 1, true), "sin Auctionator, la línea habla de Auctionator: %s", status)
+  expect(Page().tipClose == nil, "sigue la X del consejo de instalar Auctionator")
   local c = expect(CardOf(SILK), "no hay ficha de Silk Cloth")
   expect(Plain(c.sub:GetText()):find("20 u", 1, true), "la ficha no dice las unidades: %s", c.sub:GetText())
-  expect(Plain(c.price:GetText()):find(L["Sin precio: instala Auctionator"], 1, true), "sin precio: %s", c.price:GetText())
-  expect_eq(Page().stats.cost:GetText(), ES.Money(40 * S), "invertido")
-  -- La X: no vuelve a salir (se recuerda)
-  Page().tipClose:GetScript("OnClick")(Page().tipClose)
-  expect(ES.db.investNoAuctionatorTip and not Page().status:GetText():find(L[TIP], 1, true) and not Page().tipClose:IsShown(),
-    "la X no quita el consejo")
-  ES:SelectPage("home")
-  OpenPage("invest")
-  expect(not Page().status:GetText():find(L[TIP], 1, true), "el consejo vuelve tras cerrarlo")
+  expect(Plain(c.price:GetText()):find(L["Sin precio: escanea la AH"], 1, true), "sin precio: %s", c.price:GetText())
+  expect_eq(Page().stats.cost:GetText(), ES.Money(40 * S + 9 * G), "invertido")
+  -- La gráfica sin datos: que escanees, sin mencionar Auctionator
+  ES:ShowInvestItem(SILK)
+  RunTimers()
+  local msg = ItemPage().chart.message:GetText()
+  expect_eq(msg, L["Sin precios de este objeto: escanea la AH para ver su evolución."], "gráfica sin datos")
 end)
 
 local SOURCE_AUCTIONATOR = "Precios del historial de Auctionator: se ponen al día cada vez que escaneas."
@@ -300,9 +321,48 @@ test("pestaña: con Auctionator, la línea dice que los precios son de su histor
   InstallAuctionator()
   Buy(SILK, 20, 2 * S)
   OpenPage("invest")
-  expect(not Page().status:GetText():find(L[TIP], 1, true) and not Page().tipClose:IsShown(), "con Auctionator sale el consejo")
+  expect(not Page().status:GetText():find(L[SOURCE_SCANS], 1, true), "con Auctionator, la línea dice que son de tus escaneos")
   expect(Page().status:GetText():find(L[SOURCE_AUCTIONATOR], 1, true), "la línea no dice de dónde salen los precios: %s", Page().status:GetText())
   for _, o in ipairs(ES.OPTIONS) do expect(o.key ~= "noInvestAuctionator", "sigue la opción de usar el historial de Auctionator") end
+end)
+
+test("en modo Crafter's Journal con Auctionator, solo tus escaneos; al volver al modo Auctionator, vuelve Auctionator", function()
+  Buy(LOTUS, 1, 9 * G)
+  ES.Invest.RecordScan(ScanWith(LOTUS, { 10 * G, 50 }))
+  InstallAuctionator()
+  Days(LOTUS, { [0] = 12 * G })
+  OpenPage("invest")
+  expect_eq(ES.PriceHistory:Get(LOTUS).now.price, 12 * G, "con la opción, el de Auctionator")
+  -- Desactivada: tus escaneos, al momento
+  ES:SetOption("noAuctionator", false)
+  local h = expect(ES.PriceHistory:Get(LOTUS), "desactivada, sin precio")
+  expect_eq(h.source, "scans", "fuente desactivada")
+  expect_eq(h.now.price, 10 * G, "desactivada, el de tus escaneos")
+  expect(Page().status:GetText():find(L[SOURCE_SCANS], 1, true), "la cabecera no dice que son tus escaneos: %s", Page().status:GetText())
+  expect(CardOf(LOTUS).price:GetText():find(ES.Money(10 * G), 1, true), "la ficha no se repinta: %s", CardOf(LOTUS).price:GetText())
+  -- Activada otra vez: Auctionator
+  ES:SetOption("noAuctionator", true)
+  expect_eq(ES.PriceHistory:Get(LOTUS).now.price, 12 * G, "activada otra vez, el de Auctionator")
+  expect(Page().status:GetText():find(L[SOURCE_AUCTIONATOR], 1, true), "la cabecera no vuelve a Auctionator: %s", Page().status:GetText())
+end)
+
+-- Antes, si no se podía leer la base de datos de Auctionator (otra versión), Inversiones
+-- pasaba sin decirlo a tus días aunque el modo fuera Auctionator
+test("modo Auctionator sin poder leer su historial: sin precio, nunca tus días", function()
+  Buy(LOTUS, 1, 9 * G)
+  ES.Invest.RecordScan(ScanWith(LOTUS, { 10 * G, 50 }))
+  InstallAuctionator()
+  Auctionator.Database = nil -- (su historial no se puede leer)
+  Auctionator.API = nil      -- (ni su último precio)
+  ES.PriceHistory.Clear()
+  expect(ES.Scanner.UsesAuctionator(), "no está en el modo Auctionator")
+  expect(ES.PriceHistory.Available(), "en el modo Auctionator, los precios no son de Auctionator")
+  expect_eq(ES.PriceHistory:Get(LOTUS), nil, "con el historial de Auctionator ilegible, sale un precio")
+  OpenPage("invest")
+  expect(Page().status:GetText():find(L[SOURCE_AUCTIONATOR], 1, true), "la cabecera no dice Auctionator: %s", Page().status:GetText())
+  expect(not CardOf(LOTUS).price:GetText():find(ES.Money(10 * G), 1, true), "la ficha usa tus días: %s", CardOf(LOTUS).price:GetText())
+  -- El buscador, sin su base de datos y sin errores
+  no_error(ES.InvestCandidates)
 end)
 
 test("Mayús+clic en el objeto (detalle, ficha y fila) lo busca en la AH", function()
@@ -397,15 +457,15 @@ test("detalle: la línea de lo que tienes no se corta (quita partes y las enseñ
   pos.GetWidth, pos.GetStringWidth = nil, nil
 end)
 
+-- (solo en modo «solo Crafter's Journal»: la escalera es de tu escaneo, como el precio)
 test("tooltip del precio: cuántas unidades había a ese precio en el último escaneo", function()
-  InstallAuctionator()
-  Days(WOOL, { [0] = 100, [1] = 128 })
-  AUCTIONATOR_LATEST = { [WOOL] = { price = 100, age = 0 } }
   Buy(WOOL, 40, 128)
-  -- Último escaneo de hace 5 min: 1 suelta a 1s, el resto desde 1s 25c
+  -- Último escaneo de hace 5 min: 1 suelta a 1s, 20 a 1s 25c y 20 a 1s 30c. El precio del
+  -- día es 1s 25c (donde se reúne el 5 %: 3 unidades)
   local key = ES:RealmKey()
   ES.db.scans[key] = { time = NOW - 300, total = 41, unique = 1,
     items = { [WOOL] = { listings = 3, quantity = 41, minUnit = 100, ladder = { 100, 1, 125, 20, 130, 20 } } } }
+  ES.Invest.RecordScan(ES.db.scans[key])
   OpenPage("invest")
   local function Tip()
     ResetTooltip()
@@ -414,8 +474,8 @@ test("tooltip del precio: cuántas unidades había a ese precio en el último es
     return table.concat(TOOLTIP, "\n")
   end
   local ago = ES.TimeAgo(NOW - 300)
-  local want = string.format(L["Último escaneo (%s): %s u a este precio o menos"], ago, "1")
-    .. string.format(L[" · el resto desde %s"], ES.Money(125))
+  local want = string.format(L["Último escaneo (%s): %s u a este precio o menos"], ago, "21")
+    .. string.format(L[" · el resto desde %s"], ES.Money(130))
   expect(Tip():find(want, 1, true), "la ficha no dice cuántas hay a ese precio: %s", Tip())
   -- El detalle: la celda Precio ahora
   ES:ShowInvestItem(WOOL)
@@ -434,6 +494,53 @@ test("tooltip del precio: cuántas unidades había a ese precio en el último es
   expect_eq(ES.InvestDepthLine(WOOL, 100), nil, "escaneo viejo")
   ES.db.scans[key].time = NOW
   expect_eq(ES.InvestDepthLine(LOTUS, 100), nil, "objeto que no salió en el escaneo")
+end)
+
+test("modo Auctionator: Inversiones no junta su precio con la escalera de tu escaneo", function()
+  InstallAuctionator()
+  Days(WOOL, { [0] = 100, [1] = 128 })
+  AUCTIONATOR_LATEST = { [WOOL] = { price = 100, age = 0 } }
+  Buy(WOOL, 40, 128)
+  local key = ES:RealmKey()
+  ES.db.scans[key] = { time = NOW - 300, total = 41, unique = 1,
+    items = { [WOOL] = { listings = 3, quantity = 41, minUnit = 100, ladder = { 100, 1, 125, 20, 130, 20 } } } }
+  OpenPage("invest")
+  ResetTooltip()
+  local c = expect(CardOf(WOOL), "sin ficha")
+  c:GetScript("OnEnter")(c)
+  local tip = table.concat(TOOLTIP, "\n")
+  local depth = L["Último escaneo (%s): %s u a este precio o menos"]:match("^(.-)%(")
+  expect(tip:find(L["Del historial de Auctionator"], 1, true), "la ficha no dice que es de Auctionator: %s", tip)
+  expect(not tip:find(depth, 1, true), "la ficha junta el precio de Auctionator con tu escaneo: %s", tip)
+  expect_eq(ES.InvestDepthLine(WOOL, 100), nil, "línea de tu escaneo en modo Auctionator")
+  -- El detalle tampoco
+  ES:ShowInvestItem(WOOL)
+  RunTimers()
+  ResetTooltip()
+  local cell = ItemPage().boxes.now
+  cell:GetScript("OnEnter")(cell)
+  expect(not table.concat(TOOLTIP, "\n"):find(depth, 1, true), "Precio ahora junta Auctionator con tu escaneo")
+  -- En modo «solo Crafter's Journal», sí (su precio y su escalera son de tu escaneo)
+  ES:SetOption("noAuctionator", false)
+  expect(ES.InvestDepthLine(WOOL, 125), "en modo propio, sin la línea de tu escaneo")
+end)
+
+test("buscador: lo que sugiere sale de la fuente del modo, y cambia al cambiar de modo", function()
+  local ONLY_ATR, ONLY_SCAN = 999001, 999002
+  InstallAuctionator()
+  AUCTIONATOR_DB[tostring(ONLY_ATR)] = {}
+  local key = ES:RealmKey()
+  ES.db.scans[key].items[ONLY_SCAN] = { minUnit = 5, quantity = 1, listings = 1, ladder = { 5, 1 } }
+  local list = ES.InvestCandidates()
+  local has = {}
+  for _, id in ipairs(list) do has[id] = true end
+  expect(has[ONLY_ATR], "modo Auctionator: no sugiere lo de Auctionator")
+  expect(not has[ONLY_SCAN], "modo Auctionator: sugiere lo de tu escaneo")
+  ES:SetOption("noAuctionator", false)
+  has = {}
+  for _, id in ipairs(ES.InvestCandidates()) do has[id] = true end
+  expect(has[ONLY_SCAN], "modo propio: no sugiere lo de tu escaneo")
+  expect(not has[ONLY_ATR], "modo propio: sugiere lo de Auctionator")
 end)
 
 ---------------------------------------------------------------------------
@@ -457,21 +564,157 @@ test("tus escaneos: el precio del día no cuenta una subasta suelta y se guarda 
   expect_eq(ES.Invest:Item(LOTUS).price, 10 * G, "precio de la ficha")
 end)
 
-test("tus escaneos: el último escaneo del día, un día nuevo se añade y se olvida lo de hace más de 30 días", function()
+test("tus escaneos: el último escaneo del día, un día nuevo se añade y se olvida lo de hace 21 días o más", function()
   Buy(LOTUS, 1, 9 * G)
   local DAY = 86400
-  NOW = 400 * DAY + 3600 -- (la hora de las pruebas es de 1970: así "hace 40 días" no cae antes)
-  ES.Invest.RecordScan(ScanWith(LOTUS, { 12 * G, 50 }, NOW - 40 * DAY))
+  NOW = 400 * DAY + 3600 -- (la hora de las pruebas es de 1970: así "hace 25 días" no cae antes)
+  expect_eq(ES.Invest.PRICE_DAYS, 21, "días que se guardan")
+  ES.Invest.RecordScan(ScanWith(LOTUS, { 12 * G, 50 }, NOW - 25 * DAY))
+  ES.Invest.RecordScan(ScanWith(LOTUS, { 14 * G, 50 }, NOW - 21 * DAY))
+  ES.Invest.RecordScan(ScanWith(LOTUS, { 15 * G, 50 }, NOW - 20 * DAY))
   ES.Invest.RecordScan(ScanWith(LOTUS, { 11 * G, 50 }, NOW - 2 * DAY))
   ES.Invest.RecordScan(ScanWith(LOTUS, { 10 * G, 50 }, NOW - 2 * DAY + 60))
   ES.Invest.RecordScan(ScanWith(LOTUS, { 13 * G, 50 }, NOW))
   local days = ES.Invest.OwnDays(LOTUS)
-  expect_eq(#days, 2, "días (el de hace 40 se olvida)")
+  expect_eq(#days, 3, "días (los de hace 25 y 21 se olvidan)")
+  expect_eq(days[1].price, 15 * G, "hace 20 días, el más viejo que queda")
   -- (el último del día: un escaneo raro se corrige con el siguiente)
-  expect_eq(days[1].price, 10 * G, "el último escaneo del día")
-  expect_eq(days[2].price, 13 * G, "hoy")
+  expect_eq(days[2].price, 10 * G, "el último escaneo del día")
+  expect_eq(days[3].price, 13 * G, "hoy")
+  -- Y lo guardado tampoco los tiene (no crece día a día)
+  local saved = ES.db.investPrices[ES:RealmKey()][LOTUS]
+  expect_eq(select(2, saved:gsub(";", "")) + 1, 3, "días guardados: " .. saved)
   local h = ES.PriceHistory:Get(LOTUS)
   expect_eq(h.now.age, 0, "precio de hoy")
+end)
+
+test("tus escaneos: apuntar los días en cualquier orden da lo mismo", function()
+  Buy(LOTUS, 1, 9 * G)
+  local DAY = 86400
+  NOW = 400 * DAY + 3600
+  -- (en orden va por el camino rápido; uno apuntado tarde, por el de siempre)
+  local order = { 9, 3, 5, 0, 1, 1, 7, 2, 30, 0 }
+  local want = {}
+  for i, ago in ipairs(order) do
+    local p = (20 + i) * S
+    ES.Invest.RecordScan(ScanWith(LOTUS, { p, 50 }, NOW - ago * DAY + i))
+    if ago < ES.Invest.PRICE_DAYS then want[ago] = p end -- (el último apuntado de cada día)
+  end
+  local days = ES.Invest.OwnDays(LOTUS)
+  local n = 0
+  for _ in pairs(want) do n = n + 1 end
+  expect_eq(#days, n, "días")
+  for i, d in ipairs(days) do
+    local ago = ES.Invest.Day() - d.day
+    expect_eq(d.price, want[ago], "precio de hace " .. ago .. " días")
+    if i > 1 then expect(d.day > days[i - 1].day, "días fuera de orden") end
+  end
+end)
+
+test("tus escaneos: un objeto de profesiones que entra en la cartera ya trae sus días", function()
+  local LEATHER, DAY = 2318, 86400
+  NOW = 400 * DAY + 3600
+  expect(ES.History:IsTracked(LEATHER), "Light Leather no se sigue en el escaneo")
+  expect(not ES.Invest.IsTracked(LEATHER), "Light Leather ya está en una cartera")
+  for _, ago in ipairs({ 5, 3, 1 }) do
+    ES.Invest.RecordScan(ScanWith(LEATHER, { (20 + ago) * 1, 50 }, NOW - ago * DAY))
+  end
+  -- Lo apunta en la cartera: su gráfica ya tiene los 3 días
+  Buy(LEATHER, 10, 20)
+  local h = expect(ES.PriceHistory:Get(LEATHER), "sin precio al entrar en la cartera")
+  expect_eq(h.source, "scans", "fuente")
+  expect_eq(#h.days, 3, "días de antes de entrar en la cartera")
+  expect_eq(h.now.price, 21, "precio de ahora: el de hace 1 día")
+end)
+
+test("tus escaneos: un objeto que no es de profesiones solo tiene los días desde que está en la cartera", function()
+  local ODD, DAY = 900500, 86400 -- (ninguna receta lo usa)
+  NOW = 400 * DAY + 3600
+  ES.Invest.RecordScan(ScanWith(ODD, { 500, 10 }, NOW - 5 * DAY))
+  ES.Invest.RecordScan(ScanWith(ODD, { 600, 10 }, NOW - 3 * DAY))
+  Buy(ODD, 1, 100)
+  ES.Invest.RecordScan(ScanWith(ODD, { 700, 10 }, NOW))
+  local days = ES.Invest.OwnDays(ODD)
+  expect_eq(#days, 1, "días de un objeto de fuera de las recetas")
+  expect_eq(days[1].price, 700, "el de hoy")
+end)
+
+-- Lo que ocupa: cada escaneo apunta ~2.150 objetos (los de profesiones de un escaneo de
+-- Forever, medido en las SavedVariables del desarrollador); 21 días de cada uno, en las
+-- SavedVariables y en memoria mientras está cargado
+test("tus escaneos: 21 días de 2.150 objetos caben en 1 MB", function()
+  local DAY = 86400
+  NOW = 20418 * DAY + 3600 -- (días de 5 cifras, como ahora)
+  local ids = {}
+  for _, data in pairs(ES.Data) do
+    if type(data) == "table" and data.recipes then
+      for _, r in pairs(data.recipes) do
+        for _, rq in ipairs(r.r) do ids[rq[1]] = true end
+        if r.out then ids[r.out[1]] = true end
+      end
+    end
+  end
+  local list = {}
+  for id in pairs(ids) do if ES.History:IsTracked(id) then list[#list + 1] = id end end
+  table.sort(list)
+  -- (si hay más objetos de profesiones que en un escaneo real, solo esos; si hay menos,
+  -- se completan con objetos de cartera inventados)
+  while #list > 2150 do list[#list] = nil end
+  local extra = 950000
+  while #list < 2150 do
+    extra = extra + 1
+    Buy(extra, 1, 100)
+    list[#list + 1] = extra
+  end
+  local function Scan(ago, k)
+    local items = {}
+    for i, id in ipairs(list) do
+      local p = 1000 + (i * 37 + k * 13) % 90000 -- (de 10s a 9g)
+      items[id] = { minUnit = p, quantity = 40, listings = 4, ladder = { p, 2, p + 50, 38 } }
+    end
+    return { time = NOW - ago * DAY, items = items }
+  end
+  ES.db.investPrices = nil
+  collectgarbage("collect")
+  local before = collectgarbage("count")
+  -- (lo que cuesta apuntar un escaneo: miles de instrucciones, que no dependen del equipo;
+  -- los ms, solo como dato. Un patrón mal anclado lo multiplicaba por cinco)
+  local spent, ticks = 0, 0
+  for ago = 24, 0, -1 do -- (25 días: se podan 4)
+    local scan = Scan(ago, ago)
+    local t0 = os.clock()
+    debug.sethook(function() ticks = ticks + 1 end, "", 1000)
+    local ok, err = pcall(ES.Invest.RecordScan, scan)
+    debug.sethook()
+    if not ok then error(err, 0) end
+    spent = spent + os.clock() - t0
+  end
+  local ms = spent * 1000 / 25
+  budget("miles de instrucciones por escaneo apuntando 21 días de 2.150 objetos", math.floor(ticks / 25 + 0.5), 0.15, 20)
+  local root = ES.db.investPrices[ES:RealmKey()]
+  local bytes, n = 0, 0
+  for _, s in pairs(root) do bytes, n = bytes + #s, n + 1 end
+  collectgarbage("collect")
+  local kb = collectgarbage("count") - before
+  note("%d objetos, %d KB de texto guardado, %.0f KB en memoria, %.1f ms por escaneo", n, bytes / 1024, kb, ms)
+  expect_eq(n, 2150, "objetos apuntados")
+  expect_eq(#ES.Invest.OwnDays(list[1]), 21, "días de un objeto")
+  expect(bytes <= 600 * 1024, "lo guardado ocupa %d KB (tope 600 KB)", bytes / 1024)
+  expect(kb <= 1024, "en memoria ocupa %.0f KB (tope 1 MB)", kb)
+end, { state = "empty" })
+
+test("tus escaneos: con Auctionator también se apuntan, para cuando lo desinstales", function()
+  local LEATHER = 2318
+  InstallAuctionator()
+  ES:OnScanComplete(ScanWith(LEATHER, { 25, 50 }), true)
+  RunTimers()
+  -- Con Auctionator, la ficha no usa tus días (solo su historial)...
+  expect_eq(ES.PriceHistory:Get(LEATHER), nil, "con Auctionator se usan tus escaneos")
+  -- ...pero están apuntados: sin Auctionator, salen
+  Auctionator = nil
+  ES.PriceHistory.Clear()
+  local h = expect(ES.PriceHistory:Get(LEATHER), "sin Auctionator, sin el día apuntado con él")
+  expect_eq(h.now.price, 25, "el día de hoy, de tus escaneos")
 end)
 
 test("tus escaneos: un escaneo raro que dispara el precio no es el precio de ahora (Small Flame Sac a 1g)", function()

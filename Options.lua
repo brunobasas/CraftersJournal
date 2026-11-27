@@ -24,15 +24,16 @@ local L = ES.L
 --                            quien la tenía desactivada sigue sin las dos (ver Migrate)
 --   ES.db.noPostConfirm    = true: anunciar en la AH sin preguntar antes (AuctionSellUI.lua,
 --                            Sell.Post). Se apaga también con "No volver a preguntar"
---   ES.db.noScanButtons    = true: sin los botones de escanear, el de la cabecera y el
---                            "Crafter's Journal: Escanear" de encima de la AH (UI.lua,
---                            PlaceScanButtons). Los escaneos completos de Auctionator se
---                            leen igual; con Auctionator en modo resumen, o sin él, se
---                            ven en gris con lo que falta (UI.lua, ScanButtonsLock).
---                            CurseForge: ya tenían su botón Escanear. Antes era noAHButton,
---                            solo el de la AH (ver Migrate)
---   ES.db.noNeutralAHNotice = true: sin la ventana que avisa de que el addon aún no
---                            funciona en la Casa de Subastas neutral (Core.lua)
+--   ES.db.noScanButtons    = true: «Esconder el botón Escanear»: sin el botón Escanear de
+--                            la cabecera (UI.lua, PlaceScanButtons); el de encima de la AH
+--                            sale siempre. CurseForge: ya tenían el de Auctionator. Solo
+--                            en el modo Auctionator; con Auctionator en modo resumen se ve
+--                            en gris con lo que falta (UI.lua, ScanButtonsLock), y en modo
+--                            Crafter's Journal se ve y se puede pulsar (ScanButtonsOn)
+--   ES.db.noAuctionator    = true: aunque Auctionator esté cargado, no se usa: escanea el
+--                            addon y todo sale de lo suyo (Scanner.UsesAuctionator). En
+--                            General, «Modo de escaneo»: dos casillas, Auctionator o
+--                            Crafter's Journal; sin Auctionator, la suya en gris
 -- Todas salen por defecto (es lo normal del addon), salvo protectGear; la primera vez que sale cada ventana se dice en el chat que se puede quitar aquí (ES:WindowTip)
 ---------------------------------------------------------------------------
 
@@ -45,9 +46,9 @@ function ES:AuctionSellWindowOn() return not (self.db and self.db.noAuctionSellW
 function ES:MigrateWindowOptions()
   local db = self.db
   if not db then return end
-  -- Quien quitó el botón de encima de la AH (noAHButton) no quería los de escanear:
-  -- tampoco ve ahora el de la cabecera, que va con él en una sola opción
-  if db.noAHButton and db.noScanButtons == nil then db.noScanButtons = true end
+  -- (noAHButton: la opción de quitar el botón de encima de la AH, de versiones antiguas.
+  -- Ese botón sale ahora siempre y la opción de esconder es solo la de la cabecera: lo
+  -- guardado no se pasa a ella, se borra)
   db.noAHButton = nil
   db.scanButtons = nil -- (de una prueba en la que venían desactivados por defecto)
   if db.sellWindowSplit then return end
@@ -226,11 +227,21 @@ function ES:ApplyOptions(key, on)
   -- abras la AH, o ya con el botón de encima de la AH)
   local mini = self.ShoppingMini and self.ShoppingMini()
   if key == "noAuctionWindows" and not on and mini then mini:Hide() end
-  -- (los botones de escanear: al momento; el de la AH, si no está abierta, al abrirla)
-  -- (y en gris o no: escondidos con Auctionator en modo resumen, ES:ScanButtonsLock)
-  if key == "noScanButtons" and self.PlaceScanButtons then
+  -- (el botón Escanear de la cabecera: al momento, a la vista o escondido, y en gris si
+  -- está escondido con Auctionator en modo resumen, ES:ScanButtonsLock)
+  -- (el «Modo de escaneo»: cambian los botones y de dónde salen los precios de
+  -- Inversiones y de respaldo, Scanner.UsesAuctionator)
+  -- (el escaneo en curso del otro modo no se guarda: Scanner:OnModeChanged)
+  if key == "noAuctionator" and self.Scanner and self.Scanner.OnModeChanged then self.Scanner:OnModeChanged() end
+  if (key == "noScanButtons" or key == "noAuctionator") and self.PlaceScanButtons then
     self:PlaceScanButtons()
     self:RefreshScanButtons()
+  end
+  if key == "noAuctionator" then
+    if self.PriceHistory then self.PriceHistory.Clear() end
+    if self.RefreshAllViews then self:RefreshAllViews() end
+    -- (Inversiones: sus precios salen de Auctionator o de tus escaneos; si se ve)
+    if self.RenderInvest then self:RenderInvest() self:RenderInvestItem() end
   end
 end
 
@@ -244,6 +255,24 @@ local OPTIONS = {
     desc = "Tras actualizar el addon, una ventana con lo nuevo de esa versión (una vez por versión). También se quita con su casilla \"No volver a mostrar\"." },
   { key = "noChatAlerts", cat = "general", label = "Avisos en el chat",
     desc = "Tras un escaneo: recetas de botín que te faltan y están en la AH, y si tu ruta empezada cuesta bastante más con los precios nuevos. Desactivados, la ruta lo sigue diciendo en su línea de estado." },
+  -- Modo de escaneo (Scanner.UsesAuctionator): con Auctionator o solo con Crafter's
+  -- Journal, una de las dos casillas (CreateRadio). Se guarda en ES.db.noAuctionator
+  -- (Crafter's Journal = true). Sin Auctionator cargado, marcada Crafter's Journal y
+  -- Auctionator en gris. También en Novedades, con las mismas casillas (WhatsNew.lua); allí,
+  -- bajo cada casilla, su `short` (aquí, su `desc`)
+  { key = "noAuctionator", cat = "general", kind = "radio", label = "Modo de escaneo",
+    value = function() return ES.Scanner.UsesAuctionator() end,
+    enabled = function() return ES.Scanner.HasAuctionator() end,
+    choices = {
+      { on = true, text = "Auctionator",
+        desc = "El botón Escanear lanza el escaneo completo de Auctionator (un escaneo para los dos addons) y la pestaña Inversiones usa su historial de precios.",
+        offDesc = "No está instalado: Crafter's Journal escanea solo.",
+        short = "Un solo escaneo para los dos addons. Inversiones usa su historial de precios.",
+        enabled = function() return ES.Scanner.HasAuctionator() end },
+      { on = false, text = "Crafter's Journal",
+        desc = "Crafter's Journal escanea solo y usa únicamente lo suyo: sus escaneos y los 21 días de precios que apunta, nada de Auctionator. Si lo tienes, su botón de escaneo completo espera entonces los 15 min del servidor.",
+        short = "Escanea por su cuenta y solo usa sus propios datos. No hace falta ningún addon más." },
+    } },
   -- Lista de compra
   { key = "noAuctionWindows", cat = "shopping", label = "Lista de compra junto a la Casa de Subastas",
     desc = "Al abrir la AH: los materiales de tu ruta que te faltan, para comprarlos. Desactivada, se sigue pudiendo abrir con el botón de encima de la AH." },
@@ -256,11 +285,16 @@ local OPTIONS = {
     enabled = function() return true end,
     apply = function() if ES.RefreshAllViews then ES:RefreshAllViews() end ES:ApplyOptions() end },
   -- Casa de Subastas
-  { key = "noScanButtons", cat = "auction", label = "Botones de escanear de Crafter's Journal",
-    desc = "El botón Escanear de la cabecera del addon y el de encima de la AH, que además abre el addon. Piden el escaneo completo de Auctionator. Desactivados, se esconden si el botón Escanear de Auctionator hace el escaneo completo (su escaneo alternativo activado). Si no, porque Auctionator está en modo resumen (el de por defecto) o no está instalado, salen en gris con lo que falta: el addon solo se actualiza con escaneos completos. Ábrelo con /cj o el botón del minimapa." },
-  -- (Core.lua, NeutralAHNotice: también se apaga con la casilla de su ventana)
-  { key = "noNeutralAHNotice", cat = "auction", label = "Aviso en la Casa de Subastas neutral",
-    desc = "Al abrir la Casa de Subastas neutral (Bahía del Botín, Gadgetzan, Vista Eterna), una ventana avisa de que Crafter's Journal aún no funciona en ella." },
+  -- Esconder el botón Escanear de la cabecera (marcada = escondido; se guarda en
+  -- ES.db.noScanButtons). El de encima de la AH, que abre el addon, sale siempre. Solo en
+  -- el modo Auctionator: en modo Crafter's Journal se ve siempre (ES:ScanButtonsOn) y la
+  -- casilla sale en gris. `descArg`: el nombre de la opción de Auctionator, en su idioma
+  { key = "noScanButtons", cat = "auction", label = "Esconder el botón Escanear",
+    desc = "Para escanear con el botón Escanear de Auctionator en vez del de Crafter's Journal. Antes activa en Auctionator el escaneo completo: Opciones > AddOns > Auctionator > Advanced > «%s». Marcada, se esconde el botón Escanear de dentro del addon; el de encima de la AH sigue para abrir el addon. Solo con el modo de escaneo Auctionator.",
+    descArg = function() return ES.Scanner.AuctionatorScanOptionName() end,
+    get = function() return ES.db.noScanButtons == true end,
+    set = function(on) ES.db.noScanButtons = on or nil ES:ApplyOptions("noScanButtons", on) end,
+    enabled = function() return ES.Scanner.UsesAuctionator() end },
   { key = "noAuctionSellWindow", cat = "auction", label = "Vender en la AH desde tus bolsas",
     desc = "Al abrir la AH: una ventana con lo de tus bolsas que se vende mejor en la AH. Clic en una fila para anunciarlo." },
   { key = "noPostConfirm", cat = "auction", label = "Confirmar antes de anunciar en la AH",
@@ -539,6 +573,63 @@ local function CreateSegmented(page, o)
   return row
 end
 
+-- Una de varias casillas (o.kind == "radio"): el nombre y, justo debajo, una casilla por
+-- opción con qué hace; marcar una desmarca las otras (y marcar la marcada no la quita).
+-- o = { value() -> el `on` elegido, choices = { { on, text, desc, offDesc, enabled() } } }:
+-- elegir una es ES:SetOption(o.key, on). Una en gris (enabled() falso) dice su offDesc
+local RADIO_X = 26 -- (las casillas, bajo el nombre)
+local function CreateRadio(page, o)
+  local row = CreateFrame("Frame", nil, page)
+  row:SetSize(CONTENT_W, 60)
+  row.option, row.isRow = o, true
+  row.label = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  row.label:SetPoint("TOPLEFT", 32, -5)
+  row.label:SetWidth(DESC_W)
+  row.label:SetJustifyH("LEFT")
+  row.choices = {}
+  for i, c in ipairs(o.choices) do
+    local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+    cb:SetSize(26, 26)
+    cb.label = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    cb.label:SetPoint("LEFT", cb, "RIGHT", 6, 1)
+    cb.label:SetWidth(DESC_W - RADIO_X)
+    cb.label:SetJustifyH("LEFT")
+    cb.desc = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    cb.desc:SetPoint("TOPLEFT", cb.label, "BOTTOMLEFT", 0, -5)
+    cb.desc:SetWidth(DESC_W - RADIO_X)
+    cb.desc:SetJustifyH("LEFT")
+    cb.desc:SetTextColor(0.78, 0.74, 0.66)
+    cb.choice = c
+    cb:SetScript("OnClick", function()
+      if (not c.enabled or c.enabled()) and o.value() ~= c.on then ES:SetOption(o.key, c.on) end
+      if page.Refresh then page:Refresh() else row.Refresh() end -- (y vuelve a marcar la suya)
+    end)
+    row.choices[i] = cb
+  end
+
+  -- Textos, la elegida y cuáles se pueden tocar; devuelve lo que mide la fila
+  function row.Refresh()
+    row.label:SetText(L[o.label])
+    local current = o.value()
+    local y = -(5 + 14 + 6)
+    for _, cb in ipairs(row.choices) do
+      local c = cb.choice
+      local can = not c.enabled or c.enabled()
+      cb:ClearAllPoints()
+      cb:SetPoint("TOPLEFT", RADIO_X, y)
+      cb:SetChecked(c.on == current)
+      cb:SetEnabled(can)
+      cb.label:SetText(c.text) -- (nombres de addons: no se traducen)
+      if can then cb.label:SetTextColor(1, 1, 1) else cb.label:SetTextColor(0.5, 0.5, 0.5) end
+      cb.desc:SetText(L[(not can and c.offDesc) or c.desc])
+      local descH = tonumber(cb.desc:GetStringHeight()) or 0
+      y = y - math.max(28, 22 + descH) - 8
+    end
+    return -y - 8
+  end
+  return row
+end
+
 -- Cosas que se ocultan (o.kind == "hide"): nombre, qué hace y, debajo, una ficha por
 -- cosa en dos columnas, con la paleta de las filas de la categoría Pestañas. Un clic la
 -- oculta (gris, con OCULTA encima) o la vuelve a mostrar, al momento.
@@ -639,8 +730,13 @@ local function RefreshPage(page)
       y = y - h - 14
     else
       cb.label:SetText(L[o.label])
-      cb.desc:SetText(L[o.desc])
+      -- (o.descArg: lo que va en el %s de la descripción)
+      cb.desc:SetText(o.descArg and string.format(L[o.desc], o.descArg()) or L[o.desc])
       if o.get then cb:SetChecked(o.get()) else cb:SetChecked(not ES.db[o.key]) end
+      -- (en gris si no se puede cambiar: o.enabled)
+      local can = not o.enabled or o.enabled()
+      cb:SetEnabled(can)
+      if can then cb.label:SetTextColor(1, 0.82, 0) else cb.label:SetTextColor(0.5, 0.5, 0.5) end
       local descH = tonumber(cb.desc:GetStringHeight()) or 0
       y = y - math.max(30, 24 + descH) - 14
     end
@@ -803,6 +899,7 @@ local function CreateWindow()
     local page = f.pages[o.cat] or f.pages.general
     local cb = o.kind == "slider" and CreateSlider(page, o)
       or o.kind == "segmented" and CreateSegmented(page, o)
+      or o.kind == "radio" and CreateRadio(page, o)
       or o.kind == "hide" and CreateHideList(page, o) or CreateCheck(page, o)
     page.checks[#page.checks + 1] = cb
     f.checks[#f.checks + 1] = cb

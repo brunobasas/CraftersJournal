@@ -10,7 +10,8 @@ local _, ES = ...
 -- comprobando cada fila. Si falla o cambia de forma, el objeto queda sin precio,
 -- como sin Auctionator. No se guarda copia: solo lo que Auctionator tiene ahora.
 --
--- Con Auctionator instalado, solo Auctionator. Sin él, los precios por día de tus
+-- En el modo de escaneo Auctionator, solo Auctionator (si no se puede leer su historial,
+-- sin precio: nunca tus días). En modo Crafter's Journal, los precios por día de tus
 -- escaneos con el addon (Invest.OwnDays). El mismo análisis para los dos.
 --
 -- PriceHistory:Get(itemID) -> nil (sin datos) o
@@ -26,6 +27,7 @@ PH.STALE_DAYS = 3  -- más días: precio viejo (en gris)
 PH.DIP = 0.5       -- un día por debajo de la mitad del anterior y del siguiente: dudoso
 PH.SPIKE = 2       -- ...o por encima del doble de los dos: dudoso (un pico de un día)
 PH.LAST_SPIKE = 3  -- hoy, más del triple de ayer: subida sin confirmar (no es el precio de ahora)
+PH.SPIKE_UNITS = 20 -- ...salvo con al menos tantas unidades a la venta: el mercado está ahí
 PH.GAP_DAYS = 3    -- en la gráfica, días válidos más separados no se unen
 PH.CHANGE_DAYS, PH.CHANGE_MIN, PH.CHANGE_MAX = 4, 3, 5 -- "últimos 4 días": un día de hace 3 a 5
 
@@ -36,8 +38,12 @@ local function Database()
   if type(db) == "table" and type(db.GetPriceHistory) == "function" then return db end
 end
 
--- ¿Hay Auctionator con su historial? (entonces es la única fuente de precios)
-function PH.Available() return Database() ~= nil end
+-- ¿Los precios salen del historial de Auctionator? Sí en el modo de escaneo Auctionator
+-- (es la única fuente: si su historial no se puede leer, sin precio, sin caer a tus
+-- días); en modo Crafter's Journal, no: solo los días de tus escaneos
+function PH.Available()
+  return ES.Scanner ~= nil and ES.Scanner.UsesAuctionator()
+end
 
 -- Días desde el día 0 de Auctionator (su constante; si no está, 1-1-2020)
 local function Day0()
@@ -122,6 +128,10 @@ end
 -- último, si es más del triple del anterior: subida sin confirmar (d.spike), que no
 -- cuenta como precio de ahora hasta que se repita otro día. (Antes solo se miraban
 -- las bajadas: un pico de hoy pasaba a ser el precio de ahora, Small Flame Sac a 1g)
+-- Con muchas unidades a la venta (PH.SPIKE_UNITS, todas a ese precio o más) no es un
+-- pico de cuatro subastas: es el precio del mercado y cuenta ya. (Elemental Fire: de
+-- 48s a 1g 50s con 344 a la venta, y la ficha seguía diciendo 48s; Discord 2026-11-27)
+-- Solo con el historial de Auctionator, que guarda las unidades de cada día
 local function MarkDubious(days)
   for i = 2, #days - 1 do
     local d, a, b = days[i], days[i - 1].price, days[i + 1].price
@@ -136,7 +146,11 @@ local function MarkDubious(days)
   local prev
   for i = n - 1, 1, -1 do if not days[i].dubious then prev = days[i] break end end
   if prev and days[n].price > prev.price * PH.LAST_SPIKE then
-    days[n].dubious, days[n].high, days[n].spike = true, true, true
+    if (days[n].avail or 0) >= PH.SPIKE_UNITS then
+      days[n].backed = true -- (subida con unidades detrás: cuenta)
+    else
+      days[n].dubious, days[n].high, days[n].spike = true, true, true
+    end
   end
 end
 
@@ -173,10 +187,11 @@ function PH.Analyze(days, today)
   return { days = days, now = now, change4 = ref and (last.price / ref.price - 1) or nil, ref4 = ref }
 end
 
--- Historial analizado de un objeto, o nil. Con Auctionator instalado, SOLO Auctionator
+-- Historial analizado de un objeto, o nil. En el modo Auctionator, SOLO Auctionator
 -- (h.source = "auctionator"): precio, gráfica y "últimos 4 días" son lo mismo que su
--- historial, y se ponen al día al escanear o buscar con Auctionator. Sin él, los precios
--- por día de tus escaneos con el addon (h.source = "scans", Invest.OwnDays).
+-- historial, y se ponen al día al escanear o buscar con Auctionator. En modo Crafter's
+-- Journal, los precios por día de tus escaneos con el addon (h.source = "scans",
+-- Invest.OwnDays).
 -- (Se probó juntar las dos fuentes por día: con dos formas de medir el precio en una
 -- misma gráfica, los precios no cuadraban con los de Auctionator)
 function PH:Get(itemID)

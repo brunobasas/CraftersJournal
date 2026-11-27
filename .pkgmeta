@@ -7,11 +7,11 @@ manual-changelog:
   filename: CHANGELOG.md
   markup-type: markdown
 
-# Auctionator, dependencia obligatoria en CurseForge (la app lo instala sola): el botón
-# Escanear lanza su escaneo completo y el addon lo lee (Scanner.lua); sin él no se
-# escanea y solo hay precios de vendedor. En el .toc sigue en OptionalDeps: sin
-# Auctionator el addon carga igual (colección, instructores...)
-required-dependencies:
+# Auctionator, dependencia opcional en CurseForge: con él, el botón Escanear lanza su
+# escaneo completo y el addon lo lee (un escaneo para los dos), e Inversiones usa su
+# historial de precios; sin él, el addon pide su propio escaneo (Scanner.lua). En el .toc
+# sigue en OptionalDeps: si está, carga antes que el addon
+optional-dependencies:
   - auctionator
 
 ignore:

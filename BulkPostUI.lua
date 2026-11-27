@@ -9,7 +9,10 @@ local L = ES.L
 -- Un anuncio por clic: la AH pide un clic del jugador para cada uno. Anuncia
 -- Ledger:PostOnAH (la AH de Forever: espera si está ocupada o escaneando, y solo dice
 -- "Anunciados" cuando el servidor lo confirma).
---   ES.db.bulkPost = { itemID, price (cobre), shown, point = { punto, x, y } }
+-- Sirve de cebo: lo pones muy barato para que los que rebajan «al más barato» anuncien
+-- por debajo. El registro de cebos (abajo) dice cuántos te compró al instante un sniper y
+-- sugiere el precio del siguiente.
+--   ES.db.bulkPost = { itemID, price (cobre), shown, point = { punto, x, y }, sale, log }
 
 local P = {}
 ES.BulkPost = P
@@ -17,7 +20,7 @@ ES.BulkPost = P
 P.HOURS = 2 -- duración de cada subasta
 P.UNITS = 1 -- unidades por anuncio
 
-local WIDTH, HEIGHT = 250, 96
+local WIDTH, HEIGHT = 250, 124
 local GREY, ORANGE = "|cff999999", "|cffff9933"
 -- Por encima de la ventana del addon (HIGH, UI.lua), que se abre en el centro: en MEDIUM
 -- salía detrás de ella y no se veía al pulsar el botón. Como el asistente
@@ -70,6 +73,99 @@ function P.Busy()
   return s == "posting" or s == "selling"
 end
 
+---------------------------------------------------------------------------
+-- Registro de cebos: cada anuncio que la AH acepta se apunta en ES.db.bulkPost.log =
+--   { { itemID, price (cobre), t (time() al aceptarlo), secs (segundos hasta venderse) }, ... }
+-- (los últimos P.LOG_MAX). Un cebo vendido en menos de P.INSTANT s lo ha comprado un
+-- sniper (otro jugador que compra todo lo muy barato); si pasa ese tiempo sin venderse,
+-- ha aguantado, y los que rebajan «al más barato» pueden ponerse por debajo. Con los
+-- últimos cebos del objeto se sugiere el precio del siguiente: el umbral del sniper está
+-- entre el más caro que te compró al instante y el más barato que aguantó por encima
+---------------------------------------------------------------------------
+P.INSTANT = 60 -- segundos: vendido antes, lo compró un sniper
+P.LOG_MAX = 100 -- cebos apuntados (de todos los objetos)
+P.RECENT = 10 -- cebos del objeto que cuentan para la sugerencia
+P.RAISE = 1.5 -- sin ninguno que aguante: se sube así el más caro comprado al instante
+
+function P.Log()
+  local db = P.DB()
+  if type(db.log) ~= "table" then db.log = {} end
+  return db.log
+end
+
+-- ¿Qué pasó con el cebo? "sniped" (comprado al instante), "held" (aguantó P.INSTANT s
+-- sin venderse) o nil (aún no se sabe)
+function P.Outcome(e, now)
+  if e.secs then return e.secs <= P.INSTANT and "sniped" or "held" end
+  if (now or time()) - (e.t or 0) > P.INSTANT then return "held" end
+  return nil
+end
+
+local function LogEntry(t, itemID)
+  local log = P.Log()
+  for i = #log, 1, -1 do
+    if log[i].t == t and log[i].itemID == itemID then return log[i] end
+  end
+end
+
+-- Un precio redondo, hacia arriba (cobres sueltos por debajo de 1s; luego de 5c, de 1s y de 10s)
+local function Round(copper)
+  local step = copper < 100 and 1 or copper < 10000 and 5 or copper < 100000 and 100 or 1000
+  return math.ceil(copper / step - 1e-9) * step
+end
+
+-- Los últimos cebos del objeto (P.RECENT, ya decididos): cuántos, cuántos comprados al
+-- instante y el precio que se sugiere para el siguiente (nil: ninguno comprado al
+-- instante, el precio aguanta)
+function P.Summary(itemID)
+  local res = { n = 0, sniped = 0 }
+  if not itemID then return res end
+  local log, now = P.Log(), time()
+  local top, held = nil, {}
+  for i = #log, 1, -1 do
+    local e = log[i]
+    local o = e.itemID == itemID and P.Outcome(e, now)
+    if o then
+      res.n = res.n + 1
+      if o == "sniped" then
+        res.sniped = res.sniped + 1
+        top = math.max(top or 0, e.price)
+      else
+        held[#held + 1] = e.price
+      end
+      if res.n >= P.RECENT then break end
+    end
+  end
+  if not top then return res end
+  local floor -- el más barato que aguantó por encima del más caro comprado al instante
+  for _, p in ipairs(held) do
+    if p > top and (not floor or p < floor) then floor = p end
+  end
+  if not floor then
+    res.suggest = math.max(Round(top * P.RAISE), top + 1)
+  else
+    -- Entre los dos, mientras haya hueco (búsqueda del umbral); si no, el que aguantó
+    local mid = Round((top + floor) / 2)
+    res.suggest = (floor - top > floor * 0.1 and mid > top and mid < floor) and mid or floor
+  end
+  return res
+end
+
+-- La subasta puesta se ha vendido: se apunta cuánto tardó y, si fue al instante, se dice
+-- en el chat con el precio que se sugiere
+local function MarkSold(sale)
+  sale.state = "sold"
+  local e = sale.logT and LogEntry(sale.logT, sale.itemID)
+  if not e or e.secs then return end
+  e.secs = math.max(0, time() - e.t)
+  if e.secs <= P.INSTANT then
+    local s = P.Summary(sale.itemID)
+    if s.suggest then
+      ES:Print(string.format(L["Vendido en %d s: seguramente un sniper. Prueba el siguiente a %s."], e.secs, ES.Money(s.suggest)))
+    end
+  end
+end
+
 -- Respuesta de la AH al anuncio (Ledger:ConfirmPost / CancelAsked: p.onResult). `p`: el
 -- anuncio, con las horas de verdad (la AH de Forever es de 12, 24 y 48 h: pedir 2 da 12)
 function P.OnPostResult(ok, p)
@@ -78,6 +174,15 @@ function P.OnPostResult(ok, p)
   if ok then
     local hours = type(p) == "table" and tonumber(p.hours) or P.HOURS
     sale.state, sale.ends = "selling", time() + hours * 3600
+    -- Al registro de cebos (al precio con que se anunció)
+    if sale.price then
+      local log = P.Log()
+      sale.logT = time()
+      log[#log + 1] = { itemID = sale.itemID, price = sale.price, t = sale.logT }
+      while #log > P.LOG_MAX do table.remove(log, 1) end
+      -- (pasado el tiempo de un sniper sin venderse, cuenta como que aguantó)
+      if C_Timer then C_Timer.After(P.INSTANT + 1, P.Refresh) end
+    end
   else
     P.DB().sale = nil -- (no se anunció o no se sabe: se puede volver a intentar)
   end
@@ -109,7 +214,7 @@ function P.OnNotification(note, arg)
     local name = ClientName(sale.itemID)
     if name and not arg:find(name, 1, true) then return end
   end
-  sale.state = state
+  if state == "sold" then MarkSold(sale) else sale.state = state end
   P.Refresh()
 end
 
@@ -122,7 +227,7 @@ function P.OnSystemMessage(message)
   local name = ClientName(sale.itemID)
   if not name then return end
   if type(ERR_AUCTION_SOLD_S) == "string" and message == string.format(ERR_AUCTION_SOLD_S, name) then
-    sale.state = "sold"
+    MarkSold(sale)
   elseif type(ERR_AUCTION_EXPIRED_S) == "string" and message == string.format(ERR_AUCTION_EXPIRED_S, name) then
     sale.state = "expired"
   else
@@ -146,7 +251,7 @@ function P.Post()
   local n = ES.Ledger:PostOnAH(db.itemID, P.UNITS, db.price, P.HOURS) or 0
   if n > 0 then
     -- En gris hasta que la AH responda; luego «Selling» hasta que se venda (P.OnPostResult)
-    db.sale = { state = "posting", itemID = db.itemID, t = time() }
+    db.sale = { state = "posting", itemID = db.itemID, price = db.price, t = time() }
     local pending = ES.Ledger.pendingPost
     if pending then pending.onResult = P.OnPostResult end
   end
@@ -263,6 +368,27 @@ local function Create()
   f.silver:SetScript("OnTextChanged", Changed)
   f.copper:SetScript("OnTextChanged", Changed)
 
+  -- Registro de cebos del objeto: cuántos te compraron al instante y el precio sugerido
+  -- («Usar» lo pone en las casillas). Encima, los últimos cebos
+  local use = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+  use:SetSize(54, 18)
+  use:SetPoint("TOPRIGHT", -10, -72)
+  use:SetText(L["Usar"])
+  use:SetScript("OnClick", function()
+    local s = P.Summary(P.DB().itemID)
+    if s.suggest then P.SetPrice(s.suggest) P.Refresh() end
+  end)
+  f.use = use
+  local baits = CreateFrame("Button", nil, f)
+  baits:SetHeight(18) -- (sus puntos, en P.Refresh: hasta «Usar» o hasta el borde)
+  baits.text = baits:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  baits.text:SetAllPoints()
+  baits.text:SetJustifyH("LEFT")
+  baits.text:SetWordWrap(false)
+  baits:SetScript("OnEnter", function(self) P.BaitsTooltip(self) end)
+  baits:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  f.baits = baits
+
   -- Anunciar: una unidad (en una subasta de P.HOURS) al precio puesto (un clic, un anuncio)
   local post = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
   post:SetSize(WIDTH - 20, 22)
@@ -291,6 +417,39 @@ local function Create()
   end
   f:Hide()
   return f
+end
+
+-- Los últimos cebos del objeto: precio, qué pasó y a qué hora (el más reciente arriba)
+P.TOOLTIP_ROWS = 8
+function P.BaitsTooltip(owner)
+  local id = P.DB().itemID
+  GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+  GameTooltip:AddLine(L["Cebos recientes"], 1, 0.82, 0)
+  local log, now, shown = P.Log(), time(), 0
+  for i = #log, 1, -1 do
+    local e = log[i]
+    if e.itemID == id then
+      local o = P.Outcome(e, now)
+      local what
+      if o == "sniped" then
+        what = ORANGE .. string.format(L["al instante (%d s)"], e.secs) .. "|r"
+      elseif e.secs then
+        what = "|cff40ff40" .. string.format(L["vendido en %d min"], math.floor(e.secs / 60 + 0.5)) .. "|r"
+      elseif o == "held" then
+        what = "|cff40ff40" .. L["no lo compraron al instante"] .. "|r"
+      else
+        what = GREY .. L["pendiente"] .. "|r"
+      end
+      local hour = date and date("%H:%M", e.t) or ""
+      GameTooltip:AddDoubleLine(ES.Money(e.price) .. GREY .. ES.SEP .. hour .. "|r", what, 1, 1, 1, 1, 1, 1)
+      shown = shown + 1
+      if shown >= P.TOOLTIP_ROWS then break end
+    end
+  end
+  GameTooltip:AddLine(" ")
+  GameTooltip:AddLine(string.format(L["Un cebo vendido en menos de %d s lo suele comprar un sniper, y entonces nadie rebaja por debajo de él: sube el precio hasta que deje de pasar. La sugerencia va entre el más caro comprado al instante y el más barato que aguantó."],
+    P.INSTANT), 0.5, 0.8, 1, true)
+  GameTooltip:Show()
 end
 
 -- Lo que enseña: el objeto, cuántos llevas, el precio y si se puede anunciar ya
@@ -328,6 +487,24 @@ function P.Refresh()
     frame.post:SetText(string.format(L["Anunciar %d"], P.UNITS))
     frame.post:SetEnabled(ready and true or false)
   end
+  -- Registro de cebos del objeto: cuántos, cuántos comprados al instante y la sugerencia
+  local s = P.Summary(id)
+  local line
+  if s.n == 0 then
+    line = GREY .. L["Sin cebos de este objeto todavía"] .. "|r"
+  elseif s.sniped == 0 then
+    line = string.format(L["Cebos: %d, ninguno comprado al instante"], s.n)
+  else
+    line = string.format(L["Cebos: %d, %d comprados al instante"], s.n, s.sniped)
+  end
+  local offer = s.suggest and s.suggest ~= db.price
+  if offer then line = line .. GREY .. ES.SEP .. "|r" .. string.format(L["prueba %s"], ES.Money(s.suggest)) end
+  frame.baits.text:SetText(line)
+  frame.use:SetShown(offer and true or false)
+  -- (sin «Usar», la línea llega hasta el borde)
+  frame.baits:ClearAllPoints()
+  frame.baits:SetPoint("TOPLEFT", 10, -72)
+  if offer then frame.baits:SetPoint("RIGHT", frame.use, "LEFT", -4, 0) else frame.baits:SetPoint("RIGHT", -10, 0) end
   -- Título: qué pasa ahora (sin la duración: siempre la misma, P.HOURS)
   local notes = {}
   if state == "expired" then

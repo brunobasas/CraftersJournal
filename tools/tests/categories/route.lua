@@ -2025,3 +2025,106 @@ test("con el pergamino en las bolsas, la receta sigue diciendo de dónde se comp
   expect_eq(src.best and src.best.kind, "owned", "mejor fuente con el pergamino en las bolsas")
   expect_eq(src.buy and src.buy.kind, "ah", "de dónde se compra con el pergamino en las bolsas")
 end, { state = "scan" })
+
+-- Recetas de misión con precio ---------------------------------------------------------
+-- Discord: la ruta de Peletería usaba Wild Leather Leggings «gratis» (de misión) entre 200 y
+-- 250, y la misión y su cadena (Armor, Shoulders, Vest, Helmet) pedían objetos por casi 20
+-- de oro (Turtle Scale, Nightscape, Thick Armor Kits, Wildvines) que la ruta no contaba
+local WL_LEGGINGS, WL_LEGGINGS_Q = 10572, 2859 -- (la de la Horde: Jangdor Swiftstrider)
+local WL_CHAIN = { 2854, 2855, 2856, 2857 }
+local TURTLE_HELM, THICK_LEATHER, WILDVINE = 8191, 4304, 8153
+
+local function QuestOption(src)
+  for _, o in ipairs(src and src.options or {}) do if o.kind == "quest" then return o end end
+end
+
+local function WildLeatherPlan(scrollPrice)
+  FACTION = "Horde"
+  local r = expect(ES.Data.Leatherworking.recipes[WL_LEGGINGS], "falta Wild Leather Leggings")
+  SetPrice(TURTLE_HELM, 5000)
+  SetPrice(WILDVINE, 1000)
+  SetPrice(THICK_LEATHER, 400)
+  ES.db.scans[ES:RealmKey()].items[r.scroll] = nil
+  if scrollPrice then SetPrice(r.scroll, scrollPrice, 1) end
+  return PlanRoute("Leatherworking", 225, 260), r
+end
+
+test("receta de misión: cuesta lo que piden la misión y su cadena (Wild Leather Leggings)", function()
+  local P = ES.Planner
+  local plan, r = WildLeatherPlan()
+  local src = expect(P.RecipeSource(plan.ctx, r), "Wild Leather Leggings sin fuentes")
+  local o = expect(QuestOption(src), "Wild Leather Leggings sin misión para la Horde")
+  expect_eq(o.quest.id, WL_LEGGINGS_Q, "misión que la da")
+  -- Lo que pide: la misión (2 Turtle Scale Helms, 2 Wildvines...) y su cadena (10 Thick
+  -- Leather de Wild Leather Armor, un Wildvine en cada una de las otras tres)
+  local asks = {}
+  for _, it in ipairs(o.items or {}) do asks[it.item] = (asks[it.item] or 0) + it.qty end
+  expect_eq(asks[TURTLE_HELM], 2, "Turtle Scale Helms que pide la misión")
+  expect_eq(asks[THICK_LEATHER], 10, "Thick Leather de Wild Leather Armor (su cadena)")
+  expect_eq(asks[WILDVINE], 5, "Wildvines de toda la cadena")
+  local sum = 0
+  for _, it in ipairs(o.items) do sum = sum + (it.cost or 0) end
+  expect(o.cost > 0, "la misión sale gratis")
+  expect_near(o.cost, sum, 0.5, "coste de la misión = suma de lo que pide")
+  expect(o.cost >= 4000, "10 Thick Leather (400c) y 5 Wildvines (1000c) cuestan al menos 4000c: sale %s", o.cost)
+  expect_eq(src.best and src.best.kind, "quest", "mejor fuente sin el pergamino en la AH")
+  local cost, kind = P.LearnCost(plan.ctx, r)
+  expect_eq(kind, "quest", "de dónde se aprende")
+  expect_near(cost, o.cost, 0.5, "lo que cuesta aprenderla en la ruta")
+  -- Lo ya pagado por otro paso de la ruta (Vest, de la misma cadena) no se cuenta dos veces
+  local paid = {}
+  for _, q in ipairs(WL_CHAIN) do paid[q] = true end
+  local onlyQuest, _, items = P.QuestCost(plan.ctx, o.quest, paid)
+  expect_eq(#items, 3, "objetos de la misión sola (Helms, Bracers y Wildvines)")
+  expect(onlyQuest < o.cost, "sin su cadena no sale más barata (%s y %s)", onlyQuest, o.cost)
+  -- Con la cadena hecha, tampoco
+  for _, q in ipairs(WL_CHAIN) do QUESTS_DONE[q] = true end
+  expect_near((P.QuestCost(plan.ctx, o.quest)), onlyQuest, 0.5, "con la cadena hecha")
+  -- Su fila: el tooltip dice qué pide y cuánto cuesta cada cosa
+  local line = expect(ES.SourcedLearnLine(r, { id = WL_LEGGINGS, recipe = r, from = 225, to = 260, fee = o.cost },
+    "Leatherworking", plan), "sin fila de conseguir la receta")
+  local tip = table.concat(TooltipLines(line.tooltip, CreateFrame("Frame")), "\n")
+  expect(tip:find(ES.L["Lo que piden ella y su cadena:"], 1, true), "el tooltip no lista lo que pide: %s", Plain(tip))
+  expect(tip:find(ES:ItemName(TURTLE_HELM), 1, true), "el tooltip no nombra las Turtle Scale Helms: %s", Plain(tip))
+  expect(not Plain(tostring(line.value)):find(Plain(ES.L["gratis|r"]), 1, true), "la fila sigue diciendo «gratis»")
+end, { state = "scan" })
+
+test("receta de misión: si el pergamino sale más barato en la AH que lo que pide la misión, se compra", function()
+  local plan, r = WildLeatherPlan(100)
+  local src = expect(ES.Planner.RecipeSource(plan.ctx, r), "Wild Leather Leggings sin fuentes")
+  expect(QuestOption(src).cost > 100, "la misión cuesta menos que el pergamino a 100c")
+  expect_eq(src.best and src.best.kind, "ah", "mejor fuente con el pergamino a 100c en la AH")
+  expect_eq(select(2, ES.Planner.LearnCost(plan.ctx, r)), "ah", "de dónde se aprende en la ruta")
+end, { state = "scan" })
+
+-- Dos recetas de la ruta con la misma cadena: el segundo paso solo paga lo que falta, y su
+-- tooltip tiene que decir lo mismo que la fila (antes listaba y sumaba la cadena entera)
+test("receta de misión: con la cadena ya pagada por otro paso, el tooltip dice lo que paga la fila", function()
+  local P = ES.Planner
+  local plan, r = WildLeatherPlan()
+  local o = expect(QuestOption(P.RecipeSource(plan.ctx, r)), "Wild Leather Leggings sin misión para la Horde")
+  local paid = {}
+  for _, q in ipairs(WL_CHAIN) do paid[q] = true end
+  local fee, unpriced, items = P.QuestCost(plan.ctx, o.quest, paid)
+  local st = { id = WL_LEGGINGS, recipe = r, from = 225, to = 260, fee = fee,
+    questCost = { cost = fee, unpriced = unpriced or nil, items = items, quest = o.quest } }
+  local line = expect(ES.SourcedLearnLine(r, st, "Leatherworking", plan), "sin fila de conseguir la receta")
+  local tip = Plain(table.concat(TooltipLines(line.tooltip, CreateFrame("Frame")), "\n"))
+  expect(tip:find(Plain(ES.Money(fee)), 1, true), "el tooltip no dice lo que paga el paso (%s): %s", Plain(ES.Money(fee)), tip)
+  expect(not tip:find(Plain(ES.Money(o.cost)), 1, true), "el tooltip sigue con el coste de toda la cadena: %s", tip)
+  expect(not tip:find(ES:ItemName(THICK_LEATHER), 1, true), "el tooltip lista el Thick Leather de Wild Leather Armor, ya pagado: %s", tip)
+  expect(tip:find(ES:ItemName(TURTLE_HELM), 1, true), "el tooltip no nombra las Turtle Scale Helms: %s", tip)
+end, { state = "scan" })
+
+-- (el caso del informe, en la ruta: sin el arreglo, el paso sale gratis)
+test("ruta: el paso de Wild Leather Leggings paga lo que piden la misión y su cadena", function()
+  local plan = WildLeatherPlan()
+  local step
+  for _, st in ipairs(plan.steps) do
+    if st.id == WL_LEGGINGS and st.learnSource then step = st end
+  end
+  step = expect(step, "la ruta 225-260 de la Horde ya no usa Wild Leather Leggings: la prueba no prueba nada")
+  expect_eq(step.learnSource, "quest", "de dónde se aprende")
+  note("Wild Leather Leggings: %s", step.fee)
+  expect(step.fee >= 4000, "el paso cuesta %s: 10 Thick Leather (400c) y 5 Wildvines (1000c) ya son 4000c", step.fee)
+end, { state = "scan" })

@@ -425,6 +425,48 @@ test("recetas con misión: quien da la misión tiene sitio", function()
   Report(bad, "recetas con misión sin PNJ conocido")
 end, { boot = false })
 
+-- La ruta le pone precio a una receta de misión por lo que piden ella y su cadena. La
+-- cantidad sale del texto de la misión (o de QUEST_COUNTS en tools/gen_sources.py): si
+-- no se lee, ese objeto no suma y la receta sale más barata de lo que es. Solo puede
+-- faltar en objetos que no se compran (de misión, botín, monedas de festival)
+test("misiones: se sabe cuántos piden de todo lo que se compra o se fabrica", function()
+  local traded = {} -- material de alguna receta, o lo que fabrica una
+  Each(function(_, _, r)
+    for _, m in ipairs(r.r or {}) do traded[m[1]] = true end
+    if r.out then traded[r.out[1]] = true end
+  end)
+  local sold = ES.Data.ItemSources or {}
+  local bad, n = {}, 0
+  for q, baked in pairs(ES.Data.Quests) do
+    local list = baked[7] or {}
+    for i = 1, #list, 2 do
+      local item, qty = list[i], list[i + 1]
+      n = n + 1
+      expect(type(qty) == "number" and qty >= 0, "misión %d: cantidad %s", q, tostring(qty))
+      if qty == 0 and (traded[item] or (sold[item] and sold[item].v)) then
+        bad[#bad + 1] = string.format("misión %d %s: objeto %d", q, tostring(baked[1]), item)
+      end
+    end
+  end
+  expect(n > 100, "solo %d objetos pedidos en las misiones", n)
+  Report(bad, "objetos que se compran o fabrican sin cantidad")
+end, { boot = false })
+
+test("misiones: las cantidades que el texto no dice bien (Imperial Plate, Bolts of Runecloth)", function()
+  local function Qty(q, item)
+    local list = expect(ES.Data.Quests[q], "falta la misión %d", q)[7] or {}
+    for i = 1, #list, 2 do if list[i] == item then return list[i + 1] end end
+  end
+  local THORIUM_BAR = 12359
+  expect_eq(Qty(7656, THORIUM_BAR), 60, "Imperial Plate Chest: Thorium Bars (sin texto)")
+  expect_eq(Qty(7654, THORIUM_BAR), 40, "Imperial Plate Boots: Thorium Bars (sin texto)")
+  expect_eq(Qty(95769, 14048), 6, "Threading a Solution: \"6 Bolts of Runecloth\"")
+  expect_eq(Qty(5124, 7910), 4, "Fiery Plate Gauntlets: \"4 Star Rubies\"")
+  expect_eq(Qty(2752, 7958), 4, "On Iron Pauldrons: \"four Bronze Battleaxes\" (Bronze Battle Axe)")
+  expect_eq(Qty(713, 3829), 1, "Coolant Heads Prevail: \"Find Frost Oil\"")
+  expect_eq(Qty(484, 3397), 6, "Young Crocolisk Skins: el texto dice 4, Forever pide 6")
+end, { boot = false })
+
 test("la prueba de los colores detecta una receta desordenada", function()
   -- (en una copia en memoria: así se sabe que la de arriba de verdad comprueba)
   local id, r = next(ES.Data.Cooking.recipes)

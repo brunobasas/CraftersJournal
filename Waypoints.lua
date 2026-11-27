@@ -226,9 +226,10 @@ function WP.Quest(questID)
   local q = false
   local baked = ES.Data.Quests and ES.Data.Quests[questID]
   if baked then
-    -- (asks: el texto de lo que pide entregar; chain: misiones antes en su cadena)
+    -- (asks: el texto de lo que pide entregar; chain: misiones antes en su cadena; pre:
+    -- cuáles, para ponerles precio a lo que piden: Planner.QuestCost)
     q = { id = questID, name = baked[1], side = baked[2], level = baked[3] or 0, starters = baked[4] or {},
-      asks = baked[5], chain = baked[6] or 0 }
+      asks = baked[5], chain = baked[6] or 0, pre = baked[8] }
     quests[questID] = q
     return q
   end

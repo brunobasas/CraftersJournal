@@ -458,14 +458,26 @@ function InstallAuctionator()
     } },
     -- Su escaneo completo (el marco lo crea al abrir la AH): AUCTIONATOR_FULL_SCANS cuenta
     -- las veces que se lanza
-    -- (AUCTIONATOR_WAITING = true: su propia cuenta atrás o un escaneo en curso, CanInitiate)
+    -- (AUCTIONATOR_WAITING = true: un escaneo en curso; y, como el de verdad, su propia
+    -- cuenta de 15 min desde SavedState.TimeOfLastReplicateScan, CanInitiate)
+    SavedState = {},
     State = { FullScanFrameRef = {
       -- (como el de verdad con la AH clásica: pide el escaneo completo al servidor)
+      -- (como el de verdad: «en curso», inProgress, desde justo antes de pedirlo hasta
+      -- acabar; aquí, unos segundos)
       InitiateScan = function()
+        local fr = Auctionator.State.FullScanFrameRef
         AUCTIONATOR_FULL_SCANS = (AUCTIONATOR_FULL_SCANS or 0) + 1
+        Auctionator.SavedState.TimeOfLastReplicateScan = time()
+        fr.inProgress = true
         QueryAuctionItems("", nil, nil, 0, nil, nil, true, false, nil)
+        C_Timer.After(10, function() fr.inProgress = nil end)
       end,
-      CanInitiate = function() return not AUCTIONATOR_WAITING end,
+      CanInitiate = function()
+        if AUCTIONATOR_WAITING then return false end
+        local last = Auctionator.SavedState.TimeOfLastReplicateScan
+        return last == nil or time() - last > 15 * 60
+      end,
     },
     -- Su escaneo en modo resumen (AH moderna, su botón con REPLICATE_SCAN desactivado):
     -- AUCTIONATOR_SUMMARY_SCANS cuenta las veces; no trae subastas al addon

@@ -56,6 +56,8 @@ test("formatos antiguos: se migran al cargar", function()
     sellSeen = { [2318] = 10 }, sellSeenCleaned = true,
     mail = { x = 1 }, earnBudget = 100, activeAH = "Realm-Neutral", sellGear = true, useGPS = true,
     noForeignScans = true, -- (opción "Leer los escaneos de otros addons": ya se leen siempre)
+    investNoAuctionatorTip = true, -- (la X del consejo de instalar Auctionator: ya no hay consejo)
+    noNeutralAHNotice = true, -- (el aviso de la AH neutral ya no es una opción)
     characters = { [guid] = {
       prof = { Leatherworking = { target = 225, useAH = false }, Tailoring = { target = 152 } },
       shopping = { { kind = "route", key = "Leatherworking", title = "vieja", items = {} },
@@ -66,6 +68,8 @@ test("formatos antiguos: se migran al cargar", function()
   expect(db.chars == nil and db.charsMigrated == nil, "chars sigue ahí")
   expect(db.sellSeen == nil and db.mail == nil and db.earnBudget == nil and db.activeAH == nil, "claves antiguas sin quitar")
   expect(db.noForeignScans == nil, "la opción de no leer los escaneos de otros addons sigue guardada")
+  expect(db.investNoAuctionatorTip == nil, "la X del consejo de instalar Auctionator sigue guardada")
+  expect(db.noNeutralAHNotice == nil, "el aviso de la AH neutral sigue apagado")
   local c = db.characters[guid]
   expect_eq(c.prof.Leatherworking.target, nil, "objetivo 225 antiguo")
   expect_eq(c.prof.Leatherworking.useAH, nil, "useAH")

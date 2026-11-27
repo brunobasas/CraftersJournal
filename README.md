@@ -6,7 +6,7 @@ A World of Warcraft: Forever addon to **level every profession the cheapest way*
 - Trainers by rank, with a waypoint to the nearest one.
 - Every recipe of each profession: which you know, which you can learn now, and where to get the rest.
 - English and Spanish.
-- AH prices come from Auctionator's full scan: install Auctionator to scan (the Scan button starts its scan and the addon reads it).
+- AH prices come from a full scan of the Auction House: the Scan button requests it. Auctionator is optional: with it, the Scan button starts Auctionator's full scan (one scan for both addons) and the Investments tab uses its price history. The "Scan mode" option (General) picks Auctionator or Crafter's Journal: with Crafter's Journal, the addon scans and uses only its own data even with Auctionator installed.
 
 Download it from CurseForge (link coming soon).
 

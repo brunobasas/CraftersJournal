@@ -170,17 +170,20 @@ function Invest:Remove(itemID, i)
 end
 
 ---------------------------------------------------------------------------
--- Precios por día de tus escaneos (solo se usan sin Auctionator: PriceHistory.lua)
+-- Precios por día de tus escaneos (solo se usan en modo Crafter's Journal: PriceHistory.lua)
 --
--- Al acabar cada escaneo del addon se apunta, por cada objeto de alguna cartera de este
--- reino, el precio de ese día: el de la escalera donde hay "suficientes" unidades (así
--- una subasta suelta muy barata no cuenta), y si ese día se escanea más de una vez, el
--- del último escaneo.
+-- Al acabar cada escaneo del addon se apunta, por cada objeto que sigue el escaneo (los
+-- de profesiones y los de alguna cartera de este reino, History:IsTracked), el precio de
+-- ese día: el de la escalera donde hay "suficientes" unidades (así una subasta suelta muy
+-- barata no cuenta), y si ese día se escanea más de una vez, el del último escaneo. Así,
+-- un objeto que entra en la cartera ya trae sus días.
 -- ES.db.investPrices[RealmKey][itemID] = "día:precio;día:precio..." (los últimos
--- PRICE_DAYS días; los días, desde 1970: siempre positivos). Se apuntan aunque haya
--- Auctionator, por si un día lo desinstalas
+-- PRICE_DAYS días, como el historial de Auctionator por defecto; los días, desde 1970:
+-- siempre positivos). Se apuntan también en el modo Auctionator (del escaneo que lee el
+-- addon, con su forma de medir el precio), por si un día pasas al de Crafter's Journal.
+-- Son ~2.150 objetos por escaneo: una cadena por objeto, no una tabla por día
 ---------------------------------------------------------------------------
-Invest.PRICE_DAYS = 30
+Invest.PRICE_DAYS = 21
 Invest.DAY0 = 0
 local DAY = 86400
 function Invest.Day(t) return math.floor(((t or time()) - Invest.DAY0) / DAY) end
@@ -249,22 +252,53 @@ local function PackDays(map, today)
   return table.concat(parts, ";")
 end
 
+-- El precio `p` del día `today` en los días guardados `s`, sin tablas: lo de siempre (un
+-- día nuevo, o otro escaneo el mismo día que el último) es añadir o cambiar el final y
+-- quitar del principio lo de hace PRICE_DAYS días o más. nil si `s` tiene un día
+-- posterior a `today` (un escaneo de otro día apuntado tarde): entonces, PackDays
+local function AppendDay(s, today, p)
+  if type(s) ~= "string" or s == "" then return today .. ":" .. p end
+  -- (el último día: con ".*" delante el patrón va directo al último ";"; sin él, se
+  -- probaba en cada posición de la cadena: ~60 ms por escaneo con 2.150 objetos)
+  local head, lastDay = s:match("^(.*);(%d+):%d+$")
+  if not lastDay then lastDay = s:match("^(%d+):%d+$") end
+  local last = tonumber(lastDay)
+  if not last or last > today then return nil end
+  if last == today then
+    s = head and (head .. ";" .. today .. ":" .. p) or (today .. ":" .. p)
+  else
+    s = s .. ";" .. today .. ":" .. p
+  end
+  local limit = today - Invest.PRICE_DAYS
+  while true do
+    local day, rest = s:match("^(%d+):%d+;(.*)$")
+    if not day or tonumber(day) > limit then break end
+    s = rest
+  end
+  return s
+end
+
 -- Apunta los precios de un escaneo (al acabar: ES:OnScanComplete)
 function Invest.RecordScan(scan)
   if type(scan) ~= "table" or type(scan.items) ~= "table" then return end
-  local ids = Invest.Tracked()
-  if not next(ids) then return end
   local root = Table(Table(ES.db, "investPrices"), ES:RealmKey())
   local today = Invest.Day(scan.time)
-  for id in pairs(ids) do
-    local p = Invest.ScanPrice(scan.items[id])
-    if p and p > 0 then
-      local map = ParseDays(root[id])
-      -- (el último escaneo del día: es el precio de ahora, y un escaneo raro se corrige
-      -- con el siguiente. Con "el más alto del día", un escaneo con pocas unidades baratas
-      -- dejaba todo el día un precio disparado: Small Flame Sac a 1g en vez de 12s)
-      map[today] = p
-      root[id] = PackDays(map, today)
+  local History = ES.History
+  for id, entry in pairs(scan.items) do
+    if History:IsTracked(id) then
+      local p = Invest.ScanPrice(entry)
+      if p and p > 0 then
+        -- (el último escaneo del día: es el precio de ahora, y un escaneo raro se corrige
+        -- con el siguiente. Con "el más alto del día", un escaneo con pocas unidades baratas
+        -- dejaba todo el día un precio disparado: Small Flame Sac a 1g en vez de 12s)
+        local s = AppendDay(root[id], today, p)
+        if not s then
+          local map = ParseDays(root[id])
+          map[today] = p
+          s = PackDays(map, today)
+        end
+        root[id] = s
+      end
     end
   end
   if ES.PriceHistory then ES.PriceHistory.Clear() end

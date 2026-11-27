@@ -2753,7 +2753,8 @@ ES.ScrollTeaches = ScrollTeaches -- (para pruebas)
 -- Prueba piloto: fila "Conseguir receta" con su mejor fuente (misión, vendedor
 -- o AH), el clic a quien da la misión o la vende, y todas las fuentes en el tooltip
 local function SourcedLearnLine(r, st, profName, plan)
-  local src = WP.RecipeSource(r, plan.ctx.prices, plan.ctx.opts.noQuests, plan.ctx.opts.noLimited)
+  -- (la de la ruta: la misión, a lo que cuesta lo que piden ella y su cadena)
+  local src = ES.Planner.RecipeSource(plan.ctx, r)
   local best = src and src.best
   if not best then return nil end
   local scrollName, scrollPlain, waitItem = ScrollName(r)
@@ -2780,11 +2781,13 @@ local function SourcedLearnLine(r, st, profName, plan)
     useItem = r.scroll -- clic: usa el pergamino (botón seguro, ver WantsHover)
   elseif best.kind == "quest" then
     icon, label = QUEST_ICON, L["Da la misión"]
-    -- Gratis en oro, pero puede pedir objetos o misiones antes (CurseForge): se dice
-    -- aquí y el texto exacto va en el tooltip; la ruta no les pone precio (casi todo
-    -- es botín de criaturas). Si no compensa, la X de la fila
+    -- Puede pedir objetos o misiones antes (CurseForge): se dice aquí y el texto exacto
+    -- va en el tooltip. Lo que piden ella y su cadena cuenta en el coste de la fila
+    -- (Planner.QuestCost); lo que no tiene precio (botín de criaturas), no: se avisa.
+    -- Si no compensa, la X de la fila
     local q = best.quest
     local cost = (q.asks and L[" · pide objetos"] or "")
+      .. (best.unpriced and L[" · algo sin precio"] or "")
       .. ((q.chain or 0) > 0 and string.format(L[" · cadena de %d misiones"], q.chain + 1) or "")
     sub = L["Misión: "] .. q.name .. (cost ~= "" and (ORANGE .. cost .. "|r") or also)
     pick = function() return WP.Nearest(best.quest.starters) end
@@ -2813,13 +2816,21 @@ local function SourcedLearnLine(r, st, profName, plan)
     if src.owned then
       GameTooltip:AddDoubleLine(Mark("owned") .. L["En tus bolsas"], src.owned .. L[" · gratis"], 1, 0.82, 0, 1, 1, 1)
     end
+    -- La misión con su precio (Planner.RecipeSource). En un paso de la ruta, lo que paga
+    -- ese paso (st.questCost): sin lo que ya paga otro paso de la misma cadena, como la fila
+    local questOpt
+    for _, o in ipairs(src.options) do if o.kind == "quest" then questOpt = o end end
+    local paid = st and st.questCost
+    if paid and questOpt and paid.quest == questOpt.quest then questOpt = paid end
     for _, q in ipairs(src.quests) do
+      local opt = questOpt and questOpt.quest == q and questOpt or nil
       if src.questsOff then
         GameTooltip:AddDoubleLine(ES.Market.ICON_BAD .. L["Misión"], q.name .. L[" · desactivada"], 0.6, 0.6, 0.6, 0.6, 0.6, 0.6)
       else
         -- ("gratis" solo si no pide nada: si pide objetos, cuesta lo que cueste conseguirlos)
-        GameTooltip:AddDoubleLine(Mark("quest") .. L["Misión"], q.name .. ((q.asks or (q.chain or 0) > 0) and "" or L[" · gratis"]),
-          1, 0.82, 0, 1, 1, 1)
+        local price = opt and opt.cost >= 0.5 and (ES.SEP .. ES.Money(opt.cost) .. (opt.unpriced and " +?" or ""))
+          or ((q.asks or (q.chain or 0) > 0) and "" or L[" · gratis"])
+        GameTooltip:AddDoubleLine(Mark("quest") .. L["Misión"], q.name .. price, 1, 0.82, 0, 1, 1, 1)
       end
       local starter = WP.Nearest(q.starters)
       local npc = starter and WP.NPC(starter)
@@ -2833,8 +2844,22 @@ local function SourcedLearnLine(r, st, profName, plan)
         GameTooltip:AddLine(q.chain == 1 and L["Antes hay que hacer 1 misión de su cadena, que también puede pedir objetos."]
           or string.format(L["Antes hay que hacer %d misiones de su cadena, que también pueden pedir objetos."], q.chain), 1, 0.6, 0.2, true)
       end
+      -- Lo que piden ella y su cadena, con lo que cuesta conseguir cada cosa (lo más
+      -- barato: lo que llevas, comprarlo o fabricarlo). Lo hecho ya no sale
+      if opt and opt.items and opt.items[1] and not src.questsOff then
+        GameTooltip:AddLine(L["Lo que piden ella y su cadena:"], 1, 0.82, 0)
+        for _, it in ipairs(opt.items) do
+          local name = ES:ItemName(it.item) or ("item:" .. it.item)
+          local qty = it.qty > 0 and (it.qty .. "× ") or ""
+          GameTooltip:AddDoubleLine("  " .. qty .. name, it.cost and ES.Money(it.cost) or L["sin precio"], 1, 1, 1,
+            it.cost and 1 or 0.6, it.cost and 1 or 0.6, it.cost and 1 or 0.6)
+        end
+        if opt.unpriced then
+          GameTooltip:AddLine(L["Lo que no tiene precio (se consigue matando criaturas, o no se sabe cuántos pide) no cuenta en el coste."], 0.6, 0.6, 0.6, true)
+        end
+      end
       if (q.asks or (q.chain or 0) > 0) and withX then
-        GameTooltip:AddLine(L["La ruta no le pone precio a lo que pide (casi todo se consigue matando criaturas). Si no te compensa, quítala con la X de la fila."], 0.6, 0.6, 0.6, true)
+        GameTooltip:AddLine(L["La ruta cuenta lo que cuesta conseguir lo que pide, comprado o fabricado. Si no te compensa, quítala con la X de la fila."], 0.6, 0.6, 0.6, true)
       end
     end
     if src.vendors[1] then

@@ -453,6 +453,85 @@ test("BulkMoney: el botón de anunciar dice Selling mientras está en la AH y SO
   expect(not tostring(P.Frame().post:GetText()):find(ES.L["En venta"], 1, true), "tras cerrarlo y abrirlo sigue diciendo Selling")
 end, { state = "full" })
 
+-- Botón de anunciar como cebo: cada anuncio que la AH acepta se apunta, con lo que tardó
+-- en venderse. Vendido en menos de P.INSTANT s lo compró un sniper (el cebo de 30c se
+-- vendía al instante una y otra vez, y nadie llegaba a rebajar por debajo): el chat lo dice
+-- y sugiere subirlo; el umbral se busca entre el más caro comprado al instante y el más
+-- barato que aguantó. «Usar» pone el precio sugerido
+test("BulkMoney: el botón de anunciar apunta los cebos y sugiere subir el que compra un sniper", function()
+  local P = ES.BulkPost
+  OpenPage("bulk")
+  P.Show(true)
+  P.SetItem(3575) -- Iron Bar
+  BAGS[3575] = 50
+  ES.Ledger.PostOnAH = function(_, itemID, n)
+    ES.Ledger.pendingPost = { text = "anunciado", name = "Iron Bar", itemID = itemID, hours = 12 }
+    return n
+  end
+  local name = (GetItemInfo(3575))
+  local f = P.Frame()
+  local function Bait(price, sniped)
+    P.SetPrice(price)
+    expect_eq(P.Post(), 1, "cebo a " .. price)
+    ES.Ledger:ConfirmPost(true)
+    local log = P.Log()
+    local e = log[#log]
+    expect(e and e.price == price and e.itemID == 3575, "el cebo a %d no se apunta", price)
+    if sniped then
+      FireEvent("AUCTION_HOUSE_SHOW_FORMATTED_NOTIFICATION", P.NOTE_SOLD, name)
+    else
+      e.t = e.t - P.INSTANT - 5 -- (pasa el tiempo de un sniper sin venderse)
+      P.DB().sale.state = "expired"
+    end
+    P.Refresh()
+    return e
+  end
+  -- Sin cebos: nada que sugerir
+  expect(not P.Summary(3575).suggest, "sugiere un precio sin cebos")
+  expect(not f.use:IsShown(), "«Usar» sale sin cebos")
+  -- 30c, comprado al instante: el chat lo dice y sugiere 45c (×1,5)
+  local printed = #PRINTS
+  local e = Bait(30, true)
+  expect_eq(P.Outcome(e), "sniped", "vendido al instante")
+  local s = P.Summary(3575)
+  expect(s.n == 1 and s.sniped == 1, "resumen: %d cebos, %d al instante", s.n, s.sniped)
+  expect_eq(s.suggest, 45, "sugerencia tras un cebo comprado al instante")
+  local said
+  local prefix = ES.L["Vendido en %d s: seguramente un sniper. Prueba el siguiente a %s."]:match("^(.-)%%")
+  for i = printed + 1, #PRINTS do if PRINTS[i]:find(prefix, 1, true) then said = true end end
+  expect(said, "el chat no dice que lo compró un sniper")
+  -- La línea del marco lo cuenta y «Usar» pone el precio sugerido
+  local line = tostring(f.baits.text:GetText())
+  expect(line:find(string.format(ES.L["Cebos: %d, %d comprados al instante"], 1, 1), 1, true), "la línea no cuenta los cebos: %s", line)
+  expect(f.use:IsShown(), "no sale «Usar» con una sugerencia")
+  f.use:GetScript("OnClick")(f.use)
+  expect_eq(P.DB().price, 45, "precio tras «Usar»")
+  -- 45c aguanta: el umbral está entre 30 y 45, se prueba en medio (38c)
+  e = Bait(45, false)
+  expect_eq(P.Outcome(e), "held", "aguantó sin venderse")
+  expect_eq(P.Summary(3575).suggest, 38, "sugerencia entre el comprado al instante y el que aguantó")
+  -- 38c, comprado al instante: entre 38 y 45 (42c)
+  Bait(38, true)
+  expect_eq(P.Summary(3575).suggest, 42, "sugerencia al acercarse al umbral")
+  -- 42c comprado: el hueco con 45 ya es pequeño, se queda en el que aguantó
+  Bait(42, true)
+  expect_eq(P.Summary(3575).suggest, 45, "sugerencia sin hueco")
+  -- Al precio sugerido, sin «Usar»; el tooltip lista los cebos
+  P.SetPrice(45)
+  P.Refresh()
+  expect(not f.use:IsShown(), "«Usar» sale con el precio ya puesto")
+  P.BaitsTooltip(f.baits)
+  -- Los cebos de otro objeto no cuentan; cerrar el botón no los borra; solo los últimos P.LOG_MAX
+  expect_eq(P.Summary(2589).n, 0, "cebos de otro objeto")
+  P.Show(false)
+  P.Show(true)
+  expect_eq(P.Summary(3575).n, 4, "cebos tras cerrar y abrir el botón")
+  for i = 1, P.LOG_MAX + 5 do P.Log()[#P.Log() + 1] = { itemID = 2589, price = i, t = time() - 600 } end
+  P.SetPrice(45)
+  Bait(45, false)
+  expect_eq(#P.Log(), P.LOG_MAX, "cebos apuntados")
+end, { state = "full" })
+
 -- BulkMoney: tu precio de un material (como en la Calculadora) sustituye al de la AH en
 -- las cuentas; se escribe en la fila del material ("2.5" = 2s 50c) y vacío vuelve al de
 -- la AH

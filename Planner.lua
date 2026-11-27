@@ -1135,7 +1135,7 @@ function Planner.AddRouteScrolls(plan, from, to, out)
         and not (Known(r) or (st.id and ES.IsRecipeKnown and ES:IsRecipeKnown(st.id)))
       local unit
       if learnable and Sourced(r, opts) then
-        local src = ES.Waypoints.RecipeSource(r, prices, opts.noQuests, opts.noLimited)
+        local src = Planner.RecipeSource(ctx, r)
         local buy = src and src.buy
         if buy and buy.kind == "ah" then unit = buy.cost end
       elseif learnable and not r.intermediate then
@@ -1276,7 +1276,8 @@ function Planner.LearnCost(ctx, recipe)
   if recipe.basic then return 0, nil end
   if recipe.favor then return 0, "favor" end
   if Sourced(recipe, ctx.opts) then
-    local src = ES.Waypoints.RecipeSource(recipe, ctx.prices, ctx.opts.noQuests, ctx.opts.noLimited)
+    -- (la misión, a lo que cuesta lo que piden ella y su cadena: Planner.RecipeSource)
+    local src = Planner.RecipeSource(ctx, recipe)
     if src and src.best then return src.best.cost, src.best.kind end
     return 0, "unknown"
   end
@@ -1665,6 +1666,98 @@ function Planner.CraftUnitCost(ctx, itemID)
     end
   end
   return best, bestRecipe
+end
+
+---------------------------------------------------------------------------
+-- Lo que cuesta una receta de misión: los objetos que pide la misión y los que piden
+-- las de su cadena que aún no has hecho (Data/Sources.lua, Quests: { objeto, cuántos }).
+-- Antes contaban como gratis. Discord: la ruta de Peletería usaba Wild Leather Leggings
+-- "gratis" y su cadena (Shoulders, Vest, Helmet y Leggings) pedía objetos por casi 20 de
+-- oro: Turtle Scale y Nightscape fabricados, Thick Armor Kits, Wildvines...
+---------------------------------------------------------------------------
+-- Lo más barato entre lo que llevas, comprarlo (vendedor o AH) o fabricarlo; nil sin precio
+local function TurnInItemCost(ctx, itemID, qty)
+  local buy = Acquire(ctx, itemID, qty, MAX_CRAFT_DEPTH, {}, {}, {}) -- (sin fabricar)
+  local unit = Planner.CraftUnitCost(ctx, itemID)
+  local craft = unit and unit * qty
+  if buy and craft then return math.min(buy, craft) end
+  return buy or craft
+end
+
+-- { cost, unpriced, items = { { item, qty, cost } } } de una misión. unpriced: pide algo
+-- sin precio (botín de criaturas, objetos de misión) o sin saber cuántos (qty 0); eso no
+-- suma: la ruta cuenta lo que sí tiene precio y la fila avisa del resto
+local function OneQuestCost(ctx, questID)
+  local baked = ES.Data.Quests and ES.Data.Quests[questID]
+  local c = { cost = 0, items = {} }
+  if not baked then return c end -- (no está: no pide objetos)
+  local list = baked[7]
+  if baked[5] and not list then c.unpriced = true end -- (datos sin los objetos)
+  for i = 1, #(list or {}), 2 do
+    local itemID, qty = list[i], list[i + 1]
+    local cost = qty > 0 and TurnInItemCost(ctx, itemID, qty) or nil
+    if cost then c.cost = c.cost + cost else c.unpriced = true end
+    c.items[#c.items + 1] = { item = itemID, qty = qty, cost = cost, quest = questID }
+  end
+  return c
+end
+
+-- Lo que cuesta la misión `q` (de WP.Quest) y lo que falta de su cadena: coste, si
+-- hay algo sin precio y la lista de objetos. Las misiones hechas no cuentan, ni las de
+-- `paid` (ya pagadas por otro paso de la ruta: Vest y Leggings comparten cadena)
+function Planner.QuestCost(ctx, q, paid)
+  local cache = ctx.questCost
+  if not cache then cache = {} ctx.questCost = cache end
+  local total, unpriced, items = 0, false, {}
+  local function Add(questID)
+    if (paid and paid[questID]) or QuestDone(questID) then return end
+    local c = cache[questID]
+    if not c then c = OneQuestCost(ctx, questID) cache[questID] = c end
+    total = total + c.cost
+    unpriced = unpriced or c.unpriced or false
+    for _, it in ipairs(c.items) do items[#items + 1] = it end
+  end
+  Add(q.id)
+  for _, p in ipairs(q.pre or {}) do Add(p) end
+  return total, unpriced, items
+end
+
+-- WP.RecipeSource con la misión a su precio (lo que piden ella y su cadena): con eso se
+-- elige la mejor fuente (si la misión cuesta más que el pergamino en la AH o en el
+-- vendedor, gana el pergamino). Es la fuente que usan la ruta y su fila "Conseguir receta"
+function Planner.RecipeSource(ctx, recipe)
+  local opts = ctx.opts or {}
+  local src = ES.Waypoints.RecipeSource(recipe, ctx.prices, opts.noQuests, opts.noLimited)
+  if not (src and src.options) then return src end
+  local cache = ctx.sources
+  if not cache then cache = {} ctx.sources = cache end
+  local hit = cache[recipe.scroll]
+  if hit and hit.from == src then return hit.out end
+  local out = src
+  for i, o in ipairs(src.options) do
+    if o.kind == "quest" then
+      local cost, unpriced, items = Planner.QuestCost(ctx, o.quest)
+      if cost > 0 or unpriced then
+        out = {}
+        for k, v in pairs(src) do out[k] = v end
+        out.options = {}
+        for j, other in ipairs(src.options) do out.options[j] = other end
+        out.options[i] = { kind = "quest", cost = cost, quest = o.quest, unpriced = unpriced or nil, items = items }
+        -- La más barata; a igual precio, misión antes que vendedor antes que AH (como WP)
+        local best
+        for _, x in ipairs(out.options) do
+          if not best or x.cost < best.cost then best = x end
+        end
+        if src.repLocked then best = nil end
+        out.buy = best
+        -- (el pergamino en tus bolsas sigue siendo lo mejor: ver WP.WithOwned)
+        out.best = (src.best and src.best.kind == "owned") and src.best or best
+      end
+      break
+    end
+  end
+  cache[recipe.scroll] = { from = src, out = out }
+  return out
 end
 
 -- Material que se compra aunque fabricarlo salga más barato por unidad, porque su receta
@@ -3219,6 +3312,7 @@ function Planner:Plan(data, opts)
   end
 
   local feePaid = {}
+  local questPaid = {} -- misiones (y de su cadena) cuyos objetos ya cuenta un paso anterior
   for _, st in ipairs(plan.steps) do
     local inf = info[st.id]
     st.recipe = data.recipes[st.id]
@@ -3235,6 +3329,21 @@ function Planner:Plan(data, opts)
     local firstUse = not feePaid[st.id]
     st.fee = firstUse and inf.learnCost or 0
     st.learnSource = firstUse and inf.learnSource or nil
+    -- De misión: lo que piden las misiones de su cadena se paga una vez aunque la ruta use
+    -- varias recetas de la misma cadena (Wild Leather Vest y Leggings piden las dos Wild
+    -- Leather Armor). La elección de recetas sí las cuenta en cada una: sale algo cara
+    if st.learnSource == "quest" then
+      local src = Planner.RecipeSource(ctx, st.recipe)
+      local q = src and src.best and src.best.kind == "quest" and src.best.quest
+      if q then
+        -- (questCost: lo que paga este paso, para que el tooltip de la fila diga lo mismo)
+        local fee, unpriced, items = Planner.QuestCost(ctx, q, questPaid)
+        st.fee = fee
+        st.questCost = { cost = fee, unpriced = unpriced or nil, items = items, quest = q }
+        questPaid[q.id] = true
+        for _, p in ipairs(q.pre or {}) do questPaid[p] = true end
+      end
+    end
     -- Antes hay que hacer la misión que la desbloquea (el paso avisa y lleva a quien la da)
     st.questFirst = firstUse and st.learnSource ~= "known" and Planner.QuestFirst(st.recipe) or nil
     feePaid[st.id] = true

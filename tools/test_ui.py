@@ -955,16 +955,23 @@ step("escanear con barrera de 15 min", function()
   local f = ES:GetMainFrame()
   ES.ahOpen = true
   ES.db.lastFullScan = nil
-  -- Sin Auctionator no se escanea: en gris y no se pide nada
+  -- Sin Auctionator, Escanear lo pide el propio addon (aquí se cancela en seguida)
   f.scanButton.SetEnabled = function(self, on) self._enabled = on and true or false end
   local started
-  QueryAuctionItems = function() started = true end
+  QueryAuctionItems = function(...) if select(7, ...) then started = true end end
   GetNumAuctionItems = function() return 0 end
+  CanSendAuctionQuery = function() return true, true end
   Auctionator = nil
   ES:RefreshScanButtons()
-  assert(f.scanButton._enabled == false, "sin Auctionator el botón Escanear no debe poder pulsarse")
+  assert(f.scanButton._enabled == true, "sin Auctionator el botón Escanear debe poder pulsarse")
+  local after = C_Timer.After
+  C_Timer.After = function() end
   ES.Scanner:Start()
-  assert(not started and not ES.Scanner:IsBusy(), "sin Auctionator no debe pedirse un escaneo")
+  assert(started and ES.Scanner:IsBusy(), "sin Auctionator el addon debe pedir su escaneo")
+  ES.Scanner:Abort()
+  C_Timer.After = after
+  ES.db.lastFullScan, ES.db.lastScanFail, ES.countdownTicking = nil, nil, false
+  started = false
   -- Con Auctionator: Escanear lanza su escaneo (con la API clásica) y el addon lo lee
   local atrWaiting = false
   Auctionator = { State = { FullScanFrameRef = {
@@ -4513,6 +4520,8 @@ step("novedades: una vez por versión, y en vista de desarrollo cuando quieras",
   for _, l in ipairs(f.lines) do if l._shown ~= false and l.icon._shown ~= false and tostring(l.text._text) ~= "" then items = items + 1 end end
   -- (las de imagen, una página cada una en vez de una fila)
   if f.page and f.page._shown and f.pages then items = items + #f.pages end
+  -- (la de elegir algo, su diapositiva sola)
+  if f.choiceView and f.choiceView._shown then items = items + 1 end
   assert(items == #ES.WHATS_NEW[1].items, "una fila o una página por novedad: " .. items)
   assert(tostring(f.devTag._text) == "", "sin vista de desarrollo, no lo dice")
   Hide()

@@ -23,7 +23,7 @@ QUESTIE = WOW_ADDONS / "QuestieDB"
 TOC = QUESTIE / "QuestieDB_Forever.toc"
 ZONES = QUESTIE / "support" / "Forever" / "Zones"
 
-ITEM = {"npcDrops": 2, "objectDrops": 3, "vendors": 14, "questRewards": 6}
+ITEM = {"name": 1, "npcDrops": 2, "objectDrops": 3, "vendors": 14, "questRewards": 6}
 NPC = {"name": 1, "minLevel": 4, "maxLevel": 5, "spawns": 7, "zoneID": 9, "friendlyToFaction": 13, "npcFlags": 15}
 # npcFlags de Forever (los de Classic, src/corrections/enum/expansions.lua de QuestieDB)
 NPC_VENDOR, NPC_INNKEEPER, NPC_BANKER, NPC_AUCTIONEER = 4, 128, 256, 4096

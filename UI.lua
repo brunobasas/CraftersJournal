@@ -845,9 +845,9 @@ end
 local ahButton
 
 -- Estado de los botones de escanear (cabecera y ventana de la AH). Escanear lanza el
--- escaneo de Auctionator (ver Scanner:Start):
+-- escaneo de Auctionator o, sin él, pide el del addon (ver Scanner:Start):
 --   escaneando -> el % de progreso, en gris
---   si no      -> "Escanear", pulsable solo con la AH abierta y Auctionator listo
+--   si no      -> "Escanear", pulsable solo con la AH abierta (y Auctionator listo, si está)
 -- Junto al botón de la cabecera, en pequeño: "Último escaneo: hace 3 min".
 -- "14:21": lo que falta para poder pedir otro escaneo completo al servidor
 local function Countdown(seconds)
@@ -859,8 +859,7 @@ function ES:RefreshScanButtons()
   local busy = self.Scanner:IsBusy()
   -- Límite de 15 min del servidor (ver Scanner): cuenta atrás en gris
   local wait = busy and 0 or self.Scanner:SecondsUntilNextScan()
-  -- (el escaneo lo pide Auctionator: sin él no se puede, y también cuenta su propia
-  -- cuenta atrás)
+  -- (con Auctionator, el escaneo lo pide él: también cuenta su propia cuenta atrás)
   local ahOpen = self:IsAuctionHouseOpen()
   local problem = self.Scanner.AuctionatorProblem()
   -- (escondidos en las opciones, pero a la vista porque faltaba algo: en gris)
@@ -869,8 +868,9 @@ function ES:RefreshScanButtons()
   -- Auctionator crea su marco de escaneo al abrirse la AH, quizá después que nosotros:
   -- se mira otra vez en un momento (unas pocas veces)
   -- (y el aviso de su escaneo en modo resumen: su marco aparece a la vez)
-  if ahOpen and type(Auctionator) == "table" then pcall(self.Scanner.HookAuctionatorSummary, self.Scanner) end
-  if ahOpen and type(Auctionator) == "table" and not self.Scanner.AuctionatorFrame() then
+  local usesAtr = self.Scanner.UsesAuctionator()
+  if ahOpen and usesAtr then pcall(self.Scanner.HookAuctionatorSummary, self.Scanner) end
+  if ahOpen and usesAtr and not self.Scanner.AuctionatorFrame() then
     self.auctionatorRetries = (self.auctionatorRetries or 0) + 1
     if self.auctionatorRetries <= 5 then
       C_Timer.After(1, function() if ES:IsAuctionHouseOpen() then ES:RefreshScanButtons() end end)
@@ -902,11 +902,9 @@ function ES:RefreshScanButtons()
   if ahButton then
     -- Siempre pulsable con la AH abierta: abre el addon aunque no se pueda escanear
     -- (CurseForge: con la cuenta atrás en gris no había forma de abrirlo desde la AH).
-    -- Salvo si lo escondiste y está porque falta algo (ScanButtonsLock): en gris
-    ahButton:SetEnabled(self:IsAuctionHouseOpen() and not locked)
-    -- (sin Auctionator no escanea: solo abre el addon)
-    ahButton:SetText(progress and ("Crafter's Journal: " .. progress)
-      or type(Auctionator) ~= "table" and "Crafter's Journal" or L["Crafter's Journal: Escanear"])
+    -- La opción de esconder el botón Escanear no le afecta (solo la cabecera)
+    ahButton:SetEnabled(self:IsAuctionHouseOpen())
+    ahButton:SetText(progress and ("Crafter's Journal: " .. progress) or L["Crafter's Journal: Escanear"])
   end
   self:UpdatePostStatus()
   -- Mientras dure el límite, la cuenta atrás avanza cada segundo
@@ -993,19 +991,16 @@ function ES:OnAuctionHouseShow()
     ahButton:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_TOP")
       GameTooltip:AddLine("Crafter's Journal")
-      -- En gris porque lo escondiste y falta algo (ScanButtonsLock): lo primero
-      local lock = ES:ScanButtonsLock()
-      if lock then GameTooltip:AddLine(lock, 1, 0.6, 0.2, true) end
       GameTooltip:AddLine(L["Descarga todas las subastas y muestra el análisis."], 1, 1, 1, true)
       local wait = not ES.Scanner:IsBusy() and ES.Scanner:SecondsUntilNextScan() or 0
       local problem = ES.Scanner.AuctionatorProblem()
       if wait > 0 then
         GameTooltip:AddLine(string.format(L["El servidor solo permite un escaneo completo cada 15 min: podrás volver a escanear en %s."], ES.Countdown(wait)), 1, 0.6, 0.2, true)
-      elseif problem and problem ~= lock then
+      elseif problem then
         GameTooltip:AddLine(problem, 1, 0.6, 0.2, true)
       end
       -- (con Auctionator en modo resumen, su botón no actualiza el addon: este sí)
-      if ES.Scanner.AuctionatorSummaryMode() and not lock then
+      if ES.Scanner.AuctionatorSummaryMode() then
         GameTooltip:AddLine(string.format(L["Auctionator está en modo resumen: su botón Escanear no actualiza Crafter's Journal. Usa este botón, o activa en las opciones de Auctionator «%s»."],
           ES.Scanner.AuctionatorScanOptionName()), 1, 0.6, 0.2, true)
       end
@@ -1013,8 +1008,7 @@ function ES:OnAuctionHouseShow()
     end)
     ahButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
   end
-  -- (escondidos si la última AH fue la neutral; el de Crafter's Journal, también si no
-  -- se quitó en las opciones)
+  -- (escondidos si la última AH fue la neutral: vuelven a salir)
   if self.ahListButton then self.ahListButton:Show() end
   self:PlaceScanButtons()
   self.Scanner.statusText = nil
@@ -1022,32 +1016,32 @@ function ES:OnAuctionHouseShow()
   if self.SetupAuctionPanel then self:SetupAuctionPanel(ahFrame) end
 end
 
--- Los botones de escanear (el de la cabecera y el de encima de la AH) salen por defecto;
--- se pueden quitar en las opciones (CurseForge: con el botón Escanear de Auctionator
--- les sobraban). Escondidos, el addon lee los escaneos completos de Auctionator y
--- /cj scan sigue pidiéndolo. Pero solo se esconden si con Auctionator se puede: si
--- Auctionator está en modo resumen (AH moderna, su configuración por defecto: su botón
--- no actualiza el addon, Scanner.AuctionatorSummaryMode) o no está, se ven en gris con
--- lo que falta (ScanButtonsLock), sin tocar la opción guardada. A la vista, como siempre
+-- El botón Escanear de la cabecera sale por defecto; la opción «Esconder el botón
+-- Escanear» (ES.db.noScanButtons) lo quita (CurseForge: con el botón Escanear de
+-- Auctionator les sobraba). Solo ese: el de encima de la AH, que abre el addon, sale
+-- siempre. Escondido, el addon lee los escaneos completos de Auctionator y /cj scan sigue
+-- pidiéndolo. Pero solo se esconde si con Auctionator se puede: si Auctionator está en
+-- modo resumen (AH moderna, su configuración por defecto: su botón no actualiza el addon,
+-- Scanner.AuctionatorSummaryMode), se ve en gris con lo que falta (ScanButtonsLock), sin
+-- tocar la opción guardada. En modo Crafter's Journal se ve siempre y se puede pulsar:
+-- es la forma de escanear (ScanButtonsOn)
 function ES:ScanButtonsLock()
   if not (self.db and self.db.noScanButtons) then return nil end
-  if type(Auctionator) ~= "table" then
-    return L["Instala Auctionator para escanear la AH: el addon lee su escaneo completo."]
-  end
+  if not self.Scanner.UsesAuctionator() then return nil end
   if self.Scanner.AuctionatorSummaryMode() then
-    return string.format(L["Auctionator está en modo resumen: su botón Escanear no actualiza Crafter's Journal. Activa en las opciones de Auctionator «%s», o vuelve a mostrar los botones de escanear en las opciones de Crafter's Journal."],
+    return string.format(L["Auctionator está en modo resumen: su botón Escanear no actualiza Crafter's Journal. Activa en las opciones de Auctionator «%s», o desmarca «Esconder el botón Escanear» en las opciones de Crafter's Journal."],
       self.Scanner.AuctionatorScanOptionName())
   end
 end
 
 function ES:ScanButtonsOn()
-  return not (self.db and self.db.noScanButtons) or self:ScanButtonsLock() ~= nil
+  return not (self.db and self.db.noScanButtons) or not self.Scanner.UsesAuctionator()
+    or self:ScanButtonsLock() ~= nil
 end
 
--- Muestra u oculta los botones de escanear según la opción. En la cabecera, sin el
--- botón, "Último escaneo: hace 3 min" pasa a su sitio. Encima de la AH, a la izquierda
--- del de Crafter's Journal va el de la lista de compra; sin él, el de la lista va a la
--- esquina, donde estaba él
+-- Muestra u oculta el botón Escanear de la cabecera según la opción: sin él, "Último
+-- escaneo: hace 3 min" pasa a su sitio. Encima de la AH, el de Crafter's Journal sale
+-- siempre (abre el addon), y a su izquierda el de la lista de compra
 function ES:PlaceScanButtons()
   local on = self:ScanButtonsOn()
   if main and main.scanButton then
@@ -1059,11 +1053,11 @@ function ES:PlaceScanButtons()
       main.lastScan:SetPoint("RIGHT", main.scanButton, "RIGHT", 0, 0)
     end
   end
-  if ahButton then ahButton:SetShown(on) end
+  if ahButton then ahButton:SetShown(not self.neutralAH) end -- (en la neutral, no: HideAuctionHouseUI)
   local list = self.ahListButton
   if not list then return end
   list:ClearAllPoints()
-  if on and ahButton then
+  if ahButton then
     list:SetPoint("RIGHT", ahButton, "LEFT", -4, 0)
   else
     list:SetPoint("BOTTOMRIGHT", list:GetParent(), "TOPRIGHT", 0, 2)

@@ -21,8 +21,8 @@ local function CheckCancelSaid(printed, key)
   expect_eq(fail.reason, text, "motivo guardado para el tooltip (sin la cuenta atrás, que se queda parada)")
 end
 
--- (el addon no escanea por su cuenta: Escanear lanza el escaneo de Auctionator y el
--- addon lee esas subastas, ver Scanner.lua)
+-- (con Auctionator, Escanear lanza su escaneo y el addon lee esas subastas; sin él, lo
+-- pide el propio addon: ver Scanner.lua y las pruebas "sin Auctionator" de más abajo)
 test("escaneo completo: guarda el precio por unidad más bajo de cada objeto", function()
   InstallAuctionator()
   AUCTIONS = {
@@ -73,30 +73,273 @@ test("no se escanea dos veces en 15 minutos", function()
   RunTimers()
 end, { state = "empty" })
 
-test("sin Auctionator, Escanear en gris, no pide nada y dice que lo instales", function()
+-- Sin Auctionator, el escaneo lo pide el propio addon (Scanner:StartOwn). Cuenta las
+-- peticiones de escaneo completo al servidor mientras corre `fn`
+local function CountFullScanRequests(fn)
+  local n, saved = 0, QueryAuctionItems
+  QueryAuctionItems = function(...)
+    if select(7, ...) then n = n + 1 end
+    return saved(...)
+  end
+  local ok, err = pcall(fn)
+  QueryAuctionItems = saved
+  if not ok then error(err, 0) end
+  return n
+end
+
+test("sin Auctionator, Escanear pide el escaneo una vez y lo lee para todas las pestañas", function()
+  AUCTIONS = {
+    { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 },  -- 25 c/u
+    { item = 2589, count = 20, buyout = 400, owner = "Luis", tl = 3 }, -- 20 c/u
+  }
+  OpenAH()
+  local printed = #PRINTS
+  local n = CountFullScanRequests(function()
+    ES.Scanner:Start()
+    RunTimers()
+  end)
+  expect_eq(n, 1, "peticiones de escaneo completo")
+  expect(not ES.Scanner:IsBusy(), "el escaneo no termina")
+  local scan = expect(ES.db.scans[ES:RealmKey()], "no se guardó el escaneo")
+  expect_eq(scan.items[2318].minUnit, 25, "Light Leather")
+  expect_eq(scan.items[2589].minUnit, 20, "Linen Cloth")
+  expect(ES.Scanner:SecondsUntilNextScan() > 0, "el escaneo propio no cuenta para el límite de 15 min")
+  local said = table.concat(PRINTS, "\n", printed + 1)
+  expect(said:find(ES.L["Escaneo completado: %d subastas, %d objetos distintos."]:sub(1, 10), 1, true),
+    "el chat no dice que se completó tu escaneo")
+  expect(not said:find("Auctionator", 1, true), "el chat habla de Auctionator sin Auctionator: %s", said)
+end, { state = "empty" })
+
+test("sin Auctionator, no se pide otro escaneo dentro de los 15 min del propio", function()
   AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
   OpenAH()
-  OpenMain()
-  ES:RefreshScanButtons()
-  expect(ES:GetMainFrame().scanButton._enabled == false, "el botón Escanear se puede pulsar sin Auctionator")
-  local queried = false
-  local saved = QueryAuctionItems
-  QueryAuctionItems = function(...) queried = true return saved(...) end
+  local n = CountFullScanRequests(function()
+    ES.Scanner:Start()
+    RunTimers()
+    OpenMain()
+    ES:RefreshScanButtons()
+    expect(ES:GetMainFrame().scanButton._enabled == false, "el botón Escanear se puede pulsar antes de 15 min")
+    ES.Scanner:Start()
+  end)
+  expect_eq(n, 1, "pidió otra vez antes de 15 min")
+  NOW = NOW + 16 * 60
+  n = CountFullScanRequests(function()
+    ES.Scanner:Start()
+    RunTimers()
+  end)
+  expect_eq(n, 1, "pasados 15 min no deja escanear")
+end, { state = "empty" })
+
+test("sin Auctionator, los demás marcos no oyen el aviso mientras llega el escaneo propio", function()
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  local other, heard = CreateFrame("Frame"), 0
+  other:RegisterEvent("AUCTION_ITEM_LIST_UPDATE")
+  other:SetScript("OnEvent", function() heard = heard + 1 end)
+  OpenAH()
+  ES.Scanner:Start()
+  expect(ES.Scanner:IsBusy(), "no espera el escaneo propio")
+  expect(not other._events.AUCTION_ITEM_LIST_UPDATE, "el otro marco sigue apuntado al aviso mientras llega")
+  RunTimers()
+  expect(not ES.Scanner:IsBusy(), "el escaneo no termina")
+  expect(ES.db.scans[ES:RealmKey()], "no se guardó el escaneo")
+  expect_eq(heard, 0, "veces que el otro marco oyó el aviso del escaneo propio")
+  expect(other._events.AUCTION_ITEM_LIST_UPDATE, "el otro marco no vuelve a estar apuntado al acabar")
+end, { state = "empty" })
+
+test("sin Auctionator, si el servidor no responde en 2 min se deja de esperar y los marcos vuelven a oír", function()
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  AH_RESPONDS = false
+  local other = CreateFrame("Frame")
+  other:RegisterEvent("AUCTION_ITEM_LIST_UPDATE")
+  OpenAH()
+  ES.Scanner:Start()
+  expect(ES.Scanner:IsBusy(), "no espera el escaneo propio")
+  RunTimers(60)
+  expect(ES.Scanner:IsBusy(), "a los 60 s ya no espera")
+  RunTimers(70)
+  AH_RESPONDS = true
+  expect(not ES.Scanner:IsBusy(), "sigue esperando sin respuesta")
+  CheckCancelSaid(0, "El servidor no respondió: solo permite un escaneo completo cada 15 min.")
+  expect(ES.Scanner:SecondsUntilNextScan() > 0, "sin cuenta atrás tras no responder")
+  expect(ES.db.scans[ES:RealmKey()] == nil, "guardó un escaneo sin respuesta")
+  expect(other._events.AUCTION_ITEM_LIST_UPDATE, "el otro marco se quedó silenciado")
+end, { state = "empty" })
+
+-- (el WoW simulado tiene la AH clásica; la de Forever es la moderna: sin
+-- QueryAuctionItems, con C_AuctionHouse.ReplicateItems y las subastas desde el índice 0)
+test("sin Auctionator, con la AH moderna (la de Forever) se pide ReplicateItems y se lee", function()
+  AUCTIONS = {
+    { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 },  -- 25 c/u
+    { item = 2589, count = 1, buyout = 18, owner = "Ana", tl = 2 },   -- 18 c/u
+  }
+  local replicated, got = 0, false
+  QueryAuctionItems = nil
+  C_AuctionHouse = {
+    ReplicateItems = function()
+      replicated = replicated + 1
+      C_Timer.After(3, function() got = true FireEvent("REPLICATE_ITEM_LIST_UPDATE") end)
+    end,
+    GetNumReplicateItems = function() return got and #AUCTIONS or 0 end,
+    GetReplicateItemInfo = function(i) return GetAuctionItemInfo("list", i + 1) end,
+    GetReplicateItemTimeLeft = function(i) return AUCTIONS[i + 1] and AUCTIONS[i + 1].tl - 1 end,
+  }
+  OpenAH()
+  ES.Scanner:Start()
+  expect(ES.Scanner:IsBusy(), "no espera el escaneo propio")
+  RunTimers()
+  expect_eq(replicated, 1, "veces que se pidió ReplicateItems")
+  expect(not ES.Scanner:IsBusy(), "el escaneo no termina")
+  local scan = expect(ES.db.scans[ES:RealmKey()], "no se guardó el escaneo")
+  expect_eq(scan.items[2318].minUnit, 25, "Light Leather")
+  expect_eq(scan.items[2589].minUnit, 18, "Linen Cloth")
+end, { state = "empty" })
+
+-- Con Auctionator cargado y el modo de escaneo Crafter's Journal: solo Crafter's Journal
+test("Auctionator cargado y la opción desactivada: Escanear pide el escaneo propio, sin avisos del modo resumen", function()
+  InstallAuctionator()
+  AUCTIONATOR_REPLICATE = false -- (en modo resumen: con la opción, avisaría)
+  ES:SetOption("noAuctionator", false)
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  OpenAH()
+  local printed = #PRINTS
+  expect(not ES.Scanner.AuctionatorSummaryMode(), "en modo propio, se mira el modo resumen de Auctionator")
+  local n = CountFullScanRequests(function()
+    ES.Scanner:Start()
+    RunTimers()
+  end)
+  expect_eq(n, 1, "peticiones de escaneo completo")
+  expect_eq(AUCTIONATOR_FULL_SCANS, nil, "se lanzó el escaneo de Auctionator")
+  local scan = expect(ES.db.scans[ES:RealmKey()], "no se guardó el escaneo")
+  expect_eq(scan.items[2318].minUnit, 25, "Light Leather")
+  -- Su escaneo resumido (su autoscan al abrir la AH) no avisa de nada
+  ES.Scanner:OnAuctionatorSummaryScan()
+  local said = table.concat(PRINTS, "\n", printed + 1)
+  expect(said:find(ES.L[" (con el escaneo de Crafter's Journal)"], 1, true), "el chat no dice que fue el escaneo de Crafter's Journal: %s", said)
+  local summary = ES.L["Auctionator ha hecho un escaneo en modo resumen, que Crafter's Journal no usa (solo trae el precio mínimo de cada objeto). Para actualizar el addon, pulsa Escanear en Crafter's Journal, o activa en las opciones de Auctionator «%s»."]:match("^(.-)%%")
+  expect(not said:find(summary, 1, true), "avisa del modo resumen de Auctionator en modo propio")
+end, { state = "empty" })
+
+test("Auctionator cargado y la opción desactivada: el escaneo propio apunta la cuenta de 15 min de Auctionator", function()
+  InstallAuctionator()
+  ES:SetOption("noAuctionator", false)
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  OpenAH()
+  local frameRef = Auctionator.State.FullScanFrameRef
+  expect(frameRef:CanInitiate(), "Auctionator ya esperaba antes de escanear")
+  local t = time()
   ES.Scanner:Start()
   RunTimers()
-  QueryAuctionItems = saved
-  expect(not queried, "el addon pidió su propio escaneo")
+  expect_eq(Auctionator.SavedState.TimeOfLastReplicateScan, t, "hora apuntada en Auctionator")
+  expect(not frameRef:CanInitiate(), "tras el escaneo propio, Auctionator deja otro escaneo completo")
+  NOW = NOW + 16 * 60
+  expect(frameRef:CanInitiate(), "pasados 15 min, Auctionator sigue esperando")
+  -- Un Auctionator sin esa cuenta: sin errores
+  Auctionator.SavedState = nil
+  ES.Scanner:Start()
+  RunTimers()
+end, { state = "empty" })
+
+-- hooksecurefunc como el del juego (el WoW simulado no lo tiene): llama a la original y
+-- luego al gancho; y los ganchos del escáner, puestos
+local function EnableHooks()
+  hooksecurefunc = function(a, b, c)
+    local tbl, name, fn = a, b, c
+    if type(a) == "string" then tbl, name, fn = _G, a, b end
+    local orig = tbl[name]
+    tbl[name] = function(...)
+      local r = { orig(...) }
+      fn(...)
+      return unpack(r)
+    end
+  end
+  ES.Scanner.hookedQuery, ES.Scanner.hookedReplicate = nil, nil
+  ES.Scanner:InstallHooks()
+end
+
+test("solo CJ con Auctionator cargado: el escaneo que pide Auctionator por su cuenta no se lee", function()
+  InstallAuctionator()
+  ES:SetOption("noAuctionator", false)
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  OpenAH()
+  local printed = #PRINTS
+  -- Su botón o su autoscan (sin ganchos, se sigue a mano como haría el gancho)
+  Auctionator.State.FullScanFrameRef:InitiateScan()
+  ES.Scanner:OnForeignScan("legacy")
+  expect(not ES.Scanner:IsBusy(), "se lee el escaneo de Auctionator en modo propio")
+  RunTimers()
+  expect(ES.db.scans[ES:RealmKey()] == nil, "se guardó el escaneo de Auctionator en modo propio")
+  expect_eq(#PRINTS, printed, "escribe en el chat por el escaneo de Auctionator")
+  -- Pero cuenta para los 15 min (el servidor no contestará a otro)
+  expect(ES.Scanner:SecondsUntilNextScan() > 0, "el escaneo de Auctionator no cuenta para los 15 min")
+end, { state = "empty" })
+
+test("solo CJ con Auctionator cargado, con los ganchos del juego: su escaneo no se lee, el propio sí", function()
+  InstallAuctionator()
+  ES:SetOption("noAuctionator", false)
+  EnableHooks()
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  OpenAH()
+  Auctionator.State.FullScanFrameRef:InitiateScan() -- (el gancho de QueryAuctionItems lo ve)
+  expect(not ES.Scanner:IsBusy(), "el gancho sigue el escaneo de Auctionator en modo propio")
+  RunTimers()
+  expect(ES.db.scans[ES:RealmKey()] == nil, "se guardó el escaneo de Auctionator en modo propio")
+  expect(ES.db.lastFullScan["otro addon"], "el escaneo de Auctionator no cuenta para los 15 min")
+  -- Pasados los 15 min, el botón del addon pide el suyo y ese sí se lee (el gancho no lo
+  -- toma por el de otro addon)
+  NOW = NOW + 16 * 60
+  ES.db.lastFullScan = {}
+  local scans = AUCTIONATOR_FULL_SCANS
+  ES.Scanner:Start()
+  RunTimers()
+  expect_eq(AUCTIONATOR_FULL_SCANS, scans, "Escanear lanzó el de Auctionator")
+  local scan = expect(ES.db.scans[ES:RealmKey()], "no se guardó el escaneo propio")
+  expect_eq(scan.items[2318].minUnit, 25, "Light Leather")
+  expect(ES.db.lastFullScan["otro addon"] == nil, "el gancho tomó el escaneo propio por el de otro addon")
+end, { state = "empty" })
+
+test("modo Auctionator, con los ganchos del juego: Escanear lanza el suyo una vez y se lee como tuyo", function()
+  InstallAuctionator()
+  EnableHooks()
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  OpenAH()
+  local printed = #PRINTS
+  local n = CountFullScanRequests(function()
+    ES.Scanner:Start()
+    RunTimers()
+  end)
+  expect_eq(n, 1, "peticiones")
+  expect_eq(AUCTIONATOR_FULL_SCANS, 1, "escaneos de Auctionator")
+  expect(ES.db.scans[ES:RealmKey()], "no se guardó")
+  expect(table.concat(PRINTS, "\n", printed + 1):find(ES.L[" (con el escaneo de Auctionator)"], 1, true), "el chat no dice que fue con Auctionator")
+end, { state = "empty" })
+
+test("solo CJ: el escaneo completo de otro addon (no Auctionator) se sigue leyendo", function()
+  InstallAuctionator()
+  ES:SetOption("noAuctionator", false)
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  OpenAH()
+  -- (ForeverForge u otro: Auctionator no está escaneando)
+  QueryAuctionItems("", nil, nil, 0, nil, nil, true, false, nil)
+  ES.Scanner:OnForeignScan("legacy")
+  expect(ES.Scanner:IsBusy(), "no se sigue el escaneo de otro addon")
+  RunTimers()
+  local scan = expect(ES.db.scans[ES:RealmKey()], "no se guardó el escaneo de otro addon")
+  expect_eq(scan.items[2318].minUnit, 25, "Light Leather")
+end, { state = "empty" })
+
+test("sin Auctionator, con la API clásica sin permiso del servidor no se pide nada", function()
+  local can = CanSendAuctionQuery
+  CanSendAuctionQuery = function() return true, false end
+  OpenAH()
+  local n = CountFullScanRequests(function()
+    ES.Scanner:Start()
+    RunTimers()
+  end)
+  CanSendAuctionQuery = can
+  expect_eq(n, 0, "peticiones de escaneo completo")
   expect(not ES.Scanner:IsBusy(), "se quedó escaneando")
-  expect(ES.db.scans[ES:RealmKey()] == nil, "guardó un escaneo sin Auctionator")
-  local msg = ES.L["Instala Auctionator para escanear la AH: el addon lee su escaneo completo."]
-  expect(table.concat(PRINTS, "\n"):find(msg, 1, true), "el chat no dice que instales Auctionator")
-  -- El tooltip del botón también lo dice
-  local lines = {}
-  local add = GameTooltip.AddLine
-  GameTooltip.AddLine = function(_, text) lines[#lines + 1] = tostring(text) end
-  ES:GetMainFrame().scanButton._scripts.OnEnter(ES:GetMainFrame().scanButton)
-  GameTooltip.AddLine = add
-  expect(table.concat(lines, "\n"):find(msg, 1, true), "el tooltip de Escanear no dice que instales Auctionator")
+  expect(table.concat(PRINTS, "\n"):find(ES.L["El servidor aún no permite un escaneo completo (quizá otro addon escaneó hace poco). Inténtalo más tarde."], 1, true),
+    "el chat no dice que el servidor aún no deja")
 end, { state = "empty" })
 
 test("con Auctionator sin su marco de escaneo aún: en gris y no se lanza nada", function()
@@ -106,8 +349,12 @@ test("con Auctionator sin su marco de escaneo aún: en gris y no se lanza nada",
   OpenMain()
   ES:RefreshScanButtons()
   expect(ES:GetMainFrame().scanButton._enabled == false, "el botón Escanear se puede pulsar")
-  ES.Scanner:Start()
-  RunTimers()
+  -- (con Auctionator nunca se pide un escaneo propio, tampoco si aún no está listo)
+  local n = CountFullScanRequests(function()
+    ES.Scanner:Start()
+    RunTimers()
+  end)
+  expect_eq(n, 0, "el addon pidió su propio escaneo con Auctionator cargado")
   expect(not ES.Scanner:IsBusy(), "se quedó escaneando")
   expect(table.concat(PRINTS, "\n"):find(ES.L["Auctionator aún no está listo para escanear: espera un momento o vuelve a abrir la AH."], 1, true),
     "el chat no dice que espere a Auctionator")
@@ -130,6 +377,98 @@ test("el escaneo automático de Auctionator se lee y pone la cuenta atrás", fun
     expect(not PRINTS[i]:find(ES.L["Escaneo completado: %d subastas, %d objetos distintos."]:sub(1, 10), 1, true),
       "el escaneo automático escribió en el chat: %s", PRINTS[i])
   end
+end, { state = "empty" })
+
+test("modo Auctionator: el escaneo que Auctionator pide por su cuenta dice Auctionator, no «otro addon»", function()
+  InstallAuctionator()
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  OpenAH()
+  Auctionator.State.FullScanFrameRef:InitiateScan() -- (su botón: marca «en curso» y lo pide)
+  ES.Scanner:OnForeignScan("legacy")
+  expect(ES.Scanner:IsBusy(), "no sigue el escaneo de Auctionator")
+  expect_eq(ES.Scanner.source, "auctionator", "de quién es el escaneo")
+  local other = ES.L["Leyendo el escaneo que pidió otro addon... %d s"]:match("^(.-)%.%.%.")
+  RunTimers(2)
+  expect(not tostring(ES.Scanner.statusText):find(other, 1, true), "el estado dice otro addon: %s", tostring(ES.Scanner.statusText))
+  RunTimers()
+  expect(tostring(ES.Scanner.statusText):find(ES.L[" (con el escaneo de Auctionator)"], 1, true),
+    "al acabar no dice que fue el de Auctionator: %s", tostring(ES.Scanner.statusText))
+end, { state = "empty" })
+
+-- Cambiar de modo con un escaneo en curso: el del otro modo no se guarda (antes, el de
+-- Auctionator se guardaba en modo Crafter's Journal y al revés)
+test("cambiar a Crafter's Journal con el escaneo de Auctionator en curso: no se guarda", function()
+  InstallAuctionator()
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  OpenAH()
+  local printed = #PRINTS
+  ES.Scanner:Start()
+  expect(ES.Scanner:IsBusy() and ES.Scanner.source == "auctionator", "no sigue el escaneo de Auctionator")
+  ES:SetOption("noAuctionator", false)
+  expect(not ES.Scanner:IsBusy(), "sigue leyendo el escaneo de Auctionator en modo Crafter's Journal")
+  RunTimers()
+  expect(ES.db.scans[ES:RealmKey()] == nil, "se guardó el escaneo de Auctionator en modo Crafter's Journal")
+  local said = table.concat(PRINTS, "\n", printed + 1)
+  expect(said:find(ES.L["Has cambiado el modo de escaneo: el escaneo en curso no se guarda."], 1, true), "el chat no lo dice: %s", said)
+end, { state = "empty" })
+
+test("cambiar a Auctionator con el escaneo propio en curso: no se guarda y los marcos vuelven a oír", function()
+  InstallAuctionator()
+  ES:SetOption("noAuctionator", false)
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  local other = CreateFrame("Frame")
+  other:RegisterEvent("AUCTION_ITEM_LIST_UPDATE")
+  OpenAH()
+  ES.Scanner:Start()
+  expect(ES.Scanner:IsBusy() and ES.Scanner.source == "own", "no espera el escaneo propio")
+  ES:SetOption("noAuctionator", true)
+  expect(not ES.Scanner:IsBusy(), "sigue leyendo el escaneo propio en modo Auctionator")
+  expect(other._events.AUCTION_ITEM_LIST_UPDATE, "el otro marco se quedó silenciado")
+  RunTimers()
+  expect(ES.db.scans[ES:RealmKey()] == nil, "se guardó el escaneo propio en modo Auctionator")
+end, { state = "empty" })
+
+test("cambiar de modo a mitad de guardar el escaneo del otro modo: tampoco se guarda", function()
+  InstallAuctionator()
+  -- 400 objetos y sin debugprofilestop: el resumen va por tandas de 300 (varios fotogramas)
+  AUCTIONS = {}
+  for i = 1, 400 do AUCTIONS[i] = { item = 100000 + i, count = 1, buyout = 100, owner = "Ana", tl = 4 } end
+  local savedProfile = debugprofilestop
+  debugprofilestop = nil
+  local ok, err = pcall(function()
+    OpenAH()
+    ES.Scanner:Start()
+    -- Un temporizador cada vez, hasta que esté guardando
+    for _ = 1, 200 do
+      if ES.Scanner.state == "saving" then break end
+      table.sort(TIMERS, function(a, b) return a.at < b.at end)
+      local t = table.remove(TIMERS, 1)
+      if not t then break end
+      if t.at > NOW then NOW = t.at end
+      t.f()
+    end
+    expect_eq(ES.Scanner.state, "saving", "el escaneo no llegó a guardarse por tandas")
+    ES:SetOption("noAuctionator", false)
+    expect(not ES.Scanner:IsBusy(), "sigue guardando el escaneo de Auctionator en modo Crafter's Journal")
+    RunTimers()
+    expect(ES.db.scans[ES:RealmKey()] == nil, "se guardó el escaneo de Auctionator en modo Crafter's Journal")
+  end)
+  debugprofilestop = savedProfile
+  if not ok then error(err, 0) end
+end, { state = "empty" })
+
+test("cambiar de modo con el escaneo de otro addon (no Auctionator) en curso: se sigue leyendo", function()
+  InstallAuctionator()
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  OpenAH()
+  QueryAuctionItems("", nil, nil, 0, nil, nil, true, false, nil) -- (ForeverForge, por ejemplo)
+  ES.Scanner:OnForeignScan("legacy")
+  expect(ES.Scanner:IsBusy() and ES.Scanner.source == "other", "no sigue el escaneo de otro addon")
+  ES:SetOption("noAuctionator", false)
+  expect(ES.Scanner:IsBusy(), "se canceló el escaneo de otro addon al cambiar de modo")
+  RunTimers()
+  local scan = expect(ES.db.scans[ES:RealmKey()], "no se guardó el escaneo de otro addon")
+  expect_eq(scan.items[2318].minUnit, 25, "Light Leather")
 end, { state = "empty" })
 
 test("con Auctionator, si el servidor no responde en 2 min se deja de esperar", function()
@@ -325,8 +664,8 @@ local function TooltipLines(button)
 end
 
 -- Quien escondió los botones de escanear: si con Auctionator no se puede actualizar el
--- addon (en modo resumen, o sin Auctionator), salen en gris y el tooltip dice lo que falta
-local LOCKED_SUMMARY = "Auctionator está en modo resumen: su botón Escanear no actualiza Crafter's Journal. Activa en las opciones de Auctionator «%s», o vuelve a mostrar los botones de escanear en las opciones de Crafter's Journal."
+-- addon (en modo resumen), salen en gris y el tooltip dice lo que falta
+local LOCKED_SUMMARY = "Auctionator está en modo resumen: su botón Escanear no actualiza Crafter's Journal. Activa en las opciones de Auctionator «%s», o desmarca «Esconder el botón Escanear» en las opciones de Crafter's Journal."
 local function ExpectLocked(button, text, where)
   expect(button:IsShown(), "%s: sigue oculto", where)
   expect(button._enabled == false, "%s: se puede pulsar", where)
@@ -344,7 +683,8 @@ test("modo resumen de Auctionator: con los botones ocultos en las opciones, sale
   local button = expect(CraftersJournalAHButton, "no hay botón encima de la AH")
   local text = string.format(ES.L[LOCKED_SUMMARY], "Use alternate slower scan mode by default")
   ExpectLocked(header, text, "botón de la cabecera")
-  ExpectLocked(button, text, "botón de encima de la AH")
+  -- (el de encima de la AH no va con la opción: a la vista y pulsable, abre el addon)
+  expect(button:IsShown() and button._enabled == true, "el botón de encima de la AH, escondido o en gris")
   -- (y el «usa este botón» del modo resumen no sale: no se puede pulsar)
   local used = ES.L["Auctionator está en modo resumen: su botón Escanear no actualiza Crafter's Journal. Usa este botón, o activa en las opciones de Auctionator «%s»."]:match("^(.-)%%")
   expect(not table.concat(TooltipLines(header), "\n"):find(used, 1, true), "el tooltip en gris dice que uses el botón")
@@ -362,7 +702,7 @@ test("modo resumen de Auctionator: con los botones ocultos en las opciones, sale
   RunTimers()
   OpenAH()
   expect(not header:IsShown(), "con Auctionator en modo completo, el botón de la cabecera sale aunque esté oculto")
-  expect(not button:IsShown(), "con Auctionator en modo completo, el botón de encima de la AH sale aunque esté oculto")
+  expect(button:IsShown(), "con el botón Escanear escondido, se fue también el de encima de la AH")
   -- Y al revés con la ventana del addon cerrada: al abrirla, el de la cabecera sigue el modo
   AuctionFrame:Hide()
   FireEvent("AUCTION_HOUSE_CLOSED")
@@ -385,13 +725,58 @@ test("modo resumen de Auctionator: con los botones a la vista, se pueden pulsar 
   RunTimers()
 end, { state = "empty" })
 
-test("sin Auctionator: con los botones ocultos en las opciones, salen en gris y dicen que lo instales", function()
-  ES:SetOption("noScanButtons", false)
+test("sin Auctionator, el botón Escanear se puede pulsar y su tooltip no pide instalarlo", function()
   local main = OpenMain()
   OpenAH()
-  local text = ES.L["Instala Auctionator para escanear la AH: el addon lee su escaneo completo."]
-  ExpectLocked(main.scanButton, text, "botón de la cabecera")
-  ExpectLocked(expect(CraftersJournalAHButton, "no hay botón encima de la AH"), text, "botón de encima de la AH")
+  local button = expect(CraftersJournalAHButton, "no hay botón encima de la AH")
+  expect(main.scanButton._enabled == true, "el botón de la cabecera, en gris sin Auctionator")
+  expect(button._enabled == true, "el botón de encima de la AH, en gris sin Auctionator")
+  expect_eq(button:GetText(), ES.L["Crafter's Journal: Escanear"], "texto del botón de encima de la AH")
+  for _, b in ipairs({ main.scanButton, button }) do
+    local tip = table.concat(TooltipLines(b), "\n")
+    expect(not tip:find("Auctionator", 1, true), "el tooltip habla de Auctionator sin él: %s", tip)
+  end
+end, { state = "empty" })
+
+test("sin Auctionator: con los botones ocultos en las opciones, se ven y se pueden pulsar", function()
+  AUCTIONS = { { item = 2318, count = 5, buyout = 125, owner = "Ana", tl = 4 } }
+  ES:SetOption("noScanButtons", false) -- (ocultos en las opciones)
+  local main = OpenMain()
+  OpenAH()
+  local button = expect(CraftersJournalAHButton, "no hay botón encima de la AH")
+  expect(main.scanButton:IsShown(), "sin Auctionator, el botón de la cabecera sigue oculto")
+  expect(button:IsShown(), "sin Auctionator, el botón de encima de la AH sigue oculto")
+  expect(main.scanButton._enabled == true, "sin Auctionator, el botón de la cabecera en gris")
+  expect(button._enabled == true, "sin Auctionator, el botón de encima de la AH en gris")
+  expect_eq(ES.db.noScanButtons, true, "se cambió la opción guardada")
+  -- Y escanea: lo pide el addon
+  button._scripts.OnClick(button)
+  RunTimers()
+  local scan = expect(ES.db.scans[ES:RealmKey()], "el botón de encima de la AH no escaneó")
+  expect_eq(scan.items[2318].minUnit, 25, "Light Leather")
+end, { state = "empty" })
+
+test("Auctionator cargado y la opción desactivada: los botones ocultos se ven, se pulsan y dicen que escanea CJ", function()
+  InstallAuctionator() -- (en modo completo: con la opción, los ocultos no se verían)
+  ES:SetOption("noScanButtons", false)
+  ES:SetOption("noAuctionator", false)
+  local main = OpenMain()
+  OpenAH()
+  local button = expect(CraftersJournalAHButton, "no hay botón encima de la AH")
+  expect(main.scanButton:IsShown() and button:IsShown(), "los botones ocultos no se ven en modo propio")
+  expect(main.scanButton._enabled == true and button._enabled == true, "los botones en gris en modo propio")
+  local tip = table.concat(TooltipLines(main.scanButton), "\n")
+  expect(tip:find(ES.L["El escaneo lo pide Crafter's Journal."], 1, true), "el tooltip no dice quién escanea: %s", tip)
+  -- Al volver a activarla: los ocultos se esconden y el tooltip dice Auctionator
+  ES:SetOption("noAuctionator", true)
+  expect(not main.scanButton:IsShown(), "con Auctionator en modo completo, los ocultos se ven")
+  ES:SetOption("noScanButtons", true)
+  tip = table.concat(TooltipLines(main.scanButton), "\n")
+  expect(tip:find(ES.L["Con Auctionator: el escaneo lo hace Auctionator (así guarda su historial de precios) y el addon lee esos mismos datos para todas las pestañas."], 1, true),
+    "con la opción activada, el tooltip no dice que escanea Auctionator: %s", tip)
+  ES.Scanner:Start()
+  expect_eq(AUCTIONATOR_FULL_SCANS, 1, "con la opción activada, no se lanza el escaneo de Auctionator")
+  RunTimers()
 end, { state = "empty" })
 
 -- Avisos del addon en el chat que contienen `text`
@@ -493,13 +878,17 @@ test("opción: los botones de escanear, a la vista por defecto en la cabecera y 
   expect(header:IsShown(), "el botón de la cabecera no sale por defecto")
   expect(button:IsShown(), "el botón de encima de la AH no sale por defecto")
   expect(list._anchorTo == button, "la lista de compra no va junto al botón")
-  -- Se quitan al momento, con la AH abierta: los dos
-  ES:SetOption("noScanButtons", false)
+  -- «Esconder el botón Escanear» (marcada = escondido): al momento, con la AH abierta,
+  -- solo el de la cabecera; el de encima de la AH sigue para abrir el addon
+  local opt = ScanButtonsOption()
+  expect(not opt.get(), "sin tocarla, la casilla sale marcada")
+  opt.set(true)
   expect_eq(ES.db.noScanButtons, true, "opción guardada")
-  expect(not header:IsShown(), "el botón de la cabecera sigue con la opción quitada")
-  expect(not button:IsShown(), "el botón de encima de la AH sigue con la opción quitada")
+  expect(opt.get(), "marcada, la casilla no lo dice")
+  expect(not header:IsShown(), "el botón de la cabecera sigue con la opción marcada")
+  expect(button:IsShown(), "se fue también el botón de encima de la AH")
   expect(list:IsShown(), "se fue también la lista de compra")
-  expect(list._anchorTo == list:GetParent(), "la lista de compra no va a la esquina")
+  expect(list._anchorTo == button, "la lista de compra no sigue junto al botón de la AH")
   -- "Último escaneo" sigue a la vista, en el sitio del botón
   local lastScan = ES:GetMainFrame().lastScan
   expect_eq(lastScan:GetNumPoints(), 1, "anclajes del último escaneo (no se movió al sitio del botón)")
@@ -514,22 +903,24 @@ test("opción: los botones de escanear, a la vista por defecto en la cabecera y 
   FireEvent("AUCTION_HOUSE_CLOSED")
   RunTimers()
   OpenAH()
-  expect(not button:IsShown(), "el botón vuelve al abrir otra vez la AH")
-  -- Y vuelven al activarla
-  ES:SetOption("noScanButtons", true)
+  expect(not header:IsShown(), "el botón de la cabecera vuelve al abrir otra vez la AH")
+  expect(button:IsShown(), "el botón de encima de la AH no sale al abrir otra vez la AH")
+  -- Y vuelven al desmarcarla
+  opt.set(false)
   expect_eq(ES.db.noScanButtons, nil, "opción guardada")
   expect(header:IsShown(), "el botón de la cabecera no vuelve al activar la opción")
   expect(button:IsShown(), "el botón de encima de la AH no vuelve al activar la opción")
   expect(list._anchorTo == button, "la lista de compra no vuelve junto al botón")
 end, { state = "empty" })
 
-test("opción: quien quitó el botón de encima de la AH sigue sin los botones de escanear", function()
+test("opción antigua de quitar el botón de encima de la AH: se borra y no esconde el de la cabecera", function()
   local savedDB = ES.db
-  -- Lo quitó antes (noAHButton): sigue sin ellos, cabecera incluida
+  -- Lo quitó en una versión antigua (noAHButton): ese botón sale ahora siempre, y la
+  -- opción de esconder es solo la de la cabecera, que no pidió esconder
   local m = { noAHButton = true }
   ES.db = m
   ES:MigrateWindowOptions()
-  expect_eq(m.noScanButtons, true, "volvieron los botones que había quitado")
+  expect_eq(m.noScanButtons, nil, "se escondió el botón de la cabecera sin pedirlo")
   expect_eq(m.noAHButton, nil, "queda la opción de antes")
   -- No lo quitó: siguen a la vista, aunque los apagara la prueba de desactivados por defecto
   m = { scanButtons = nil, noAHButton = false, sellWindowSplit = true }
@@ -1484,7 +1875,7 @@ test("al abrir la AH, el diario del escaneo apunta el mapa", function()
 end, { state = "scan" })
 
 -- Antes era una línea en el chat que pasaba desapercibida
-test("AH neutral: una ventana avisa de que aún no funciona (una vez por sesión, se puede apagar)", function()
+test("AH neutral: una ventana avisa de que aún no funciona (una vez por sesión, sin casilla ni opción)", function()
   local text = ES.L["Crafter's Journal aún no funciona en la Casa de Subastas neutral. Aquí no escanea ni abre sus ventanas; tus rutas y precios siguen siendo los de la Casa de Subastas de tu facción."]
   NPC_FACTION = nil
   SetPlayerMap(1446)
@@ -1493,6 +1884,9 @@ test("AH neutral: una ventana avisa de que aún no funciona (una vez por sesión
   expect(d:IsShown(), "no sale la ventana del aviso")
   expect_eq(d.text._text, text, "texto del aviso")
   expect(d.ok:IsShown() and not d.cancel:IsShown(), "el aviso debería tener un solo botón (Aceptar)")
+  -- Ya no se apaga: sin «No volver a mostrar este aviso» y sin opción
+  expect(not d.check:IsShown() and not d.note:IsShown(), "el aviso tiene la casilla para apagarlo")
+  for _, o in ipairs(ES.OPTIONS) do expect(o.key ~= "noNeutralAHNotice", "sigue la opción del aviso") end
   -- Al cerrar la AH se va
   AuctionFrame:Hide()
   FireEvent("AUCTION_HOUSE_CLOSED")
@@ -1501,23 +1895,16 @@ test("AH neutral: una ventana avisa de que aún no funciona (una vez por sesión
   -- Una vez por sesión
   OpenAH()
   expect(not d:IsShown(), "el aviso sale en cada visita")
-  -- En otra sesión vuelve; con "No volver a mostrar este aviso" ya no
+  -- En otra sesión vuelve (aunque estuviera apagado con la opción de antes); Aceptar lo cierra
+  ES.db.noNeutralAHNotice = true
   ES.neutralWarned = nil
   AuctionFrame:Hide()
   FireEvent("AUCTION_HOUSE_CLOSED")
   RunTimers()
   OpenAH()
   expect(d:IsShown(), "el aviso no vuelve en otra sesión")
-  d.check:SetChecked(true)
   d.ok:GetScript("OnClick")(d.ok)
   expect(not d:IsShown(), "Aceptar no cierra el aviso")
-  expect_eq(ES.db.noNeutralAHNotice, true, "la casilla no apaga el aviso")
-  ES.neutralWarned = nil
-  AuctionFrame:Hide()
-  FireEvent("AUCTION_HOUSE_CLOSED")
-  RunTimers()
-  OpenAH()
-  expect(not d:IsShown(), "el aviso sale apagado")
   NPC_FACTION = "Alliance"
 end, { state = "scan" })
 

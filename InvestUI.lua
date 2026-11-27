@@ -16,7 +16,6 @@ local L = ES.L
 local Invest, PH = ES.Invest, ES.PriceHistory
 local GREEN, RED, GREY, ORANGE, GOLD = "|cff40ff40", "|cffff4040", "|cff9d9d9d", "|cffff9933", "|cffffd100"
 local DASH = "|cff888888—|r"
-local BLUE_TIP = "|cff80ccff" -- (consejos: el azul de los de la pestaña Inventario)
 -- Triángulos verde (sube) y rojo (baja), en gris (precio viejo) y el punto de la gráfica:
 -- tools/gen_invest_arrows.py
 local MEDIA = "Interface\\AddOns\\CraftersJournal\\Media\\Invest\\"
@@ -149,10 +148,10 @@ local function DateText(t)
   return ""
 end
 
--- Por qué no hay precio (con Auctionator, solo cuenta él; sin él, tus escaneos)
+-- Por qué no hay precio (modo Auctionator: solo cuenta él; modo Crafter's Journal: tus escaneos)
 local function NoPriceText()
   if PH.Available() then return L["Sin precio: búscalo en Auctionator"] end
-  return L["Sin precio: instala Auctionator"] -- (sin él, el addon ya no escanea)
+  return L["Sin precio: escanea la AH"] -- (los días que apunta el addon al escanear)
 end
 
 -- De dónde sale un precio: "De tu escaneo de hoy" o "Del historial de Auctionator"
@@ -165,8 +164,11 @@ end
 -- escalera de precios, y desde cuánto el resto: así se ve si un precio muy bajo es una
 -- subasta suelta o si el mercado ha bajado de verdad. nil si el escaneo es de hace más
 -- de 12 h o no tiene el objeto
+-- Solo en modo «solo Crafter's Journal»: en el modo Auctionator, Inversiones usa solo lo de
+-- Auctionator (su precio no se junta con la escalera de tu escaneo)
 local DEPTH_MAX_AGE = 12 * 3600
 local function DepthLine(itemID, price)
+  if PH.Available() then return nil end
   local scan = price and ES.db and type(ES.db.scans) == "table" and ES.db.scans[ES:RealmKey()]
   local item = type(scan) == "table" and type(scan.items) == "table" and scan.items[itemID]
   local ladder = type(item) == "table" and item.ladder
@@ -191,11 +193,6 @@ local function DepthLine(itemID, price)
     .. (nextPrice and string.format(L[" · el resto desde %s"], Money(nextPrice)) or "")
 end
 ES.InvestDepthLine = DepthLine -- (pruebas)
-
--- El consejo de instalar Auctionator: solo sin él, hasta que lo cierras con su X
-local function ShowAuctionatorTip()
-  return not PH.Available() and not ES.db.investNoAuctionatorTip
-end
 
 ---------------------------------------------------------------------------
 -- Ventana de compra o venta: cantidad, precio (por unidad o total) y, debajo, un
@@ -495,24 +492,32 @@ local function NotForAH(id)
   return bind == 1 or bind == 4
 end
 
--- Objetos del buscador: solo lo que puede ir a la AH. Lo que ha estado a la venta (tu
--- último escaneo y lo que tiene precios en Auctionator) seguro que sí; los ligados y
--- los de misión nunca salen ahí. Sin escaneo ni Auctionator, los materiales y productos
+-- Objetos del buscador: solo lo que puede ir a la AH. Lo que ha estado a la venta seguro
+-- que sí, y sale de la fuente del modo: en el modo Auctionator, lo que tiene precios en
+-- Auctionator; en modo «solo Crafter's Journal», tu último escaneo (sin mezclar). Los
+-- ligados y los de misión nunca salen ahí. Sin nada de eso, los materiales y productos
 -- de las recetas, sin lo que el juego sabe que es ligado o de misión. Y siempre lo que
--- ya tienes en la cartera
+-- ya tienes en la cartera. Se rehace si cambia el modo (la opción «Modo de escaneo»)
+local candidatesMode
 local function Candidates()
-  if candidates then return candidates end
+  local usesAtr = PH.Available()
+  if candidates and candidatesMode == usesAtr then return candidates end
+  candidatesMode = usesAtr
   local set = {}
-  local scan = ES.db.scans and ES.db.scans[ES:RealmKey()]
-  for id in pairs(scan and scan.items or {}) do set[id] = true end
-  local adb = Auctionator and Auctionator.Database and Auctionator.Database.db
-  if type(adb) == "table" then
-    pcall(function()
-      for key in pairs(adb) do
-        local id = tonumber(key) -- (las claves de equipo con variantes, "g:...", no)
-        if id then set[id] = true end
-      end
-    end)
+  if usesAtr then
+    -- (su base de datos puede no estar o cambiar de forma: entonces, como sin nada)
+    local adb = type(Auctionator) == "table" and type(Auctionator.Database) == "table" and Auctionator.Database.db
+    if type(adb) == "table" then
+      pcall(function()
+        for key in pairs(adb) do
+          local id = tonumber(key) -- (las claves de equipo con variantes, "g:...", no)
+          if id then set[id] = true end
+        end
+      end)
+    end
+  else
+    local scan = ES.db.scans and ES.db.scans[ES:RealmKey()]
+    for id in pairs(scan and scan.items or {}) do set[id] = true end
   end
   if next(set) == nil then
     for _, data in pairs(ES.Data) do
@@ -530,16 +535,19 @@ local function Candidates()
   for id in pairs(set) do if type(id) == "number" then candidates[#candidates + 1] = id end end
   return candidates
 end
+ES.InvestCandidates = Candidates -- (pruebas)
 
 -- { { id, name, low } }: los nombres de los datos del addon (en su idioma y en inglés:
 -- "silk" y "seda" encuentran lo mismo), sin preguntar al juego. Lo escaneado que no está
 -- en los datos, solo si el juego ya lo tiene cargado: pedir miles de objetos al
 -- servidor (todo lo escaneado) hacía que el buscador fuera a tirones
+local nameIndexFor -- (los candidatos con los que se hizo: si cambian, con el modo, se rehace)
 local function NameIndex()
-  if nameIndex then return nameIndex end
-  nameIndex = {}
+  local list = Candidates()
+  if nameIndex and nameIndexFor == list then return nameIndex end
+  nameIndex, nameIndexFor = {}, list
   local english = ES.Data.ItemNames or {}
-  for _, id in ipairs(Candidates()) do
+  for _, id in ipairs(list) do
     local name, en = ES:DataItemName(id), english[id]
     if not name and not en and Cached(id) then name = (ES:GetItemData(id)) end
     name = name or en
@@ -1176,28 +1184,10 @@ function ES:CreateInvestPage(page)
     page.views[i] = b
   end
 
-  -- X del consejo de Auctionator (solo se ve con el consejo): no volver a enseñarlo
-  page.tipClose = CreateFrame("Button", nil, page)
-  page.tipClose:SetSize(14, 14)
-  page.tipClose:SetPoint("RIGHT", page.views.grid, "LEFT", -12, 0)
-  page.tipClose:SetNormalTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
-  page.tipClose:SetHighlightTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Highlight", "ADD")
-  page.tipClose:SetScript("OnClick", function()
-    ES.db.investNoAuctionatorTip = true
-    GameTooltip:Hide()
-    ES:RenderInvest()
-  end)
-  page.tipClose:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine(L["No volver a mostrar este consejo"])
-    GameTooltip:Show()
-  end)
-  page.tipClose:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  page.tipClose:Hide()
-
+  -- De dónde salen los precios (y cuántos no tienen), bajo las cifras
   page.status = Label(page, "", "GameFontHighlightSmall")
   page.status:SetPoint("TOPLEFT", strip, "BOTTOMLEFT", 4, -2)
-  page.status:SetPoint("RIGHT", page.tipClose, "LEFT", -6, 0)
+  page.status:SetPoint("RIGHT", page.views.grid, "LEFT", -12, 0)
   page.status:SetJustifyH("LEFT")
   page.status:SetWordWrap(false)
 
@@ -1246,20 +1236,12 @@ function ES:RenderInvest()
   page.stats.net:SetText(t.priced > 0 and (L["Neto tras la AH (5%)"] .. ": " .. Money(t.net)) or "")
   page.stats.realized:SetText(SignedMoney(t.realized))
 
-  -- Sin Auctionator, el consejo (en azul, con su X): los precios son los de tus últimos
-  -- escaneos y sin él no se escanea (Scanner.lua). Con él, de dónde salen los precios.
-  -- Y cuántos no tienen precio
-  local tip = ShowAuctionatorTip()
-  page.tipClose:SetShown(tip)
+  -- De dónde salen los precios: en el modo Auctionator, su historial; en el de Crafter's Journal, los días que
+  -- apunta el addon de sus escaneos (Invest.RecordScan). Y cuántos no tienen precio
   local missing = t.missing > 0 and string.format(L["%d sin precio: no cuentan en Vale hoy."], t.missing) or nil
-  if tip then
-    page.status:SetText(BLUE_TIP .. L["Precios de tus últimos escaneos. Instala Auctionator para volver a escanear y tener el historial de precios."] .. "|r")
-  elseif PH.Available() then
-    page.status:SetText(GREY .. L["Precios del historial de Auctionator: se ponen al día cada vez que escaneas."]
-      .. (missing and (" " .. ES.SEP .. " " .. missing) or "") .. "|r")
-  else
-    page.status:SetText(missing and (GREY .. missing .. "|r") or "")
-  end
+  local source = PH.Available() and L["Precios del historial de Auctionator: se ponen al día cada vez que escaneas."]
+    or L["Precios de tus escaneos con Crafter's Journal: se ponen al día cada vez que escaneas."]
+  page.status:SetText(GREY .. source .. (missing and (" " .. ES.SEP .. " " .. missing) or "") .. "|r")
 
   -- Ancho: el de la zona de la lista menos la guía de scroll (antes las fichas de la
   -- derecha quedaban debajo de la guía)
@@ -1874,9 +1856,8 @@ function ES:RenderInvestItem()
   local chart = page.chart
   if not h then
     chart:SetDays(nil)
-    -- (sin Auctionator, la recomendación va aquí también: es cuando más se echa en falta)
     chart:SetMessage(PH.Available() and L["Auctionator aún no tiene precios de este objeto: búscalo o escanea con Auctionator."]
-      or L["Sin precios de este objeto. Instala Auctionator para escanear la AH y ver su evolución."])
+      or L["Sin precios de este objeto: escanea la AH para ver su evolución."])
   else
     chart:SetDays(h.days)
     local valid = 0

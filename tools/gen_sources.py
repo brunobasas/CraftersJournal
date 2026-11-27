@@ -65,17 +65,88 @@ def main():
         lo, hi = r and field("Npc", npc_id, NPC["minLevel"], r), r and field("Npc", npc_id, NPC["maxLevel"], r)
         return (int(lo), int(hi or lo)) if isinstance(lo, (int, float)) and lo > 0 else None
 
-    # Lo que pide entregar una misión: su texto de objetivos ("Bring 2 Turtle Scale
-    # Helms...") si pide objetos, o None. No se le pone precio: casi todo es botín de
-    # criaturas y las cantidades vienen escritas de mil formas; se enseña tal cual
-    def quest_asks(q, qr):
+    # Nombres de objeto de Forever (para leer cuántos pide una misión en su texto)
+    item_names = {}
+    with open(HERE / "wago" / "ItemSparse_forever.csv", encoding="utf-8") as f:
+        rd = csv.reader(f)
+        next(rd)
+        for r in rd:
+            item_names[int(r[0])] = r[1]
+
+    def item_objectives(q, qr):
         obj = field("Quest", q, QUEST["objectives"], qr) or {}
         item_obj = obj.get(3) if isinstance(obj, dict) else (obj[2] if len(obj) > 2 else None)
-        if not any(item_obj or []):
-            return None
+        return [o for o in (item_obj or []) if o]
+
+    def objectives_text(q, qr):
         text = field("Quest", q, QUEST["objectivesText"], qr) or []
         text = " ".join(t.decode("utf-8", "replace") if isinstance(t, bytes) else str(t) for t in text)
-        return " ".join(text.split()) or None
+        return " ".join(text.split())
+
+    # Lo que pide entregar una misión: su texto de objetivos ("Bring 2 Turtle Scale
+    # Helms...") si pide objetos, o None. Se enseña tal cual en el tooltip
+    def quest_asks(q, qr):
+        if not item_objectives(q, qr):
+            return None
+        return objectives_text(q, qr) or None
+
+    # Los objetos que pide, con cuántos: [id, n, id, n...] (n = 0: no se sabe cuántos).
+    # QuestieDB dice qué objetos pero no cuántos; la cantidad sale del texto ("Bring 2
+    # Turtle Scale Helms ... and a Wildvine"). Con ellos la ruta le pone precio a la
+    # receta de misión (Discord: las de Wild Leather salían gratis y la cadena de Wild
+    # Leather Leggings pedía objetos por casi 20 de oro)
+    NUM_WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+                 "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "fifteen": 15, "twenty": 20,
+                 "thirty": 30, "forty": 40, "fifty": 50}
+    COUNT = r"\b(\d+|" + "|".join(NUM_WORDS) + r")\s+(?:(?:pieces?|vials?|helpings?|mugs?|bundles?|bags?)\s+of\s+)?"
+
+    def name_pattern(name):
+        """El nombre del objeto tal como puede salir en el texto: en plural ("Star Rubies",
+        "Bolts of Runecloth": se pluraliza la palabra antes de "of") y con las palabras
+        juntas o separadas ("Bronze Battleaxes" es el objeto Bronze Battle Axe)"""
+        words = name.split()
+        head = words.index("of") - 1 if "of" in words[1:] else len(words) - 1
+        parts = []
+        for i, w in enumerate(words):
+            p = re.escape(w)
+            if i == head:
+                p = re.escape(w[:-1]) + r"(?:y|ies)" if w.endswith("y") else p + r"(?:e?s)?"
+            parts.append(p)
+        return r"\s*".join(parts) + r"\b"
+
+    # Cuántos se piden cuando el texto no lo dice (o dice otra cosa). Sacado de Wowhead
+    # Forever, la página de cada misión (comprobado 2026-11-26: las demás cantidades que
+    # salen del texto coinciden con Wowhead)
+    THORIUM_BAR = 12359
+    QUEST_COUNTS = {
+        484: {3397: 6},  # Young Crocolisk Skins: el texto dice 4, Forever pide 6
+        7604: {17203: 1},  # A Binding Contract: con el contrato se entrega un Sulfuron Ingot
+        # Imperial Plate (Derotain Mudsipper): no tienen texto de objetivos
+        7653: {THORIUM_BAR: 20}, 7654: {THORIUM_BAR: 40}, 7655: {THORIUM_BAR: 20}, 7656: {THORIUM_BAR: 60},
+        7657: {THORIUM_BAR: 50}, 7658: {THORIUM_BAR: 60}, 7659: {THORIUM_BAR: 20},
+    }
+
+    def quest_items(q, qr):
+        objs = item_objectives(q, qr)
+        if not objs:
+            return None
+        text = objectives_text(q, qr)
+        out = []
+        for o in objs:
+            item_id = int(seq(o)[0]) if not isinstance(o, int) else o
+            # (los objetos de misión no están en ItemSparse: el nombre de QuestieDB)
+            ir = row("Item", item_id)
+            name, n = item_names.get(item_id) or (ir and field("Item", item_id, ITEM["name"], ir)), 0
+            pat = name and name_pattern(name)
+            m = pat and re.search(COUNT + pat, text, re.I)
+            if m:
+                c = m.group(1).lower()
+                n = int(c) if c.isdigit() else NUM_WORDS[c]
+            elif pat and re.search(r"\b" + pat, text, re.I):
+                n = 1  # nombrado sin cantidad ("Find Frost Oil", "some Soothing Spices"): uno
+            n = QUEST_COUNTS.get(q, {}).get(item_id, n)
+            out += [item_id, n]
+        return out
 
     # Misiones que hay que hacer antes (toda la cadena, no solo la anterior)
     def quest_chain(q, seen=None):
@@ -95,6 +166,28 @@ def main():
         return seen
 
     items, quests, npcs_needed = {}, {}, set(trainers)
+
+    # Una misión que da un pergamino (reward) y, para ponerle precio, las de su cadena que
+    # piden objetos (sin reward: no se va a quien las da, solo se miran sus objetos)
+    def add_quest(q, reward):
+        if q in quests:
+            return
+        qr = row("Quest", q)
+        if not qr:
+            return
+        races = field("Quest", q, QUEST["requiredRaces"], qr) or 0
+        a, h = (races & ALLIANCE_RACES) != 0, (races & HORDE_RACES) != 0
+        starters = ids(at(field("Quest", q, QUEST["startedBy"], qr), 1))
+        chain = sorted(quest_chain(q))
+        quests[q] = (field("Quest", q, QUEST["name"], qr), "" if a == h else ("A" if a else "H"),
+                     field("Quest", q, QUEST["requiredLevel"], qr) or 0, starters,
+                     quest_asks(q, qr), len(chain), quest_items(q, qr), chain)
+        if reward:
+            npcs_needed.update(starters)
+            for p in chain:
+                pr = row("Quest", p)
+                if pr and item_objectives(p, pr):
+                    add_quest(p, False)
     drops = {}  # pergamino -> (criaturas o None si es del mundo, cuántas criaturas, cuántos objetos, niveles)
     droppers = set()  # criaturas de las que se guarda el nivel
     for item_id in sorted(scrolls | vendor_items | set(RANK_BOOKS)):
@@ -118,18 +211,7 @@ def main():
             items[item_id] = (vendors, qs)
             npcs_needed.update(vendors)
         for q in qs:
-            if q in quests:
-                continue
-            qr = row("Quest", q)
-            if not qr:
-                continue
-            races = field("Quest", q, QUEST["requiredRaces"], qr) or 0
-            a, h = (races & ALLIANCE_RACES) != 0, (races & HORDE_RACES) != 0
-            starters = ids(at(field("Quest", q, QUEST["startedBy"], qr), 1))
-            quests[q] = (field("Quest", q, QUEST["name"], qr), "" if a == h else ("A" if a else "H"),
-                         field("Quest", q, QUEST["requiredLevel"], qr) or 0, starters,
-                         quest_asks(q, qr), len(quest_chain(q)))
-            npcs_needed.update(starters)
+            add_quest(q, True)
 
     # Vendedores de pergaminos de Forever (PRIVATE/forever_*.csv): se suman a los de
     # QuestieDB, solo los que tienen sitio en el mapa. Un pergamino que en Forever no vende
@@ -282,10 +364,15 @@ def main():
                 parts.append(f"o = {n_objs}")
         out.append(f"  [{item_id}] = {{ {', '.join(parts)} }},")
     out += ["}", "", "-- [misión] = { nombre, bando (\"A\", \"H\" o \"\" los dos), nivel mínimo, { quien la da },",
-            "--   texto de lo que pide entregar (o nil), misiones antes en su cadena }", "ES.Data.Quests = {"]
-    for q, (name, side, level, starters, asks, chain) in sorted(quests.items()):
+            "--   texto de lo que pide entregar (o nil), misiones antes en su cadena,",
+            "--   { objeto, cuántos, ... } que pide (cuántos 0: no se sabe) o nil, { misiones de su cadena } o nil }",
+            "-- (también las de la cadena que piden objetos, para ponerles precio)", "ES.Data.Quests = {"]
+    for q, (name, side, level, starters, asks, n_chain, q_items, chain) in sorted(quests.items()):
+        rest = ""
+        if q_items or chain:
+            rest = f", {lua_ids(q_items) if q_items else 'nil'}" + (f", {lua_ids(chain)}" if chain else "")
         out.append(f"  [{q}] = {{ {lua_str(name)}, \"{side}\", {level}, {lua_ids(starters)}, "
-                   f"{lua_str(asks) if asks else 'nil'}, {chain} }},")
+                   f"{lua_str(asks) if asks else 'nil'}, {n_chain}{rest} }},")
     out += ["}", "",
             "-- [PNJ] = { nombre, bando (\"A\", \"H\", \"\" los dos, \"X\" ninguno), mapa, x, y } (x, y de 0 a 1;",
             "-- en una mazmorra: mapa 0 y la zona como 6.º campo)", "ES.Data.NPCs = {"]
