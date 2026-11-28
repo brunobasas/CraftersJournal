@@ -263,16 +263,65 @@ test("Simple Poultice: saltar la fila de Mild Spices no salta la del Bottle", fu
   expect(not rows[DALARAN_NOIR].done, "la fila del Bottle también se saltó")
 end, { boot = false })
 
+-- (un hooksecurefunc mínimo, como el del juego: ProfessionUI.lua apunta las compras con él)
+local function HookSecure()
+  hooksecurefunc = function(t, name, fn)
+    if type(t) == "string" then t, name, fn = _G, t, name end
+    local orig = t[name]
+    t[name] = function(...) local r = { orig(...) } fn(...) return unpack(r) end
+  end
+end
+
 test("Simple Poultice: cerrar a Morag no da por visitada la fila de Mild Spices", function()
+  HookSecure()
   PoulticeRoute(true)
   local notEnough = ES.L["No había suficiente"]
   OpenMerchant({ { item = DALARAN_NOIR, price = 50 } }) -- (Morag: vende el Bottle, no las Mild Spices)
+  BuyMerchantItem(1, 1)
   CloseMerchant()
   local rows = VendorRows()
   local spices, noir = rows[MILD_SPICES], rows[DALARAN_NOIR]
   expect(not spices.sub:find(notEnough, 1, true), "la fila de Mild Spices dice «No había suficiente»: %s", spices.sub)
   expect(not spices.done, "la fila de Mild Spices dejó de estar pendiente")
   expect(noir.sub:find(notEnough, 1, true), "la fila del Bottle no se dio por visitada: %s", noir.sub)
+end, { boot = false })
+
+test("Simple Poultice: cerrar a Morag sin comprar no dice «No había suficiente»", function()
+  HookSecure()
+  PoulticeRoute(true)
+  local notEnough = ES.L["No había suficiente"]
+  OpenMerchant({ { item = DALARAN_NOIR, price = 50 } })
+  CloseMerchant()
+  local noir = VendorRows()[DALARAN_NOIR]
+  expect(not noir.sub:find(notEnough, 1, true), "la fila del Bottle dice «No había suficiente» sin comprar: %s", noir.sub)
+end, { boot = false })
+
+test("Simple Poultice: abrir a Morag deja como paso actual la fila del Bottle", function()
+  PoulticeRoute(true)
+  BAGS[3174] = 1000 -- (sin la compra de la AH delante: los dos recados son del vendedor)
+  OpenMerchant({ { item = DALARAN_NOIR, price = 50 } })
+  local cur
+  for _, l in ipairs(ES:RouteLines("FirstAid", { buy = true }) or {}) do
+    if l.current then cur = l break end
+  end
+  local id = cur and cur.buyItems and cur.buyItems[1] and cur.buyItems[1].itemID
+  expect_eq(id, DALARAN_NOIR, "material de la fila actual con Morag abierto")
+  CloseMerchant()
+end, { boot = false })
+
+test("vendedor con la lista sin cargar: no se apunta que le falta", function()
+  PoulticeRoute(true)
+  local guid, itemID = UnitGUID, GetMerchantItemID
+  UnitGUID = function(u) if u == "npc" then return "Creature-0-0-0-0-" .. MORAG .. "-0" end return guid(u) end
+  GetMerchantItemID = function() return nil end -- (el juego aún no lo ha cargado)
+  OpenMerchant({ { item = DALARAN_NOIR, price = 50 } })
+  local noir = VendorRows()[DALARAN_NOIR]
+  local lacks = ES.Waypoints.vendorLacks[MORAG]
+  expect(not (lacks and lacks[DALARAN_NOIR]), "Morag apuntado como sin Bottle antes de cargar su lista")
+  expect(noir.onClick, "la fila del Bottle no compra aquí con la lista sin cargar")
+  GetMerchantItemID = itemID
+  CloseMerchant()
+  UnitGUID = guid
 end, { boot = false })
 
 -- Cada venta o compra trae MERCHANT_UPDATE y BAG_UPDATE_DELAYED, y cada repintado repasa
