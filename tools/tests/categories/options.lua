@@ -69,6 +69,22 @@ test("cada selector de segmentos: cada opción se guarda (la de por defecto, nad
   expect(n > 0, "no hay selectores de segmentos")
 end, { state = "full" })
 
+-- Bug: la Duración de las subastas (cuatro botones de 110) se salía de la ventana y el
+-- botón de 24 h quedaba cortado
+test("cada selector de segmentos cabe en el ancho de la ventana", function()
+  local n = 0
+  ES:OpenOptions()
+  RunTimers()
+  for _, cb in ipairs(ES:OptionsWindow().checks) do
+    if cb.option.kind == "segmented" then
+      expect(cb.select.width <= cb.textW, "%s: los botones miden %d y caben %d",
+        cb.option.key, cb.select.width, cb.textW)
+      n = n + 1
+    end
+  end
+  expect(n > 0, "no hay selectores de segmentos")
+end)
+
 test("Inversiones: sin opción de cartera por personaje (es de la cuenta)", function()
   expect_eq(ES:OptionCategory("investPerChar"), nil, "sigue la opción")
   expect_eq(ES:OptionCategory("investPriceMode"), "invest", "el precio al apuntar, en Inversiones")

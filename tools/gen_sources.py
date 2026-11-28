@@ -228,26 +228,13 @@ def main():
                     # "Limited (N)": vende N y se repone con el tiempo ("Unlimited": siempre hay)
                     if r["stock"].strip().startswith("Limited"):
                         limited.add((int(r["item"]), int(r["npc"])))
-        # Correcciones comprobadas en el juego.
-        # Raptor Hide Harness / Raptor Hide Belt: los datos los tienen al revés.
-        # En el juego Tunkk (Horda, Hammerfall) vende el Belt y Androd Fadran (Alianza,
-        # Refuge Pointe) la Harness, como en el Classic original (dos jugadores de la
-        # Horda, Discord y CurseForge, 2026-11)
-        VENDOR_FIXES = {13287: {2816}, 13288: {2819}}
-        for item_id, npcs in VENDOR_FIXES.items():
-            if item_id in fv_vendors:
-                was = fv_vendors[item_id]
-                for old, new in zip(sorted(was), sorted(npcs)):
-                    if (item_id, old) in limited:
-                        limited.add((item_id, new))
-                fv_vendors[item_id] = set(npcs)
+        # (Raptor Hide Harness / Raptor Hide Belt: aquí se les cambiaba el vendedor por dos
+        # avisos de jugadores, y era al revés. Los datos están bien: la Harness la vende
+        # Tunkk (Horda) y el Belt Androd Fadran (Alianza). GitHub #14)
         for item_id in scrolls:
             book = fv_vendors.get(item_id)
             vendors, qs = items.get(item_id, ([], []))
-            if item_id in VENDOR_FIXES:
-                vendors = sorted(VENDOR_FIXES[item_id]) # (QuestieDB también lo tiene al revés)
-                npcs_needed.update(VENDOR_FIXES[item_id])
-            elif book:
+            if book:
                 vendors = sorted(set(vendors) | book)
                 npcs_needed.update(book)
             elif vendors:

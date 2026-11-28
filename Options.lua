@@ -558,10 +558,14 @@ local function CreateSegmented(page, o)
   row.desc:SetWidth(DESC_W)
   row.desc:SetJustifyH("LEFT")
   row.desc:SetTextColor(0.78, 0.74, 0.66)
+  -- (los botones caben en el ancho del texto: con cuatro, 110 cada uno se salía de la
+  -- ventana y el último no se veía)
+  row.textW = DESC_W
+  local segW = math.min(110, math.floor((DESC_W - 2) / #o.choices))
   row.select = ES.UI.Segmented(row, o.choices, function(v)
     ES.db[o.key] = v ~= o.default and v or nil
     if o.apply then o.apply(v) end
-  end, 110, 22)
+  end, segW, 22)
   row.select:SetPoint("TOPLEFT", row.desc, "BOTTOMLEFT", 0, -8)
   function row.Refresh()
     row.label:SetText(L[o.label])

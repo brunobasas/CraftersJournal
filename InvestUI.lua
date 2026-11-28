@@ -35,7 +35,8 @@ local Money = function(c) return ES.Money(c) end
 function ES.UI.Segmented(parent, choices, onSelect, segW, h)
   segW, h = segW or 96, h or 22
   local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-  f:SetSize(segW * #choices + 2, h + 2)
+  f.width = segW * #choices + 2 -- (lo que mide de ancho)
+  f:SetSize(f.width, h + 2)
   f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
   f:SetBackdropColor(0.08, 0.06, 0.04, 0.9)
   f:SetBackdropBorderColor(0.52, 0.38, 0.17, 1)

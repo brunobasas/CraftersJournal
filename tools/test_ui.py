@@ -1160,7 +1160,7 @@ step("aviso de recetas de botín en la AH: una vez al día por receta", function
   ES.db.scrollAlerts = savedAlerts
 end)
 step("recetas de vendedor con stock limitado (lim)", function()
-  -- Raptor Hide Harness: solo la vende Tunkk, 1 y repone con el tiempo
+  -- Raptor Hide Harness: solo la vende Tunkk, 1 y repone con el tiempo (GitHub #14)
   local src = ES.Data.ItemSources
   assert(src[13287] and src[13287].lim == true, "Raptor Hide Harness debería marcarse con stock limitado")
   -- Hilo y tintes de los vendedores de materiales: siempre hay
@@ -1182,8 +1182,8 @@ step("recetas de vendedor con stock limitado (lim)", function()
   local wl = ES.Data.Quests[2859]
   assert(wl and tostring(wl[5]):find("Turtle Scale Helms") and wl[6] == 4, "Wild Leather Leggings: falta lo que pide o su cadena")
   assert(ES.Waypoints.Quest(2859).asks == wl[5], "la misión no lleva lo que pide")
-  -- Su vendedor es Androd Fadran (Alianza), no Tunkk: Wowhead lo tenía al revés
-  assert(src[13287].v[1] == 2816 and src[13288].v[1] == 2819, "Raptor Hide Harness la vende Androd Fadran y el Belt, Tunkk")
+  -- Su vendedor es Tunkk (Horda), y el del Belt Androd Fadran (Alianza): GitHub #14
+  assert(src[13287].v[1] == 2819 and src[13288].v[1] == 2816, "Raptor Hide Harness la vende Tunkk y el Belt, Androd Fadran")
   local VENDOR = src[13287].v[1]
   local savedSide = ES.Data.NPCs[VENDOR][2]
   ES.Data.NPCs[VENDOR][2] = "" -- (de los dos bandos para la prueba)

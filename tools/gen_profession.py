@@ -85,6 +85,19 @@ RANK_BIT = {75: 1, 150: 2, 225: 4, 300: 8}
 NPC_FLAG_TRAINER = 16
 FOREVER_NPC_IDS = 200000  # los PNJ nuevos de Forever tienen ID altos (p. ej. 251991)
 OVERRIDES = HERE / "forever" / "trainer_overrides.csv"
+# Recetas en que valen los instructores de Forever del tramo por nivel, no los de Classic
+# que la regla de Soft-soled Linen Boots deja (ver tr). Jugador, 2026-11-28: a 180 la ruta
+# mandaba a Hahrana Ironhide (Artesano, Feralas) a aprender Nightscape Headband y no se la
+# enseñaba. En Forever las enseñan Una y Telonis (Experto); en Classic, Drakk y Hahrana.
+# Las otras cinco, del mismo tramo, están igual en los datos
+FOREVER_TEACHERS = {
+    10499,  # Nightscape Tunic
+    10507,  # Nightscape Headband
+    10511,  # Turtle Scale Breastplate
+    10518,  # Turtle Scale Bracers
+    14930,  # Quickdraw Quiver
+    14932,  # Thick Leather Ammo Pouch
+}
 
 # Hotfixes de Blizzard que el volcado DB2 de wago todavía no refleja (notas oficiales
 # de WoW: Forever, 6-13 de noviembre de 2026). Quitar cuando wago los traiga.
@@ -239,7 +252,10 @@ def quest_trainers():
         if not isinstance(sub, str) or not (int(flags) & NPC_FLAG_TRAINER):
             continue
         for prof, noun in TRAINER_NOUN.items():
-            pm = re.match(rf"^(?:(Journeyman|Expert|Artisan|Master) )?{noun}(?: Trainer)?$", sub)
+            # ("Master Leatherworker" o "Master Leatherworking Trainer": Drakk Stonehand, el
+            # Artesano de la Alianza, lleva el segundo y se quedaba fuera. Discord, 2026-11-26:
+            # "Entrenar Artesano" decía que no había ningún instructor de tu bando)
+            pm = re.match(rf"^(?:(Journeyman|Expert|Artisan|Master) )?(?:{noun}(?: Trainer)?|{prof} Trainer)$", sub)
             generic = sub == f"{prof} Trainer"
             prefix = pm and pm.group(1)
             if prefix:
@@ -794,6 +810,8 @@ def main():
             if who and not (who & by_rank):
                 known = sorted(who & {npc for npc, _ in trainers}) or sorted(who)
                 parts.append("tr = { " + ", ".join(str(n) for n in known) + " }")
+            elif who and sid in FOREVER_TEACHERS:
+                parts.append("tr = { " + ", ".join(str(n) for n in sorted(who & by_rank)) + " }")
             elif who:
                 # Forever bajó el nivel de muchas recetas a un tramo más bajo que el de sus
                 # instructores, pero las siguen enseñando los de Classic. Discord: la flecha

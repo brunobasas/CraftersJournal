@@ -183,6 +183,53 @@ test("Soft-soled Linen Boots la enseña Sellandus, no Lawrence Schneider", funct
   expect(not has[1300], "Lawrence Schneider (1300) está entre los que la enseñan")
 end, { boot = false })
 
+-- Jugador, 2026-11-28: a 180 la ruta mandaba a Hahrana Ironhide (Artesano, Feralas) a
+-- aprender Nightscape Headband y no se la enseñaba. En Forever las del tramo 180-200 que en
+-- Classic enseñaban Drakk Stonehand y Hahrana las enseñan Una y Telonis (Experto)
+test("Nightscape Headband y las de su tramo las enseñan Una y Telonis, no Hahrana", function()
+  local UNA, TELONIS, HAHRANA = 3007, 4212, 11098
+  local bad = {}
+  for _, id in ipairs({ 10499, 10507, 10511, 10518, 14930, 14932 }) do
+    local r = ES.Data.Leatherworking.recipes[id]
+    if not r then
+      bad[#bad + 1] = string.format("%d: no está en los datos", id)
+    else
+      local has = {}
+      for _, npc in ipairs(r.tr or {}) do has[npc] = true end
+      if not (has[UNA] and has[TELONIS]) or has[HAHRANA] then
+        bad[#bad + 1] = string.format("%s: tr = {%s}", tostring(r.name), table.concat(r.tr or {}, ", "))
+      end
+    end
+  end
+  Report(bad, "recetas de Peletería 180-200 que no llevan a Una y Telonis")
+end, { boot = false })
+
+-- Discord, 2026-11-26: en «Entrenar Artesano» de Peletería, la flecha decía «No se conoce
+-- ninguno de tu bando cerca» a un jugador de la Alianza. El Artesano de la Alianza, Drakk
+-- Stonehand, lleva el subtítulo «Master Leatherworking Trainer» (no «Master
+-- Leatherworker») y gen_profession.py lo dejaba fuera: solo quedaba Hahrana (Horda)
+test("cada rango de cada profesión tiene instructor para la Alianza y para la Horda", function()
+  local WP = ES.Waypoints
+  local bad = {}
+  for _, prof in ipairs({ "Alchemy", "Blacksmithing", "Enchanting", "Engineering", "Leatherworking", "Tailoring" }) do
+    for _, cap in ipairs({ 75, 150, 225, 300 }) do
+      local sides = {}
+      for _, npc in ipairs(WP.Trainers(prof, cap)) do
+        local row = ES.Data.NPCs[npc]
+        local side = row and row[2]
+        if side == "" then sides.A, sides.H = true, true elseif side then sides[side] = true end
+      end
+      for _, side in ipairs({ "A", "H" }) do
+        if not sides[side] then bad[#bad + 1] = string.format("%s %d: ninguno de %s", prof, cap, side) end
+      end
+    end
+  end
+  Report(bad, "rangos sin instructor de un bando")
+  local drakk = {}
+  for _, npc in ipairs(WP.Trainers("Leatherworking", 300)) do drakk[npc] = true end
+  expect(drakk[11097], "Drakk Stonehand (11097) no enseña Artesano de Peletería")
+end)
+
 -- Quién enseña cada receta en Classic (tools/cmangos/trainer_spells.csv, filas sin rank_step)
 local function ClassicTeachers()
   local f = assert(io.open(ADDON_DIR .. "/tools/cmangos/trainer_spells.csv", "rb"))
@@ -310,6 +357,22 @@ test("fuentes: vendedores y misiones que existen", function()
     end
   end
   Report(bad, "fuentes que apuntan a lo que no existe")
+end, { boot = false })
+
+-- GitHub #14: Pattern: Raptor Hide Harness es de la Horda (Tunkk, Hammerfall) y Pattern:
+-- Raptor Hide Belt de la Alianza (Androd Fadran, Refuge Pointe), como dicen los datos de
+-- Forever, QuestieDB y Wowhead. tools/gen_sources.py los cambiaba de vendedor
+-- (VENDOR_FIXES) y la ruta de la Alianza mandaba a comprar la Harness
+test("Raptor Hide Harness la vende Tunkk (Horda) y Raptor Hide Belt Androd Fadran (Alianza)", function()
+  local function Only(item, name, npc, side)
+    local s = expect(ES.Data.ItemSources[item], "%s (%d) sin fuentes", name, item)
+    local v = s.v or {}
+    expect(#v == 1 and v[1] == npc, "%s: vendedores {%s}, se esperaba solo %d", name, table.concat(v, ", "), npc)
+    local e = expect(ES.Data.NPCs[npc], "%s: el PNJ %d no está en ES.Data.NPCs", name, npc)
+    expect_eq(e[2], side, name .. ": bando de " .. tostring(e[1]))
+  end
+  Only(13287, "Pattern: Raptor Hide Harness", 2819, "H")
+  Only(13288, "Pattern: Raptor Hide Belt", 2816, "A")
 end, { boot = false })
 
 test("los pergaminos de receta tienen de dónde salir", function()
