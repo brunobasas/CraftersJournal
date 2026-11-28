@@ -36,7 +36,7 @@ local SHOTS = "Interface\\AddOns\\CraftersJournal\\Media\\WhatsNew\\"
 ES.WHATS_NEW_SHOTS = SHOTS -- (las pruebas montan una versión con imágenes)
 ES.WHATS_NEW = {
   {
-    version = "0.72.2",
+    version = "0.73.0",
     items = {
       { top = true, title = "Ahora puedes escoger el modo de escaneo para Crafter's Journal",
         choice = "noAuctionator" },
