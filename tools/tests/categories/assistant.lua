@@ -96,6 +96,59 @@ test("números secretos del juego (combate, mazmorras): el asistente no da error
   expect(f.nav.arrow._shown == false, "con la posición secreta se ve la flecha")
 end)
 
+test("la flecha pasa a otro PNJ del paso si queda claramente más cerca", function()
+  A = ES.Assistant
+  local nav = SecretNav()
+  local npcs = {
+    [777] = { name = "Lejos", map = 1414, x = 0.6, y = 0.5, side = "" },
+    [778] = { name = "Cerca", map = 1414, x = 0.3, y = 0.5, side = "" },
+  }
+  ES.Waypoints.NPC = function(id) return npcs[id] end
+  local pos = { 500, 1000 } -- (en el mundo: x * 1000, y * 2000)
+  UnitPosition = function() return pos[1], pos[2], 0, 0 end
+  local target = 777
+  ES.RouteLines = function() return {
+    { level = "110", title = "Compra 5× Mild Spices", current = true, icon = 134400, go = function() return target end },
+  } end
+  A.Update()
+  local f = A.Frame()
+  expect_eq(f.nav.go(), 777, "destino al empezar el paso")
+  -- A medio camino: 778 está más cerca, pero no lo bastante
+  target = 778
+  pos[1] = 440
+  A.Retarget()
+  expect_eq(f.nav.go(), 777, "destino con 778 algo más cerca")
+  -- Junto a 778
+  pos[1] = 320
+  A.Retarget()
+  expect_eq(f.nav.go(), 778, "destino con 778 mucho más cerca")
+end)
+
+test("ojeando una compra de la AH con la AH abierta: el clic compra", function()
+  A = ES.Assistant
+  SecretNav()
+  local bought, other = 0, 0
+  ES.RouteLines = function() return {
+    { level = "110", title = "Compra 5× Mild Spices", current = true, icon = 134400, buyRow = "vendor",
+      onClick = function() other = other + 1 end },
+    { level = "110", title = "Compra 146× Chunk of Boar Meat", icon = 134400, buyRow = "ah",
+      onClick = function() bought = bought + 1 end },
+    { level = "110", title = "Fabrica", icon = 134400, stepRecipe = "x" },
+  } end
+  A.Update()
+  local f, st = A.Frame(), A.State()
+  f.arrows.next._scripts.OnClick(f.arrows.next)
+  expect_eq(st.peek, 2, "paso ojeado")
+  f.banner._scripts.OnClick(f.banner, "LeftButton")
+  expect_eq(bought, 1, "compras abiertas con el clic")
+  expect_eq(other, 0, "clics al paso actual")
+  -- Ojeando un paso sin compra: el clic vuelve al actual
+  f.arrows.next._scripts.OnClick(f.arrows.next)
+  expect_eq(st.peek, 3, "paso ojeado")
+  f.banner._scripts.OnClick(f.banner, "LeftButton")
+  expect(st.peek == nil, "el clic ojeando la fabricación no vuelve al paso actual")
+end)
+
 test("sin ruta empezada no sale", function()
   A = ES.Assistant
   A.Update()

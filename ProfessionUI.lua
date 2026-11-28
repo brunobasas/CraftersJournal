@@ -3092,8 +3092,13 @@ local function BuyLine(source, items, buy, level, visited, profKey)
     -- la lista de compra) de lo que tenga; lo que no tiene, se dice. Si no tiene nada
     -- de la fila, el clic marca el camino a quien lo vende (WP.Vendors)
     local sells = {}
-    for i = 1, (GetMerchantNumItems and GetMerchantNumItems()) or 0 do
+    local count = (GetMerchantNumItems and GetMerchantNumItems()) or 0
+    -- Al abrir, el juego aún puede no haber cargado la lista (0 objetos o sin ID): sin
+    -- ella no se sabe qué falta, y apuntarlo mandaba a otro vendedor al abrir este
+    local loaded = count > 0
+    for i = 1, count do
       local id = ES.Ledger.MerchantItemID(i)
+      if not id then loaded = false end
       local _, _, avail = ES.Ledger.MerchantInfo(i)
       if id and avail ~= 0 then sells[id] = true end -- (agotado: como si no lo tuviera)
       -- (lo vende: al cerrar, "ya fuiste" si no lo compraste todo; ver ES.buyTried)
@@ -3103,9 +3108,9 @@ local function BuyLine(source, items, buy, level, visited, profKey)
     -- y la fila lleva a otro vendedor de la lista (WP.VendorFor)
     local guid = UnitGUID and UnitGUID("npc")
     local npcID = guid and tonumber(guid:match("^%a+%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
-    local here = false
+    local here = not loaded
     for _, it in ipairs(items) do
-      if sells[it.itemID] then here = true elseif npcID then WP.MarkVendorLacks(npcID, it.itemID) end
+      if sells[it.itemID] then here = true elseif npcID and loaded then WP.MarkVendorLacks(npcID, it.itemID) end
     end
     if here then
       action = L["comprar a este vendedor justo lo que falta"]
@@ -3436,22 +3441,39 @@ ES.RouteBuy = RouteBuy -- (para pruebas)
 -- Solo si intentaste comprarlo ahí (Discord: "No había suficiente" sin haber comprado
 -- nada): en la AH, si abriste la compra de alguno (ES:OpenAuctionBuy) o compraste
 -- alguno; en un vendedor, si vende alguno. Abrir la AH para escanear o un vendedor para
--- vender basura no cuenta. ES.buyTried = { ah = { [itemID] = true }, sells = { ... } }
+-- vender basura no cuenta. ES.buyTried = { ah = { [itemID] = true }, sells, bought, limited = { ... } }
+-- En el vendedor, "No había suficiente" solo si compraste de ese material ahí (bought) o
+-- su stock es limitado (limited): cerrarlo sin comprar no es que no hubiera
 ES.buyTried = ES.buyTried or { ah = {}, sells = {} }
+ES.buyTried.bought = ES.buyTried.bought or {}
+ES.buyTried.limited = ES.buyTried.limited or {}
 -- Lo que vende el vendedor abierto (al abrirlo, al cerrarlo si aún se sabe, y cada vez
 -- que se pinta una fila de compra con él abierto: a veces llega después de MERCHANT_SHOW)
 local function NoteMerchantSells()
   for i = 1, (GetMerchantNumItems and GetMerchantNumItems()) or 0 do
     local id = ES.Ledger and ES.Ledger.MerchantItemID and ES.Ledger.MerchantItemID(i)
-    if id then ES.buyTried.sells[id] = true end
+    if id then
+      ES.buyTried.sells[id] = true
+      local _, _, avail = ES.Ledger.MerchantInfo(i)
+      if avail and avail >= 0 then ES.buyTried.limited[id] = true end
+    end
   end
+end
+local buyHooked = false
+local function HookBuys()
+  if buyHooked or not (BuyMerchantItem and hooksecurefunc) then return end
+  buyHooked = true
+  hooksecurefunc("BuyMerchantItem", function(i)
+    local id = ES.Ledger and ES.Ledger.MerchantItemID and ES.Ledger.MerchantItemID(i)
+    if id then ES.buyTried.bought[id] = true end
+  end)
 end
 local function TriedHere(source, items)
   local tried = ES.buyTried
   for _, it in ipairs(items) do
     if source == "ah" then
       if tried.ah[it.itemID] or (ES.Ledger and ES.Ledger.OnWay and ES.Ledger.OnWay(it.itemID) > 0) then return true end
-    elseif tried.sells[it.itemID] then
+    elseif tried.sells[it.itemID] and (tried.bought[it.itemID] or tried.limited[it.itemID]) then
       return true
     end
   end
@@ -3469,7 +3491,12 @@ do
   f:SetScript("OnEvent", function(_, event)
     -- Cada visita empieza de cero
     if event == "AUCTION_HOUSE_SHOW" then ES.buyTried.ah = {} return end
-    if event == "MERCHANT_SHOW" then ES.buyTried.sells = {} NoteMerchantSells() return end
+    if event == "MERCHANT_SHOW" then
+      HookBuys()
+      ES.buyTried.sells, ES.buyTried.bought, ES.buyTried.limited = {}, {}, {}
+      NoteMerchantSells()
+      return
+    end
     if event == "MERCHANT_CLOSED" then NoteMerchantSells() end
     -- (solo sirve al asistente: sin él, no hay filas de compra)
     if not (ES.Assistant and ES.db and ES.db.prof) then return end
@@ -3494,7 +3521,7 @@ do
             -- vende el Bottle, no da por visitada la fila de las Mild Spices)
             v.vendorSeen = v.vendorSeen or {}
             for _, it in ipairs(buy.vendor) do
-              if ES.buyTried.sells[it.itemID] then v.vendorSeen[it.itemID] = true end
+              if TriedHere("vendor", { it }) then v.vendorSeen[it.itemID] = true end
             end
           else
             v[source] = true
@@ -3551,9 +3578,20 @@ ES.UI.ArrangeRecipeErrands = ArrangeRecipeErrands -- (para pruebas)
 -- Lo lejos que está un recado (al cuadrado): 0 si ya lo tienes abierto (el vendedor o el
 -- buzón: estás ahí); si no, hasta su PNJ (WP.DistanceTo)
 local function ErrandDistance(l)
-  if l.buyRow == "vendor" and ES.Ledger and ES.Ledger:MerchantOpen() then return 0 end
   if l.mailRow and MailFrame and MailFrame:IsShown() then return 0 end
-  local ok, id = pcall(function() return l.go and l.go() end)
+  local go = l.go
+  if l.buyRow == "vendor" and l.buyItems then
+    -- Solo la fila de lo que vende el vendedor abierto: con todas a 0, ganaba la primera
+    -- y al abrirlo te mandaba a otro a por el siguiente material
+    local ids = {}
+    for _, it in ipairs(l.buyItems) do
+      if ES.Ledger and ES.Ledger:MerchantOpen() and ES.buyTried and ES.buyTried.sells[it.itemID] then return 0 end
+      ids[#ids + 1] = it.itemID
+    end
+    -- (con el vendedor abierto la fila no lleva camino, sino comprar)
+    go = go or function() return WP.VendorFor(ids) end
+  end
+  local ok, id = pcall(function() return go and go() end)
   return WP.DistanceTo(ok and id or nil)
 end
 
