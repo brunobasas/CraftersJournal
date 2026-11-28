@@ -141,6 +141,7 @@ end
 local NAV_GRID, NAV_FRAMES = 8, 64 -- Media/Assistant/Arrow.tga (tools/gen_assistant_arrow.py)
 local ARRIVE_YARDS = 10            -- más cerca: "Has llegado" (la flecha no se quita)
 local NAV_TICK = 0.05              -- s entre cálculos
+local RETARGET_TICK = 3            -- s entre búsquedas de un PNJ más cercano (A.Retarget: buscar cuesta)
 local NAV_W, NAV_ARROW = 190, 40   -- el panel de la flecha y la flecha
 local NAV_LEFT = 14                -- desde la izquierda del asistente (como las pestañas)
 local TWO_PI = 2 * math.pi
@@ -1368,9 +1369,14 @@ local function CreateUI()
     HideMini()
   end)
   -- Se recalcula unas veces por segundo mientras se ve (giras, andas)
-  local wait = 0
+  local wait, retarget = 0, RETARGET_TICK
   frame:SetScript("OnUpdate", function(_, elapsed)
     A.SlideTab(elapsed)
+    retarget = retarget - elapsed
+    if retarget <= 0 then
+      retarget = RETARGET_TICK
+      A.Retarget()
+    end
     wait = wait - elapsed
     if wait > 0 then return end
     wait = NAV_TICK
@@ -1495,12 +1501,12 @@ function A.Update()
   state.profName, state.profIcon = ES:ProfLabel(profKey), prof and prof.icon or ES.ICON
   if state.peek and state.peek > #steps then state.peek = nil end
   -- Destino de la flecha: el PNJ del paso (instructor, vendedor, subastador...), el más
-  -- cercano AL EMPEZAR el paso, y no cambia mientras dura (no salta de uno a otro por el
-  -- camino). Pulsar el banner lo vuelve a buscar (state.navKey = nil)
+  -- cercano AL EMPEZAR el paso; mientras dura, solo cambia si otro queda claramente más
+  -- cerca (A.Retarget). Pulsar el banner lo vuelve a buscar (state.navKey = nil)
   local line = state.line
   local key = line and not completed and A.LineKey(line) or nil
   if key ~= state.navKey then
-    state.navKey, state.navNpc = key, nil
+    state.navKey, state.navNpc, state.navPicked = key, nil, nil
     if key and line.go then
       local ok, npcID = pcall(line.go)
       state.navNpc = ok and npcID or nil
@@ -1695,7 +1701,26 @@ function A.SetTarget(npcID, how)
   local npc = npcID and ES.Waypoints.NPC(npcID)
   if not (npc and npc.map and state.navKey) then return end
   state.navNpc, state.pathNpc, state.pathHow = npcID, npcID, how
+  state.navPicked = true -- (elegido a mano: A.Retarget no lo cambia)
   A.NavTick()
+end
+
+-- Mientras dura el paso, si otro PNJ que sirve está claramente más cerca (la mitad de
+-- la distancia al cuadrado, ~70% en yardas), la flecha y el camino pasan a él. Con el
+-- margen no salta de uno a otro a medio camino entre dos
+function A.Retarget()
+  local line = state.line
+  if state.hold or state.completed or state.navPicked or not (line and line.go and state.navNpc) then return end
+  local ok, npcID = pcall(line.go)
+  if not ok or not npcID or npcID == state.navNpc then return end
+  local WP = ES.Waypoints
+  local now, new = WP.DistanceTo(state.navNpc), WP.DistanceTo(npcID)
+  if not (new < math.huge and new < now * 0.5) then return end
+  state.navNpc = npcID
+  state.pathNpc = npcID
+  state.pathHow = WP.Mark(npcID, true)
+  if not state.pathHow and WP.ClearMark then WP.ClearMark() end
+  NavTick()
 end
 
 -- El botón del asistente en la ventana (junto a Dejar ruta): si ya sigue esta ruta y se
