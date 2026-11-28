@@ -558,7 +558,10 @@ local function Paint()
   local peeking = state.peek ~= nil and state.peek ~= state.index
   -- Lo que hace el clic: lo mismo que la fila (ES.UI.RowClick); ojeando, nada
   local active = line and not peeking and not state.completed
-  banner.onClick = active and line.onClick or nil
+  -- Ojeando una compra pendiente con su clic a mano (la AH o el vendedor abiertos): el
+  -- clic compra, como dice su tooltip, y no vuelve al paso actual
+  local peekBuy = peeking and line and line.buyRow and not line.done and line.onClick and true or false
+  banner.onClick = (active or peekBuy) and line.onClick or nil
   banner.go = active and line.go or nil
   banner.ahItem = active and line.ahItem or nil
   banner.item = line and line.item or nil
@@ -566,7 +569,7 @@ local function Paint()
   banner.learnRow = line and line.learnRow and not state.completed or nil
   if state.completed then
     banner.onClick = function() A.OpenWindow("profit") end -- (lo que sacas vendiendo lo fabricado)
-  elseif peeking then
+  elseif peeking and not peekBuy then
     banner.onClick = function() A.Peek(nil) end
   end
   SetUseItem(active and line.useItem or nil)
